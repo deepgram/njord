@@ -57,8 +57,8 @@ impl UI {
                 }
             }
             Err(ReadlineError::Interrupted) => {
-                // Ctrl-C
-                Ok(Some("/quit".to_string()))
+                // Ctrl-C - return special signal to clear input
+                Ok(Some("__CTRL_C__".to_string()))
             }
             Err(ReadlineError::Eof) => {
                 // Ctrl-D

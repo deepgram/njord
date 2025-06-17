@@ -1,6 +1,7 @@
 use anyhow::Result;
 use std::collections::HashMap;
 use futures::StreamExt;
+use tokio_util::sync::CancellationToken;
 
 use crate::{
     commands::{Command, CommandParser},
@@ -20,6 +21,7 @@ pub struct Repl {
     command_parser: CommandParser,
     ui: UI,
     queued_message: Option<String>,
+    active_request_token: Option<CancellationToken>,
 }
 
 impl Repl {
@@ -90,6 +92,7 @@ impl Repl {
             command_parser,
             ui,
             queued_message: None,
+            active_request_token: None,
         })
     }
     
@@ -98,6 +101,18 @@ impl Repl {
         
         loop {
             if let Some(input) = self.ui.read_input(self.queued_message.as_deref())? {
+                // Handle Ctrl-C signal
+                if input == "__CTRL_C__" {
+                    // Cancel any active request
+                    if let Some(token) = &self.active_request_token {
+                        token.cancel();
+                        self.ui.print_info("Request cancelled");
+                    }
+                    // Clear queued message
+                    self.queued_message = None;
+                    continue;
+                }
+                
                 // Clear queued message once we get input
                 self.queued_message = None;
                 if input.starts_with('/') {
@@ -338,12 +353,33 @@ impl Repl {
     }
     
     async fn handle_message(&mut self, message: String) -> Result<()> {
+        // Create cancellation token for this request
+        let cancel_token = CancellationToken::new();
+        self.active_request_token = Some(cancel_token.clone());
+        
         // Try to send the message with retry logic
-        match self.send_message_with_retry(&message, 3).await {
+        let result = tokio::select! {
+            result = self.send_message_with_retry(&message, 3, cancel_token.clone()) => result,
+            _ = cancel_token.cancelled() => {
+                self.ui.print_info("Request was cancelled");
+                return Ok(());
+            }
+        };
+        
+        // Clear active request token
+        self.active_request_token = None;
+        
+        match result {
             Ok(()) => {
                 // Success - message was sent and response received
             }
             Err(e) => {
+                // Check if this was a cancellation
+                if cancel_token.is_cancelled() {
+                    self.ui.print_info("Request was cancelled");
+                    return Ok(());
+                }
+                
                 // All retries failed - queue the message for retry
                 self.queued_message = Some(message);
                 self.ui.print_error(&format!("Failed to send message after 3 attempts: {}", e));
@@ -354,7 +390,7 @@ impl Repl {
         Ok(())
     }
     
-    async fn send_message_with_retry(&mut self, message: &str, max_retries: u32) -> Result<()> {
+    async fn send_message_with_retry(&mut self, message: &str, max_retries: u32, cancel_token: CancellationToken) -> Result<()> {
         let user_message = Message {
             role: "user".to_string(),
             content: message.to_string(),
@@ -364,7 +400,14 @@ impl Repl {
             if attempt > 1 {
                 let delay = std::time::Duration::from_millis(1000 * (1 << (attempt - 2))); // Exponential backoff: 1s, 2s, 4s
                 self.ui.print_info(&format!("Retrying in {}s... (attempt {}/{})", delay.as_secs(), attempt, max_retries));
-                tokio::time::sleep(delay).await;
+                
+                // Check for cancellation during delay
+                tokio::select! {
+                    _ = tokio::time::sleep(delay) => {},
+                    _ = cancel_token.cancelled() => {
+                        return Err(anyhow::anyhow!("Request cancelled during retry delay"));
+                    }
+                }
             }
             
             // Only add to session history on first attempt
@@ -392,18 +435,35 @@ impl Repl {
                             let mut full_response = String::new();
                             let mut stream_error = false;
                             
-                            while let Some(chunk) = stream.next().await {
-                                match chunk {
-                                    Ok(content) => {
-                                        if !content.is_empty() {
-                                            self.ui.print_agent_chunk(&content);
-                                            full_response.push_str(&content);
+                            loop {
+                                tokio::select! {
+                                    chunk_result = stream.next() => {
+                                        match chunk_result {
+                                            Some(chunk) => {
+                                                match chunk {
+                                                    Ok(content) => {
+                                                        if !content.is_empty() {
+                                                            self.ui.print_agent_chunk(&content);
+                                                            full_response.push_str(&content);
+                                                        }
+                                                    }
+                                                    Err(e) => {
+                                                        self.ui.print_error(&format!("Stream error: {}", e));
+                                                        stream_error = true;
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                            None => break, // Stream ended
                                         }
                                     }
-                                    Err(e) => {
-                                        self.ui.print_error(&format!("Stream error: {}", e));
-                                        stream_error = true;
-                                        break;
+                                    _ = cancel_token.cancelled() => {
+                                        self.ui.print_info("\nRequest cancelled");
+                                        // Remove user message from history if it was added
+                                        if attempt == 1 && self.session.messages.last().map(|m| &m.message.role) == Some(&"user".to_string()) {
+                                            self.session.messages.pop();
+                                        }
+                                        return Err(anyhow::anyhow!("Request cancelled"));
                                     }
                                 }
                             }
