@@ -174,6 +174,7 @@ impl Repl {
                 println!("  /undo [N] - Remove last N responses (default 1)");
                 println!("  /goto N - Jump back to message N");
                 println!("  /history - Show conversation history");
+                println!("  /system [PROMPT] - Set system prompt (empty to view, 'clear' to remove)");
                 println!("  /quit - Exit Njord");
                 println!();
                 println!("Input tips:");
@@ -211,6 +212,11 @@ impl Repl {
                     self.ui.print_info(&format!("Current provider: {}", provider_name));
                     self.ui.print_info(&format!("Current model: {}", self.session.current_model));
                     self.ui.print_info(&format!("Temperature: {}", self.session.temperature));
+                    if let Some(system_prompt) = &self.session.system_prompt {
+                        self.ui.print_info(&format!("System prompt: {}", system_prompt));
+                    } else {
+                        self.ui.print_info("System prompt: (none)");
+                    }
                 } else {
                     self.ui.print_error("No provider selected");
                 }
@@ -308,6 +314,9 @@ impl Repl {
                     println!("Created: {}", self.session.created_at.format("%Y-%m-%d %H:%M:%S UTC"));
                     println!("Model: {}", self.session.current_model);
                     println!("Temperature: {}", self.session.temperature);
+                    if let Some(system_prompt) = &self.session.system_prompt {
+                        println!("System prompt: {}", system_prompt);
+                    }
                     println!();
                     
                     for numbered_message in &self.session.messages {
@@ -349,6 +358,25 @@ impl Repl {
                     Err(e) => {
                         self.ui.print_error(&e.to_string());
                     }
+                }
+            }
+            Command::System(prompt) => {
+                if prompt.trim().is_empty() {
+                    // Show current system prompt
+                    if let Some(current_prompt) = &self.session.system_prompt {
+                        self.ui.print_info("Current system prompt:");
+                        println!("{}", current_prompt);
+                    } else {
+                        self.ui.print_info("No system prompt is currently set");
+                    }
+                } else if prompt.trim() == "clear" {
+                    // Clear system prompt
+                    self.session.system_prompt = None;
+                    self.ui.print_info("System prompt cleared");
+                } else {
+                    // Set new system prompt
+                    self.session.system_prompt = Some(prompt);
+                    self.ui.print_info("System prompt updated");
                 }
             }
             _ => {
@@ -446,7 +474,20 @@ impl Repl {
             if let Some(provider_name) = &self.current_provider {
                 if let Some(provider) = self.providers.get(provider_name) {
                     // Create request with user message included but not yet in session history
-                    let mut request_messages: Vec<Message> = self.session.messages.iter().map(|nm| nm.message.clone()).collect();
+                    let mut request_messages: Vec<Message> = Vec::new();
+                    
+                    // Add system prompt if present
+                    if let Some(system_prompt) = &self.session.system_prompt {
+                        request_messages.push(Message {
+                            role: "system".to_string(),
+                            content: system_prompt.clone(),
+                        });
+                    }
+                    
+                    // Add conversation history
+                    request_messages.extend(self.session.messages.iter().map(|nm| nm.message.clone()));
+                    
+                    // Add current user message
                     request_messages.push(user_message.clone());
                     
                     let chat_request = ChatRequest {

@@ -118,7 +118,7 @@ Based on current progress, the next most valuable features to implement are:
   - [ ] Theme support
   - [ ] Configurable key bindings
   - [ ] Custom prompt templates
-  - [ ] `/system PROMPT` - Set system prompt
+  - [x] `/system PROMPT` - Set system prompt
 
 ### Session Management
 - [ ] **Advanced Session Features**
