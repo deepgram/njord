@@ -27,17 +27,25 @@ impl Repl {
         let mut current_provider = None;
         
         // Initialize providers based on available API keys
+        // Prefer OpenAI as the default provider since it's fully implemented
+        let provider_priority = ["openai", "anthropic", "gemini"];
+        
         for (provider_name, api_key) in &config.api_keys {
             match create_provider(provider_name, api_key) {
                 Ok(provider) => {
                     providers.insert(provider_name.clone(), provider);
-                    if current_provider.is_none() {
-                        current_provider = Some(provider_name.clone());
-                    }
                 }
                 Err(e) => {
                     eprintln!("Failed to initialize {} provider: {}", provider_name, e);
                 }
+            }
+        }
+        
+        // Set current provider based on priority (OpenAI first)
+        for preferred_provider in &provider_priority {
+            if providers.contains_key(*preferred_provider) {
+                current_provider = Some(preferred_provider.to_string());
+                break;
             }
         }
         
@@ -114,6 +122,8 @@ impl Repl {
                 self.ui.print_info("Available commands:");
                 println!("  /model MODEL - Switch to a different model");
                 println!("  /models - List available models");
+                println!("  /provider PROVIDER - Switch provider (openai, anthropic, gemini)");
+                println!("  /status - Show current provider and model");
                 println!("  /chat new - Start a new chat session");
                 println!("  /chat save NAME - Save current session");
                 println!("  /chat load NAME - Load a saved session");
@@ -141,6 +151,31 @@ impl Repl {
                 let count = count.unwrap_or(1);
                 self.session.undo(count)?;
                 self.ui.print_info(&format!("Removed last {} message(s)", count));
+            }
+            Command::Model(model_name) => {
+                // For now, just update the session model
+                // TODO: Validate model exists for current provider
+                self.session.current_model = model_name.clone();
+                self.ui.print_info(&format!("Switched to model: {}", model_name));
+            }
+            Command::Status => {
+                if let Some(provider_name) = &self.current_provider {
+                    self.ui.print_info(&format!("Current provider: {}", provider_name));
+                    self.ui.print_info(&format!("Current model: {}", self.session.current_model));
+                    self.ui.print_info(&format!("Temperature: {}", self.session.temperature));
+                } else {
+                    self.ui.print_error("No provider selected");
+                }
+            }
+            Command::Provider(provider_name) => {
+                if self.providers.contains_key(&provider_name) {
+                    self.current_provider = Some(provider_name.clone());
+                    self.ui.print_info(&format!("Switched to provider: {}", provider_name));
+                } else {
+                    self.ui.print_error(&format!("Provider '{}' not available. Available providers: {}", 
+                        provider_name, 
+                        self.providers.keys().collect::<Vec<_>>().join(", ")));
+                }
             }
             _ => {
                 self.ui.print_info(&format!("Command not yet implemented: {:?}", command));

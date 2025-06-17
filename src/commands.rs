@@ -25,6 +25,8 @@ pub enum Command {
     Help,
     Clear,
     Stats,
+    Status,
+    Provider(String),
     Retry,
     Edit(usize),
     Quit,
@@ -45,6 +47,7 @@ pub struct CommandParser {
     edit_regex: Regex,
     chat_save_regex: Regex,
     chat_load_regex: Regex,
+    provider_regex: Regex,
 }
 
 impl CommandParser {
@@ -64,6 +67,7 @@ impl CommandParser {
             edit_regex: Regex::new(r"^/edit\s+(\d+)$")?,
             chat_save_regex: Regex::new(r"^/chat\s+save\s+(.+)$")?,
             chat_load_regex: Regex::new(r"^/chat\s+load\s+(.+)$")?,
+            provider_regex: Regex::new(r"^/provider\s+(\w+)$")?,
         })
     }
     
@@ -83,6 +87,7 @@ impl CommandParser {
             "/help" | "/commands" => Some(Command::Help),
             "/clear" => Some(Command::Clear),
             "/stats" => Some(Command::Stats),
+            "/status" => Some(Command::Status),
             "/retry" => Some(Command::Retry),
             "/quit" | "/exit" => Some(Command::Quit),
             _ => {
@@ -115,6 +120,8 @@ impl CommandParser {
                     Some(Command::ChatSave(caps[1].to_string()))
                 } else if let Some(caps) = self.chat_load_regex.captures(input) {
                     Some(Command::ChatLoad(caps[1].to_string()))
+                } else if let Some(caps) = self.provider_regex.captures(input) {
+                    Some(Command::Provider(caps[1].to_string()))
                 } else {
                     None
                 }
