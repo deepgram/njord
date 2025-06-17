@@ -127,15 +127,6 @@ impl Repl {
                     continue;
                 }
                 
-                // Check if global cancellation was triggered
-                if self.global_cancel_token.is_cancelled() {
-                    // Reset the global token for next time
-                    self.global_cancel_token = CancellationToken::new();
-                    // Clear any queued/interrupted messages
-                    self.queued_message = None;
-                    self.interrupted_message = None;
-                    continue;
-                }
                 
                 // Clear queued/interrupted messages once we get input
                 self.queued_message = None;
@@ -397,6 +388,8 @@ impl Repl {
                 cancel_token.cancel();
                 self.interrupted_message = Some(message);
                 self.ui.print_info("Request interrupted by Ctrl-C. Message available for editing.");
+                // Reset the global token for next time
+                self.global_cancel_token = CancellationToken::new();
                 return Ok(());
             }
         };
@@ -413,6 +406,10 @@ impl Repl {
                 if cancel_token.is_cancelled() || global_token.is_cancelled() {
                     self.interrupted_message = Some(message);
                     self.ui.print_info("Request interrupted. Message available for editing.");
+                    // Reset the global token if it was cancelled
+                    if global_token.is_cancelled() {
+                        self.global_cancel_token = CancellationToken::new();
+                    }
                     return Ok(());
                 }
                 
