@@ -49,7 +49,6 @@ impl UI {
     
     fn read_multiline_input(&mut self, first_line: String) -> Result<Option<String>> {
         let mut lines = vec![first_line];
-        let _in_code_block = true;
         
         println!("\x1b[2m(Multi-line mode - end with ``` on its own line)\x1b[0m");
         
@@ -64,7 +63,7 @@ impl UI {
                     let line = line.trim_end_matches('\n').trim_end_matches('\r');
                     
                     // Check for end of code block
-                    if line.trim() == "```" && in_code_block {
+                    if line.trim() == "```" {
                         lines.push(line.to_string());
                         break;
                     }
