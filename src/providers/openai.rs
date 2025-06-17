@@ -59,7 +59,6 @@ impl LLMProvider for OpenAIProvider {
                 |(mut buffer, mut byte_stream, mut pending_content)| async move {
                     // First, check if we have pending content to yield
                     if let Some(content) = pending_content.pop() {
-                        eprintln!("DEBUG: Yielding pending content: '{}'", content);
                         return Some((Ok(content), (buffer, byte_stream, pending_content)));
                     }
                     
@@ -67,24 +66,17 @@ impl LLMProvider for OpenAIProvider {
                         match byte_stream.next().await {
                             Some(Ok(bytes)) => {
                                 let chunk = String::from_utf8_lossy(&bytes);
-                                eprintln!("DEBUG: Received chunk: '{}'", chunk);
                                 buffer.push_str(&chunk);
-                                eprintln!("DEBUG: Buffer now: '{}'", buffer);
                                 
                                 // Process ALL complete lines ending with \n
                                 while let Some(newline_pos) = buffer.find('\n') {
                                     let line = buffer[..newline_pos].trim().to_string();
                                     buffer = buffer[newline_pos + 1..].to_string();
                                     
-                                    // DEBUG: Print raw line
-                                    eprintln!("DEBUG: Raw line: '{}'", line);
                                     
                                     // Parse SSE data lines
                                     if let Some(json_str) = line.strip_prefix("data: ") {
-                                        eprintln!("DEBUG: JSON string: '{}'", json_str);
-                                        
                                         if json_str.trim() == "[DONE]" {
-                                            eprintln!("DEBUG: Found [DONE], ending stream");
                                             // If we have pending content, yield it first
                                             if let Some(content) = pending_content.pop() {
                                                 return Some((Ok(content), (buffer, byte_stream, pending_content)));
@@ -94,7 +86,6 @@ impl LLMProvider for OpenAIProvider {
                                         
                                         // Parse the JSON chunk
                                         if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(json_str) {
-                                            eprintln!("DEBUG: Parsed JSON: {}", json_val);
                                             if let Some(content) = json_val
                                                 .get("choices")
                                                 .and_then(|c| c.as_array())
@@ -104,19 +95,15 @@ impl LLMProvider for OpenAIProvider {
                                                 .and_then(|content| content.as_str())
                                             {
                                                 if !content.is_empty() {
-                                                    eprintln!("DEBUG: Adding content to pending: '{}'", content);
                                                     pending_content.insert(0, content.to_string()); // Insert at beginning to maintain order
                                                 }
                                             }
-                                        } else {
-                                            eprintln!("DEBUG: Failed to parse JSON: '{}'", json_str);
                                         }
                                     }
                                 }
                                 
                                 // If we have pending content, yield the first piece
                                 if let Some(content) = pending_content.pop() {
-                                    eprintln!("DEBUG: Returning content: '{}'", content);
                                     return Some((Ok(content), (buffer, byte_stream, pending_content)));
                                 }
                                 // Continue to next chunk if no content to yield
@@ -125,13 +112,10 @@ impl LLMProvider for OpenAIProvider {
                                 return Some((Err(anyhow::anyhow!("Stream error: {}", e)), (buffer, byte_stream, pending_content)));
                             }
                             None => {
-                                eprintln!("DEBUG: Stream ended, buffer contains: '{}'", buffer);
                                 // Stream ended - process any remaining complete lines in buffer
                                 while let Some(newline_pos) = buffer.find('\n') {
                                     let line = buffer[..newline_pos].trim().to_string();
                                     buffer = buffer[newline_pos + 1..].to_string();
-                                    
-                                    eprintln!("DEBUG: Final line: '{}'", line);
                                     
                                     if let Some(json_str) = line.strip_prefix("data: ") {
                                         if json_str.trim() != "[DONE]" {
@@ -145,7 +129,6 @@ impl LLMProvider for OpenAIProvider {
                                                     .and_then(|content| content.as_str())
                                                 {
                                                     if !content.is_empty() {
-                                                        eprintln!("DEBUG: Final content: '{}'", content);
                                                         pending_content.insert(0, content.to_string());
                                                     }
                                                 }
@@ -156,11 +139,9 @@ impl LLMProvider for OpenAIProvider {
                                 
                                 // Yield any remaining pending content
                                 if let Some(content) = pending_content.pop() {
-                                    eprintln!("DEBUG: Yielding final pending content: '{}'", content);
                                     return Some((Ok(content), (String::new(), byte_stream, pending_content)));
                                 }
                                 
-                                eprintln!("DEBUG: Stream truly ended, no more content");
                                 return None; // Stream truly ended
                             }
                         }
