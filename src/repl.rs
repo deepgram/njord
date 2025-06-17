@@ -44,7 +44,7 @@ impl Repl {
             return Err(anyhow::anyhow!("No valid API keys provided. Please set at least one API key."));
         }
         
-        let mut history = History::load()?;
+        let history = History::load()?;
         
         let session = if config.new_session {
             ChatSession::new(config.default_model.clone(), config.temperature)

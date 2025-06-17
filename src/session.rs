@@ -62,7 +62,7 @@ impl ChatSession {
         number
     }
     
-    fn extract_code_blocks(&self, content: &str) -> Vec<CodeBlock> {
+    fn extract_code_blocks(&self, _content: &str) -> Vec<CodeBlock> {
         // TODO: Implement code block extraction from markdown
         Vec::new()
     }

@@ -1,6 +1,6 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use futures::{stream, Stream, StreamExt};
+use futures::{stream, Stream};
 use reqwest::Client;
 
 use super::{LLMProvider, ChatRequest};
@@ -24,7 +24,7 @@ impl LLMProvider for AnthropicProvider {
     async fn chat(&self, _request: ChatRequest) -> Result<Box<dyn Stream<Item = Result<String>> + Unpin + Send>> {
         // TODO: Implement Anthropic API integration
         let stream = stream::once(async { Ok("TODO: Anthropic implementation".to_string()) });
-        Ok(Box::new(stream))
+        Ok(Box::pin(stream))
     }
     
     fn get_models(&self) -> Vec<String> {
