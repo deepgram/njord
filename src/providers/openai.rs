@@ -50,8 +50,8 @@ impl LLMProvider for OpenAIProvider {
             // Handle streaming response with proper SSE parsing
             use futures::stream::unfold;
             
-            let mut buffer = String::new();
-            let mut byte_stream = response.bytes_stream();
+            let buffer = String::new();
+            let byte_stream = response.bytes_stream();
             
             let stream = unfold(
                 (buffer, byte_stream),
@@ -64,7 +64,7 @@ impl LLMProvider for OpenAIProvider {
                                 
                                 // Process complete lines
                                 while let Some(line_end) = buffer.find('\n') {
-                                    let line = buffer[..line_end].trim();
+                                    let line = buffer[..line_end].trim().to_string();
                                     buffer = buffer[line_end + 1..].to_string();
                                     
                                     if let Some(json_str) = line.strip_prefix("data: ") {
