@@ -49,7 +49,7 @@ impl UI {
     
     fn read_multiline_input(&mut self, first_line: String) -> Result<Option<String>> {
         let mut lines = vec![first_line];
-        let mut in_code_block = true;
+        let _in_code_block = true;
         
         println!("\x1b[2m(Multi-line mode - end with ``` on its own line)\x1b[0m");
         
