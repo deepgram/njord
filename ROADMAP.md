@@ -188,6 +188,9 @@ Based on current progress, the next most valuable features to implement are:
 - [x] **TUI Input Handling Broken** - Replaced with simple REPL
 - [x] **Overcomplicated UI** - Simplified to standard terminal interface
 - [x] **Streaming Response Parsing** - OpenAI SSE parsing fixed and working perfectly
+- [x] **Ctrl-C Handling** - Fixed with proper signal handling and cancellation tokens
+- [x] **Session Persistence** - Provider and model selection now persisted across restarts
+- [x] **Message Metadata** - Provider and model info now tracked per message
 - [ ] **Error Handling** - Need better user-friendly error messages
 
 ### Code Quality
