@@ -172,9 +172,10 @@ impl Repl {
                     self.current_provider = Some(provider_name.clone());
                     self.ui.print_info(&format!("Switched to provider: {}", provider_name));
                 } else {
+                    let available_providers: Vec<String> = self.providers.keys().cloned().collect();
                     self.ui.print_error(&format!("Provider '{}' not available. Available providers: {}", 
                         provider_name, 
-                        self.providers.keys().collect::<Vec<_>>().join(", ")));
+                        available_providers.join(", ")));
                 }
             }
             _ => {
