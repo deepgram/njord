@@ -18,19 +18,25 @@ Njord is an interactive LLM REPL that aims to provide a powerful terminal-based 
   - [x] Error handling and rate limiting
   - [x] Support for different models (GPT-3.5, GPT-4, etc.)
 
+- [x] **Anthropic API Integration** - COMPLETE!
+  - [x] Implement Claude API calls with Messages API
+  - [x] Handle streaming responses with SSE parsing
+  - [x] Support for Claude 3 model variants (Haiku, Sonnet, Opus, 3.5 Sonnet)
+  - [x] Message format conversion (system messages handled properly)
+
 ## Next Priority 🎯
 
 Based on current progress, the next most valuable features to implement are:
 
-1. **Code Block Extraction** - Parse and manage code from responses
-   - Extract code blocks from markdown responses
-   - Number and catalog code blocks for easy reference
-   - Foundation for advanced code management features
-
-2. **Google Gemini API Integration** - Complete the multi-provider support
+1. **Google Gemini API Integration** - Complete the multi-provider support
    - Implement Gemini API calls with streaming
    - Support for Gemini Pro models
    - Validate the provider architecture with a third implementation
+
+2. **Code Block Extraction** - Parse and manage code from responses
+   - Extract code blocks from markdown responses
+   - Number and catalog code blocks for easy reference
+   - Foundation for advanced code management features
 
 3. **Enhanced Error Handling** - Better user experience
    - User-friendly error messages
@@ -42,16 +48,12 @@ Based on current progress, the next most valuable features to implement are:
    - Code syntax highlighting
    - Better text formatting and coloring
 
-## Phase 1: Core Functionality 🚧
+## Phase 1: Core Functionality ✅
 
 ### LLM Provider Integration
 - [x] **OpenAI API Integration** - COMPLETE!
 
 - [x] **Anthropic API Integration** - COMPLETE!
-  - [x] Implement Claude API calls with Messages API
-  - [x] Handle streaming responses with SSE parsing
-  - [x] Support for Claude 3 model variants (Haiku, Sonnet, Opus, 3.5 Sonnet)
-  - [x] Message format conversion (system messages handled properly)
 
 - [ ] **Google Gemini API Integration**
   - [ ] Implement Gemini API calls
@@ -254,6 +256,8 @@ export NJORD_EDITOR="vim"
 **🎉 Phase 1 is now COMPLETE! 🎉**
 
 **🚀 Phase 2 is now IN PROGRESS! 🚀**
+
+**Current Status**: Two major providers (OpenAI and Anthropic) are fully implemented with streaming support. The core REPL functionality is robust with proper error handling, retry logic, session management, and professional UX. Next focus is completing Gemini integration and adding code block management features.
 
 ### Phase 2 Success Criteria
 - [ ] Code block extraction and management works
