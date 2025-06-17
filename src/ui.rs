@@ -1,6 +1,6 @@
 use anyhow::Result;
 use rustyline::error::ReadlineError;
-use rustyline::{DefaultEditor, Editor};
+use rustyline::DefaultEditor;
 use std::io::{self, Write};
 
 pub struct UI {
@@ -30,8 +30,16 @@ impl UI {
         Ok(())
     }
     
-    pub fn read_input(&mut self) -> Result<Option<String>> {
-        match self.editor.readline("\x1b[1;32m>>> \x1b[0m") {
+    pub fn read_input(&mut self, queued_message: Option<&str>) -> Result<Option<String>> {
+        let prompt = if queued_message.is_some() {
+            "\x1b[1;33m>>> (retry) \x1b[0m"
+        } else {
+            "\x1b[1;32m>>> \x1b[0m"
+        };
+        
+        let initial_input = queued_message.unwrap_or("");
+        
+        match self.editor.readline_with_initial(prompt, (initial_input, "")) {
             Ok(line) => {
                 let input = line.trim();
                 if input.is_empty() {

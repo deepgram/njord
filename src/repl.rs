@@ -19,6 +19,7 @@ pub struct Repl {
     history: History,
     command_parser: CommandParser,
     ui: UI,
+    queued_message: Option<String>,
 }
 
 impl Repl {
@@ -88,6 +89,7 @@ impl Repl {
             history,
             command_parser,
             ui,
+            queued_message: None,
         })
     }
     
@@ -95,7 +97,9 @@ impl Repl {
         self.ui.draw_welcome()?;
         
         loop {
-            if let Some(input) = self.ui.read_input()? {
+            if let Some(input) = self.ui.read_input(self.queued_message.as_deref())? {
+                // Clear queued message once we get input
+                self.queued_message = None;
                 if input.starts_with('/') {
                     // This is a command attempt
                     if let Some(command) = self.command_parser.parse(&input) {
@@ -334,65 +338,132 @@ impl Repl {
     }
     
     async fn handle_message(&mut self, message: String) -> Result<()> {
+        // Try to send the message with retry logic
+        match self.send_message_with_retry(&message, 3).await {
+            Ok(()) => {
+                // Success - message was sent and response received
+            }
+            Err(e) => {
+                // All retries failed - queue the message for retry
+                self.queued_message = Some(message);
+                self.ui.print_error(&format!("Failed to send message after 3 attempts: {}", e));
+                self.ui.print_info("Message queued for retry. Press Enter to retry, or modify and press Enter.");
+            }
+        }
+        
+        Ok(())
+    }
+    
+    async fn send_message_with_retry(&mut self, message: &str, max_retries: u32) -> Result<()> {
         let user_message = Message {
             role: "user".to_string(),
-            content: message,
+            content: message.to_string(),
         };
         
-        let message_number = self.session.add_message(user_message);
-        self.ui.print_user_message(message_number, &self.session.messages.last().unwrap().message.content);
-        
-        // Send to LLM provider and handle streaming response
-        if let Some(provider_name) = &self.current_provider {
-            if let Some(provider) = self.providers.get(provider_name) {
-                let chat_request = ChatRequest {
-                    messages: self.session.messages.iter().map(|nm| nm.message.clone()).collect(),
-                    model: self.session.current_model.clone(),
-                    temperature: self.session.temperature,
-                    stream: true, // Re-enable streaming
-                };
-                
-                match provider.chat(chat_request).await {
-                    Ok(mut stream) => {
-                        self.ui.print_agent_prefix(message_number + 1);
-                        let mut full_response = String::new();
-                        
-                        while let Some(chunk) = stream.next().await {
-                            match chunk {
-                                Ok(content) => {
-                                    if !content.is_empty() {
-                                        self.ui.print_agent_chunk(&content);
-                                        full_response.push_str(&content);
+        for attempt in 1..=max_retries {
+            if attempt > 1 {
+                let delay = std::time::Duration::from_millis(1000 * (1 << (attempt - 2))); // Exponential backoff: 1s, 2s, 4s
+                self.ui.print_info(&format!("Retrying in {}s... (attempt {}/{})", delay.as_secs(), attempt, max_retries));
+                tokio::time::sleep(delay).await;
+            }
+            
+            // Only add to session history on first attempt
+            let message_number = if attempt == 1 {
+                let num = self.session.add_message(user_message.clone());
+                self.ui.print_user_message(num, &message);
+                num
+            } else {
+                self.session.messages.len()
+            };
+            
+            // Send to LLM provider and handle streaming response
+            if let Some(provider_name) = &self.current_provider {
+                if let Some(provider) = self.providers.get(provider_name) {
+                    let chat_request = ChatRequest {
+                        messages: self.session.messages.iter().map(|nm| nm.message.clone()).collect(),
+                        model: self.session.current_model.clone(),
+                        temperature: self.session.temperature,
+                        stream: true,
+                    };
+                    
+                    match provider.chat(chat_request).await {
+                        Ok(mut stream) => {
+                            self.ui.print_agent_prefix(message_number + 1);
+                            let mut full_response = String::new();
+                            let mut stream_error = false;
+                            
+                            while let Some(chunk) = stream.next().await {
+                                match chunk {
+                                    Ok(content) => {
+                                        if !content.is_empty() {
+                                            self.ui.print_agent_chunk(&content);
+                                            full_response.push_str(&content);
+                                        }
+                                    }
+                                    Err(e) => {
+                                        self.ui.print_error(&format!("Stream error: {}", e));
+                                        stream_error = true;
+                                        break;
                                     }
                                 }
-                                Err(e) => {
-                                    self.ui.print_error(&format!("Stream error: {}", e));
-                                    break;
+                            }
+                            
+                            if stream_error {
+                                if attempt < max_retries {
+                                    continue; // Retry on stream error
+                                } else {
+                                    // Remove user message from history on final failure
+                                    if self.session.messages.last().map(|m| &m.message.role) == Some(&"user".to_string()) {
+                                        self.session.messages.pop();
+                                    }
+                                    return Err(anyhow::anyhow!("Stream error on final attempt"));
+                                }
+                            }
+                            
+                            self.ui.print_agent_newline();
+                            
+                            // Add the complete response to the session with metadata
+                            if !full_response.is_empty() {
+                                let assistant_message = Message {
+                                    role: "assistant".to_string(),
+                                    content: full_response,
+                                };
+                                self.session.add_message_with_metadata(
+                                    assistant_message,
+                                    self.current_provider.clone(),
+                                    Some(self.session.current_model.clone())
+                                );
+                                return Ok(()); // Success!
+                            } else {
+                                if attempt < max_retries {
+                                    self.ui.print_error("Empty response received, retrying...");
+                                    continue;
+                                } else {
+                                    // Remove user message from history on final failure
+                                    if self.session.messages.last().map(|m| &m.message.role) == Some(&"user".to_string()) {
+                                        self.session.messages.pop();
+                                    }
+                                    return Err(anyhow::anyhow!("Empty response on final attempt"));
                                 }
                             }
                         }
-                        self.ui.print_agent_newline();
-                        
-                        // Add the complete response to the session with metadata
-                        if !full_response.is_empty() {
-                            let assistant_message = Message {
-                                role: "assistant".to_string(),
-                                content: full_response,
-                            };
-                            self.session.add_message_with_metadata(
-                                assistant_message,
-                                self.current_provider.clone(),
-                                Some(self.session.current_model.clone())
-                            );
+                        Err(e) => {
+                            if attempt < max_retries {
+                                self.ui.print_error(&format!("API error (attempt {}/{}): {}", attempt, max_retries, e));
+                                continue; // Retry on API error
+                            } else {
+                                // Remove user message from history on final failure
+                                if self.session.messages.last().map(|m| &m.message.role) == Some(&"user".to_string()) {
+                                    self.session.messages.pop();
+                                }
+                                return Err(e);
+                            }
                         }
-                    }
-                    Err(e) => {
-                        self.ui.print_error(&format!("Error calling LLM provider: {}", e));
                     }
                 }
             }
         }
         
-        Ok(())
+        Err(anyhow::anyhow!("No provider available"))
     }
 }
