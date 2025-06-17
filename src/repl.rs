@@ -70,8 +70,23 @@ impl Repl {
             }
         }
         
+        // If no provider is set, choose the first available one as default
+        if current_provider.is_none() && !providers.is_empty() {
+            current_provider = providers.keys().next().cloned();
+        }
+        
         // Update session with current provider
         session.current_provider = current_provider.clone();
+        
+        // Ensure we have a valid model for the current provider
+        if let Some(provider_name) = &current_provider {
+            if let Some(provider) = providers.get(provider_name) {
+                let available_models = provider.get_models();
+                if !available_models.contains(&session.current_model) && !available_models.is_empty() {
+                    session.current_model = available_models[0].clone();
+                }
+            }
+        }
         
         let command_parser = CommandParser::new()?;
         let ui = UI::new()?;
@@ -202,10 +217,23 @@ impl Repl {
                 self.ui.print_info(&format!("Removed last {} message(s)", count));
             }
             Command::Model(model_name) => {
-                // For now, just update the session model
-                // TODO: Validate model exists for current provider
-                self.session.current_model = model_name.clone();
-                self.ui.print_info(&format!("Switched to model: {}", model_name));
+                // Validate model exists for current provider
+                if let Some(provider_name) = &self.current_provider {
+                    if let Some(provider) = self.providers.get(provider_name) {
+                        let available_models = provider.get_models();
+                        if available_models.contains(&model_name) {
+                            self.session.current_model = model_name.clone();
+                            self.ui.print_info(&format!("Switched to model: {}", model_name));
+                        } else {
+                            self.ui.print_error(&format!("Model '{}' not available for provider '{}'. Available models: {}", 
+                                model_name, provider_name, available_models.join(", ")));
+                        }
+                    } else {
+                        self.ui.print_error("No provider available");
+                    }
+                } else {
+                    self.ui.print_error("No provider selected");
+                }
             }
             Command::Status => {
                 if let Some(provider_name) = &self.current_provider {
@@ -225,7 +253,21 @@ impl Repl {
                 if self.providers.contains_key(&provider_name) {
                     self.current_provider = Some(provider_name.clone());
                     self.session.current_provider = Some(provider_name.clone());
-                    self.ui.print_info(&format!("Switched to provider: {}", provider_name));
+                    
+                    // Switch to a default model for this provider if current model isn't available
+                    if let Some(provider) = self.providers.get(&provider_name) {
+                        let available_models = provider.get_models();
+                        if !available_models.contains(&self.session.current_model) && !available_models.is_empty() {
+                            let old_model = self.session.current_model.clone();
+                            self.session.current_model = available_models[0].clone();
+                            self.ui.print_info(&format!("Switched to provider: {} (model changed from {} to {})", 
+                                provider_name, old_model, self.session.current_model));
+                        } else {
+                            self.ui.print_info(&format!("Switched to provider: {}", provider_name));
+                        }
+                    } else {
+                        self.ui.print_info(&format!("Switched to provider: {}", provider_name));
+                    }
                 } else {
                     let available_providers: Vec<String> = self.providers.keys().cloned().collect();
                     self.ui.print_error(&format!("Provider '{}' not available. Available providers: {}", 
