@@ -63,6 +63,7 @@ impl LLMProvider for OpenAIProvider {
                                 buffer.push_str(&chunk);
                                 
                                 // Process complete lines
+                                let mut found_content = false;
                                 while let Some(line_end) = buffer.find('\n') {
                                     let line = buffer[..line_end].trim().to_string();
                                     buffer = buffer[line_end + 1..].to_string();
@@ -82,17 +83,47 @@ impl LLMProvider for OpenAIProvider {
                                                 .and_then(|content| content.as_str())
                                             {
                                                 if !content.is_empty() {
+                                                    found_content = true;
                                                     return Some((Ok(content.to_string()), (buffer, byte_stream)));
                                                 }
                                             }
                                         }
                                     }
                                 }
+                                
+                                // If we didn't find content in this chunk, continue to next chunk
+                                if !found_content {
+                                    continue;
+                                }
                             }
                             Some(Err(e)) => {
                                 return Some((Err(anyhow::anyhow!("Stream error: {}", e)), (buffer, byte_stream)));
                             }
                             None => {
+                                // Stream ended - check if there's any remaining content in buffer
+                                if !buffer.trim().is_empty() {
+                                    // Try to process any remaining lines
+                                    for line in buffer.lines() {
+                                        if let Some(json_str) = line.trim().strip_prefix("data: ") {
+                                            if json_str.trim() != "[DONE]" {
+                                                if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(json_str) {
+                                                    if let Some(content) = json_val
+                                                        .get("choices")
+                                                        .and_then(|c| c.as_array())
+                                                        .and_then(|arr| arr.first())
+                                                        .and_then(|choice| choice.get("delta"))
+                                                        .and_then(|delta| delta.get("content"))
+                                                        .and_then(|content| content.as_str())
+                                                    {
+                                                        if !content.is_empty() {
+                                                            return Some((Ok(content.to_string()), (String::new(), byte_stream)));
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                                 return None; // Stream ended
                             }
                         }
