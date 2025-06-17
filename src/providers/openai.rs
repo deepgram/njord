@@ -96,12 +96,23 @@ impl LLMProvider for OpenAIProvider {
                                 return Some((Err(anyhow::anyhow!("Stream error: {}", e)), (buffer, byte_stream)));
                             }
                             None => {
-                                // Stream ended - check if there's any remaining content in buffer
-                                if !buffer.trim().is_empty() {
-                                    // Try to process any remaining lines
-                                    for line in buffer.lines() {
+                                // Stream ended - process any remaining content in buffer
+                                let remaining_buffer = buffer.trim();
+                                if !remaining_buffer.is_empty() {
+                                    // Split by lines and also check for incomplete lines
+                                    let mut lines: Vec<&str> = remaining_buffer.lines().collect();
+                                    
+                                    // If buffer doesn't end with newline, the last part might be an incomplete line
+                                    if !buffer.ends_with('\n') && !remaining_buffer.is_empty() {
+                                        // Check if the remaining content looks like a data line
+                                        if remaining_buffer.starts_with("data: ") {
+                                            lines.push(remaining_buffer);
+                                        }
+                                    }
+                                    
+                                    for line in lines {
                                         if let Some(json_str) = line.trim().strip_prefix("data: ") {
-                                            if json_str.trim() != "[DONE]" {
+                                            if json_str.trim() != "[DONE]" && !json_str.trim().is_empty() {
                                                 if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(json_str) {
                                                     if let Some(content) = json_val
                                                         .get("choices")
