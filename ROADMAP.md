@@ -22,21 +22,25 @@ Njord is an interactive LLM REPL that aims to provide a powerful terminal-based 
 
 Based on current progress, the next most valuable features to implement are:
 
-1. **Session Save/Load Implementation** - Complete the chat session persistence
-   - Implement `/chat save NAME` and `/chat load NAME` commands
-   - This will make the tool much more practical for ongoing conversations
-
-2. **Anthropic API Integration** - Add second provider for comparison
+1. **Anthropic API Integration** - Add second provider for comparison
    - Implement Claude API calls with streaming
    - This provides immediate value and validates our multi-provider architecture
+   - Essential for demonstrating the multi-provider design
 
-3. **Basic Message Navigation** - Complete the conversation management
-   - Implement `/goto N` and `/history` commands
-   - Essential for managing longer conversations
-
-4. **Multi-line Input Support** - Improve user experience
+2. **Multi-line Input Support** - Improve user experience
    - Allow users to input longer prompts more easily
-   - Critical for practical usage
+   - Critical for practical usage with complex prompts
+   - Should support triple-backtick blocks for code input
+
+3. **Code Block Extraction** - Parse and manage code from responses
+   - Extract code blocks from markdown responses
+   - Number and catalog code blocks for easy reference
+   - Foundation for advanced code management features
+
+4. **Enhanced Error Handling** - Better user experience
+   - User-friendly error messages
+   - Graceful degradation when APIs are unavailable
+   - Better validation and feedback
 
 ## Phase 1: Core Functionality 🚧
 
@@ -68,26 +72,28 @@ Based on current progress, the next most valuable features to implement are:
   - [ ] Code syntax highlighting
 
 ### Core Commands Implementation
-- [x] **Chat Management**
+- [x] **Chat Management** - COMPLETE!
   - [x] `/chat new` - Start new session
-  - [ ] `/chat save NAME` - Save current session
-  - [ ] `/chat load NAME` - Load saved session
-  - [ ] `/chat list` - List saved sessions
-  - [ ] `/chat delete NAME` - Delete saved session
+  - [x] `/chat save NAME` - Save current session
+  - [x] `/chat load NAME` - Load saved session
+  - [x] `/chat list` - List saved sessions
+  - [x] `/chat delete NAME` - Delete saved session
 
-- [x] **Model Management**
+- [x] **Model Management** - COMPLETE!
   - [x] `/models` - List available models
   - [x] `/model MODEL` - Switch to different model
   - [x] `/provider PROVIDER` - Switch between providers
   - [x] `/status` - Show current provider and model
 
-- [x] **Message Navigation**
+- [x] **Message Navigation** - COMPLETE!
   - [x] `/undo [N]` - Remove last N messages
-  - [ ] `/goto N` - Jump to message N
-  - [ ] `/history` - Show conversation history
+  - [x] `/goto N` - Jump to message N
+  - [x] `/history` - Show conversation history
   - [ ] `/search TERM` - Search conversation history
 
-## Phase 2: Advanced Features 🔮
+## Phase 2: Advanced Features 🚧
+
+**Current Focus: Multi-Provider Support and Enhanced UX**
 
 ### Code Block Management
 - [ ] **Code Extraction and Management**
@@ -233,8 +239,10 @@ export NJORD_EDITOR="vim"
 ### Phase 1 Success Criteria
 - [x] Can successfully chat with at least one LLM provider (OpenAI complete!)
 - [x] Streaming responses work smoothly (Fixed and working perfectly!)
-- [ ] Basic session save/load functionality
-- [x] Core commands are implemented and functional (Most core commands done)
+- [x] Basic session save/load functionality (COMPLETE!)
+- [x] Core commands are implemented and functional (COMPLETE!)
+
+**🎉 Phase 1 is now COMPLETE! 🎉**
 
 ### Phase 2 Success Criteria
 - [ ] Code block extraction and management works
