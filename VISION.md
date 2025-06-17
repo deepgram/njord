@@ -1,4 +1,6 @@
-# Interactive LLM REPL - Project Vision
+# Njord - Interactive LLM REPL
+
+*Named after the Norse god of the sea and sailors, Njord guides you through the vast ocean of AI conversations.*
 
 ## Project Vision and Goals
 
@@ -66,4 +68,6 @@ This is an **Interactive LLM REPL** - a terminal-based chat interface for multip
 
 ## Desired Behavior
 
-This creates a powerful, persistent, and highly navigable AI chat environment optimized for technical users who want full control over their AI interactions. The tool should feel like a native terminal application with the responsiveness and feature set that systems engineers and developers expect from their command-line tools.
+Njord creates a powerful, persistent, and highly navigable AI chat environment optimized for technical users who want full control over their AI interactions. The tool should feel like a native terminal application with the responsiveness and feature set that systems engineers and developers expect from their command-line tools.
+
+Like its namesake Norse god who provided safe passage across treacherous waters, Njord helps developers navigate the complex landscape of AI providers and conversations with confidence and control.
