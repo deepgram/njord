@@ -47,40 +47,58 @@ impl LLMProvider for OpenAIProvider {
         }
         
         if request.stream {
-            // Handle streaming response - simplified approach
-            let stream = response
-                .bytes_stream()
-                .map(|chunk| {
-                    match chunk {
-                        Ok(bytes) => {
-                            let text = String::from_utf8_lossy(&bytes);
-                            // Simple parsing - look for content in each chunk
-                            for line in text.lines() {
-                                if let Some(json_str) = line.strip_prefix("data: ") {
-                                    if json_str.trim() == "[DONE]" {
-                                        continue;
-                                    }
-                                    if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(json_str) {
-                                        if let Some(content) = json_val
-                                            .get("choices")
-                                            .and_then(|c| c.as_array())
-                                            .and_then(|arr| arr.first())
-                                            .and_then(|choice| choice.get("delta"))
-                                            .and_then(|delta| delta.get("content"))
-                                            .and_then(|content| content.as_str())
-                                        {
-                                            if !content.is_empty() {
-                                                return Ok(content.to_string());
+            // Handle streaming response with proper SSE parsing
+            use futures::stream::unfold;
+            
+            let mut buffer = String::new();
+            let mut byte_stream = response.bytes_stream();
+            
+            let stream = unfold(
+                (buffer, byte_stream),
+                |(mut buffer, mut byte_stream)| async move {
+                    loop {
+                        match byte_stream.next().await {
+                            Some(Ok(bytes)) => {
+                                let chunk = String::from_utf8_lossy(&bytes);
+                                buffer.push_str(&chunk);
+                                
+                                // Process complete lines
+                                while let Some(line_end) = buffer.find('\n') {
+                                    let line = buffer[..line_end].trim();
+                                    buffer = buffer[line_end + 1..].to_string();
+                                    
+                                    if let Some(json_str) = line.strip_prefix("data: ") {
+                                        if json_str.trim() == "[DONE]" {
+                                            return None; // End of stream
+                                        }
+                                        
+                                        if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(json_str) {
+                                            if let Some(content) = json_val
+                                                .get("choices")
+                                                .and_then(|c| c.as_array())
+                                                .and_then(|arr| arr.first())
+                                                .and_then(|choice| choice.get("delta"))
+                                                .and_then(|delta| delta.get("content"))
+                                                .and_then(|content| content.as_str())
+                                            {
+                                                if !content.is_empty() {
+                                                    return Some((Ok(content.to_string()), (buffer, byte_stream)));
+                                                }
                                             }
                                         }
                                     }
                                 }
                             }
-                            Ok(String::new()) // Return empty string if no content found
+                            Some(Err(e)) => {
+                                return Some((Err(anyhow::anyhow!("Stream error: {}", e)), (buffer, byte_stream)));
+                            }
+                            None => {
+                                return None; // Stream ended
+                            }
                         }
-                        Err(e) => Err(anyhow::anyhow!("Stream error: {}", e)),
                     }
-                });
+                }
+            );
             
             Ok(Box::new(Box::pin(stream)))
         } else {
