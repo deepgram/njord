@@ -14,6 +14,7 @@ pub struct Message {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct ChatRequest {
     pub messages: Vec<Message>,
     pub model: String,
@@ -23,8 +24,10 @@ pub struct ChatRequest {
 
 #[async_trait]
 pub trait LLMProvider: Send + Sync {
+    #[allow(dead_code)]
     async fn chat(&self, request: ChatRequest) -> Result<Box<dyn Stream<Item = Result<String>> + Unpin + Send>>;
     fn get_models(&self) -> Vec<String>;
+    #[allow(dead_code)]
     fn get_name(&self) -> &str;
 }
 

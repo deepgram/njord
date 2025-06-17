@@ -2,6 +2,7 @@ use anyhow::Result;
 use regex::Regex;
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum Command {
     Model(String),
     Models,

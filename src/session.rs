@@ -80,6 +80,7 @@ impl ChatSession {
         Ok(())
     }
     
+    #[allow(dead_code)]
     pub fn goto(&mut self, message_number: usize) -> Result<()> {
         if message_number == 0 || message_number > self.messages.len() {
             return Err(anyhow::anyhow!("Invalid message number: {}", message_number));

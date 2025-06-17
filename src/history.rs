@@ -44,6 +44,7 @@ impl History {
         self.current_session = Some(session);
     }
     
+    #[allow(dead_code)]
     pub fn save_session(&mut self, name: String, session: ChatSession) {
         self.saved_sessions.insert(name, session);
     }
@@ -52,6 +53,7 @@ impl History {
         self.saved_sessions.get(name)
     }
     
+    #[allow(dead_code)]
     pub fn list_sessions(&self) -> Vec<&String> {
         self.saved_sessions.keys().collect()
     }

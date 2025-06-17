@@ -5,6 +5,7 @@ use reqwest::Client;
 
 use super::{LLMProvider, ChatRequest};
 
+#[allow(dead_code)]
 pub struct AnthropicProvider {
     client: Client,
     api_key: String,
