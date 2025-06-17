@@ -249,6 +249,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Built with [Rust](https://www.rust-lang.org/) for performance and safety
 - Uses [rustls](https://github.com/rustls/rustls) for pure Rust TLS implementation
 - Terminal interface powered by [rustyline](https://github.com/kkawakam/rustyline)
+- Developed with [Aider](https://aider.chat/) - the entire project was vibe-coded in a few hours using Aider and Claude-3.5-Sonnet
 
 ## Roadmap
 
