@@ -22,12 +22,7 @@ Njord is an interactive LLM REPL that aims to provide a powerful terminal-based 
 
 Based on current progress, the next most valuable features to implement are:
 
-1. **Anthropic API Integration** - Add second provider for comparison
-   - Implement Claude API calls with streaming
-   - This provides immediate value and validates our multi-provider architecture
-   - Essential for demonstrating the multi-provider design
-
-2. **Multi-line Input Support** - Improve user experience
+1. **Multi-line Input Support** - Improve user experience
    - Allow users to input longer prompts more easily
    - Critical for practical usage with complex prompts
    - Should support triple-backtick blocks for code input
@@ -47,10 +42,11 @@ Based on current progress, the next most valuable features to implement are:
 ### LLM Provider Integration
 - [x] **OpenAI API Integration** - COMPLETE!
 
-- [ ] **Anthropic API Integration**
-  - [ ] Implement Claude API calls
-  - [ ] Handle streaming responses
-  - [ ] Support for Claude 3 model variants
+- [x] **Anthropic API Integration** - COMPLETE!
+  - [x] Implement Claude API calls with Messages API
+  - [x] Handle streaming responses with SSE parsing
+  - [x] Support for Claude 3 model variants (Haiku, Sonnet, Opus, 3.5 Sonnet)
+  - [x] Message format conversion (system messages handled properly)
 
 - [ ] **Google Gemini API Integration**
   - [ ] Implement Gemini API calls

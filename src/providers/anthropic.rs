@@ -1,9 +1,10 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use futures::{stream, Stream};
+use futures::Stream;
 use reqwest::Client;
+use serde_json::json;
 
-use super::{LLMProvider, ChatRequest};
+use super::{LLMProvider, ChatRequest, Message};
 
 #[allow(dead_code)]
 pub struct AnthropicProvider {
@@ -18,14 +19,193 @@ impl AnthropicProvider {
             api_key: api_key.to_string(),
         })
     }
+    
+    fn convert_messages(&self, messages: &[Message]) -> (Option<String>, Vec<serde_json::Value>) {
+        let mut system_message = None;
+        let mut anthropic_messages = Vec::new();
+        
+        for msg in messages {
+            if msg.role == "system" {
+                system_message = Some(msg.content.clone());
+            } else {
+                anthropic_messages.push(json!({
+                    "role": msg.role,
+                    "content": msg.content
+                }));
+            }
+        }
+        
+        (system_message, anthropic_messages)
+    }
 }
 
 #[async_trait]
 impl LLMProvider for AnthropicProvider {
-    async fn chat(&self, _request: ChatRequest) -> Result<Box<dyn Stream<Item = Result<String>> + Unpin + Send>> {
-        // TODO: Implement Anthropic API integration
-        let stream = stream::once(async { Ok("TODO: Anthropic implementation".to_string()) });
-        Ok(Box::new(Box::pin(stream)))
+    async fn chat(&self, request: ChatRequest) -> Result<Box<dyn Stream<Item = Result<String>> + Unpin + Send>> {
+        let url = "https://api.anthropic.com/v1/messages";
+        
+        let (system_message, anthropic_messages) = self.convert_messages(&request.messages);
+        
+        let mut payload = json!({
+            "model": request.model,
+            "max_tokens": 4096,
+            "messages": anthropic_messages,
+            "temperature": request.temperature,
+            "stream": request.stream
+        });
+        
+        if let Some(system) = system_message {
+            payload["system"] = json!(system);
+        }
+        
+        let response = self.client
+            .post(url)
+            .header("x-api-key", &self.api_key)
+            .header("anthropic-version", "2023-06-01")
+            .header("Content-Type", "application/json")
+            .json(&payload)
+            .send()
+            .await?;
+        
+        if !response.status().is_success() {
+            let error_text = response.text().await?;
+            return Err(anyhow::anyhow!("Anthropic API error: {}", error_text));
+        }
+        
+        if request.stream {
+            // Handle streaming response with proper SSE parsing
+            use futures::stream::unfold;
+            use futures::StreamExt;
+            
+            let buffer = String::new();
+            let byte_stream = response.bytes_stream();
+            
+            let stream = unfold(
+                (buffer, byte_stream, Vec::<String>::new()),
+                |(mut buffer, mut byte_stream, mut pending_content)| async move {
+                    // First, check if we have pending content to yield
+                    if let Some(content) = pending_content.pop() {
+                        return Some((Ok(content), (buffer, byte_stream, pending_content)));
+                    }
+                    
+                    loop {
+                        match byte_stream.next().await {
+                            Some(Ok(bytes)) => {
+                                let chunk = String::from_utf8_lossy(&bytes);
+                                buffer.push_str(&chunk);
+                                
+                                // Process ALL complete lines ending with \n
+                                while let Some(newline_pos) = buffer.find('\n') {
+                                    let line = buffer[..newline_pos].trim().to_string();
+                                    buffer = buffer[newline_pos + 1..].to_string();
+                                    
+                                    // Parse SSE data lines
+                                    if let Some(json_str) = line.strip_prefix("data: ") {
+                                        if json_str.trim() == "[DONE]" {
+                                            // If we have pending content, yield it first
+                                            if let Some(content) = pending_content.pop() {
+                                                return Some((Ok(content), (buffer, byte_stream, pending_content)));
+                                            }
+                                            return None; // End of stream
+                                        }
+                                        
+                                        // Parse the JSON chunk
+                                        if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(json_str) {
+                                            // Handle different event types
+                                            if let Some(event_type) = json_val.get("type").and_then(|t| t.as_str()) {
+                                                match event_type {
+                                                    "content_block_delta" => {
+                                                        if let Some(content) = json_val
+                                                            .get("delta")
+                                                            .and_then(|delta| delta.get("text"))
+                                                            .and_then(|text| text.as_str())
+                                                        {
+                                                            if !content.is_empty() {
+                                                                pending_content.insert(0, content.to_string());
+                                                            }
+                                                        }
+                                                    }
+                                                    "message_stop" => {
+                                                        // End of message
+                                                        if let Some(content) = pending_content.pop() {
+                                                            return Some((Ok(content), (buffer, byte_stream, pending_content)));
+                                                        }
+                                                        return None;
+                                                    }
+                                                    _ => {
+                                                        // Ignore other event types (message_start, content_block_start, etc.)
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                // If we have pending content, yield the first piece
+                                if let Some(content) = pending_content.pop() {
+                                    return Some((Ok(content), (buffer, byte_stream, pending_content)));
+                                }
+                                // Continue to next chunk if no content to yield
+                            }
+                            Some(Err(e)) => {
+                                return Some((Err(anyhow::anyhow!("Stream error: {}", e)), (buffer, byte_stream, pending_content)));
+                            }
+                            None => {
+                                // Stream ended - process any remaining complete lines in buffer
+                                while let Some(newline_pos) = buffer.find('\n') {
+                                    let line = buffer[..newline_pos].trim().to_string();
+                                    buffer = buffer[newline_pos + 1..].to_string();
+                                    
+                                    if let Some(json_str) = line.strip_prefix("data: ") {
+                                        if json_str.trim() != "[DONE]" {
+                                            if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(json_str) {
+                                                if let Some(event_type) = json_val.get("type").and_then(|t| t.as_str()) {
+                                                    if event_type == "content_block_delta" {
+                                                        if let Some(content) = json_val
+                                                            .get("delta")
+                                                            .and_then(|delta| delta.get("text"))
+                                                            .and_then(|text| text.as_str())
+                                                        {
+                                                            if !content.is_empty() {
+                                                                pending_content.insert(0, content.to_string());
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                // Yield any remaining pending content
+                                if let Some(content) = pending_content.pop() {
+                                    return Some((Ok(content), (String::new(), byte_stream, pending_content)));
+                                }
+                                
+                                return None; // Stream truly ended
+                            }
+                        }
+                    }
+                }
+            );
+            
+            Ok(Box::new(Box::pin(stream)))
+        } else {
+            // Handle non-streaming response
+            let json_response: serde_json::Value = response.json().await?;
+            
+            let content = json_response
+                .get("content")
+                .and_then(|content| content.as_array())
+                .and_then(|arr| arr.first())
+                .and_then(|block| block.get("text"))
+                .and_then(|text| text.as_str())
+                .unwrap_or("No response content")
+                .to_string();
+            
+            let stream = futures::stream::once(async move { Ok(content) });
+            Ok(Box::new(Box::pin(stream)))
+        }
     }
     
     fn get_models(&self) -> Vec<String> {
@@ -33,6 +213,7 @@ impl LLMProvider for AnthropicProvider {
             "claude-3-haiku-20240307".to_string(),
             "claude-3-sonnet-20240229".to_string(),
             "claude-3-opus-20240229".to_string(),
+            "claude-3-5-sonnet-20241022".to_string(),
         ]
     }
     
