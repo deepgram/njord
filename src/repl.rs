@@ -33,9 +33,6 @@ impl Repl {
         let mut current_provider = None;
         
         // Initialize providers based on available API keys
-        // Prefer OpenAI as the default provider since it's fully implemented
-        let provider_priority = ["openai", "anthropic", "gemini"];
-        
         for (provider_name, api_key) in &config.api_keys {
             match create_provider(provider_name, api_key) {
                 Ok(provider) => {
@@ -367,18 +364,29 @@ impl Repl {
         let cancel_token = CancellationToken::new();
         self.active_request_token = Some(cancel_token.clone());
         
+        // Split the receiver to avoid borrow checker issues
+        let mut ctrl_c_rx = std::mem::replace(&mut self.ctrl_c_rx, tokio::sync::mpsc::unbounded_channel().1);
+        
         // Try to send the message with retry logic
         let result = tokio::select! {
-            result = self.send_message_with_retry(&message, 3, cancel_token.clone()) => result,
+            result = self.send_message_with_retry(&message, 3, cancel_token.clone()) => {
+                // Restore the receiver
+                self.ctrl_c_rx = ctrl_c_rx;
+                result
+            },
             _ = cancel_token.cancelled() => {
+                // Restore the receiver
+                self.ctrl_c_rx = ctrl_c_rx;
                 // Request was cancelled - queue as interrupted message
                 self.interrupted_message = Some(message);
                 self.ui.print_info("Request interrupted. Message available for editing.");
                 return Ok(());
             }
-            _ = self.ctrl_c_rx.recv() => {
+            _ = ctrl_c_rx.recv() => {
                 // Ctrl-C received - cancel local token and queue message
                 cancel_token.cancel();
+                // Restore the receiver
+                self.ctrl_c_rx = ctrl_c_rx;
                 self.interrupted_message = Some(message);
                 self.ui.print_info("Request interrupted by Ctrl-C. Message available for editing.");
                 return Ok(());
