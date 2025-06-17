@@ -22,6 +22,7 @@ pub struct Repl {
     ui: UI,
     queued_message: Option<String>,
     active_request_token: Option<CancellationToken>,
+    interrupted_message: Option<String>,
 }
 
 impl Repl {
@@ -93,6 +94,7 @@ impl Repl {
             ui,
             queued_message: None,
             active_request_token: None,
+            interrupted_message: None,
         })
     }
     
@@ -100,7 +102,16 @@ impl Repl {
         self.ui.draw_welcome()?;
         
         loop {
-            if let Some(input) = self.ui.read_input(self.queued_message.as_deref())? {
+            // Determine what message to show in prompt
+            let prompt_message = if let Some(interrupted) = &self.interrupted_message {
+                Some((interrupted.as_str(), "interrupted"))
+            } else if let Some(queued) = &self.queued_message {
+                Some((queued.as_str(), "retry"))
+            } else {
+                None
+            };
+            
+            if let Some(input) = self.ui.read_input(prompt_message)? {
                 // Handle Ctrl-C signal
                 if input == "__CTRL_C__" {
                     // Cancel any active request
@@ -108,13 +119,15 @@ impl Repl {
                         token.cancel();
                         self.ui.print_info("Request cancelled");
                     }
-                    // Clear queued message
+                    // Clear all queued/interrupted messages
                     self.queued_message = None;
+                    self.interrupted_message = None;
                     continue;
                 }
                 
-                // Clear queued message once we get input
+                // Clear queued/interrupted messages once we get input
                 self.queued_message = None;
+                self.interrupted_message = None;
                 if input.starts_with('/') {
                     // This is a command attempt
                     if let Some(command) = self.command_parser.parse(&input) {
@@ -361,7 +374,9 @@ impl Repl {
         let result = tokio::select! {
             result = self.send_message_with_retry(&message, 3, cancel_token.clone()) => result,
             _ = cancel_token.cancelled() => {
-                self.ui.print_info("Request was cancelled");
+                // Request was cancelled - queue as interrupted message
+                self.interrupted_message = Some(message);
+                self.ui.print_info("Request interrupted. Message available for editing.");
                 return Ok(());
             }
         };
@@ -376,7 +391,8 @@ impl Repl {
             Err(e) => {
                 // Check if this was a cancellation
                 if cancel_token.is_cancelled() {
-                    self.ui.print_info("Request was cancelled");
+                    self.interrupted_message = Some(message);
+                    self.ui.print_info("Request interrupted. Message available for editing.");
                     return Ok(());
                 }
                 
@@ -459,8 +475,8 @@ impl Repl {
                                     }
                                     _ = cancel_token.cancelled() => {
                                         self.ui.print_info("\nRequest cancelled");
-                                        // Remove user message from history if it was added
-                                        if attempt == 1 && self.session.messages.last().map(|m| &m.message.role) == Some(&"user".to_string()) {
+                                        // Always remove user message from history when cancelled
+                                        if self.session.messages.last().map(|m| &m.message.role) == Some(&"user".to_string()) {
                                             self.session.messages.pop();
                                         }
                                         return Err(anyhow::anyhow!("Request cancelled"));
