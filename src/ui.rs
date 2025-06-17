@@ -19,6 +19,8 @@ impl UI {
         println!("  /models - List available models");
         println!("  /quit - Exit Njord");
         println!();
+        println!("For multi-line input, start with ``` and end with ``` on its own line.");
+        println!();
         
         Ok(())
     }
@@ -31,14 +33,53 @@ impl UI {
         match io::stdin().read_line(&mut input) {
             Ok(0) => Ok(Some("/quit".to_string())), // EOF
             Ok(_) => {
-                let input = input.trim().to_string();
+                let input = input.trim();
                 if input.is_empty() {
                     Ok(None)
+                } else if input.starts_with("```") {
+                    // Multi-line input mode
+                    self.read_multiline_input(input.to_string())
                 } else {
-                    Ok(Some(input))
+                    Ok(Some(input.to_string()))
                 }
             }
             Err(e) => Err(anyhow::anyhow!("Failed to read input: {}", e)),
+        }
+    }
+    
+    fn read_multiline_input(&mut self, first_line: String) -> Result<Option<String>> {
+        let mut lines = vec![first_line];
+        let mut in_code_block = true;
+        
+        println!("\x1b[2m(Multi-line mode - end with ``` on its own line)\x1b[0m");
+        
+        loop {
+            print!("\x1b[1;32m... \x1b[0m");
+            io::stdout().flush()?;
+            
+            let mut line = String::new();
+            match io::stdin().read_line(&mut line) {
+                Ok(0) => break, // EOF
+                Ok(_) => {
+                    let line = line.trim_end_matches('\n').trim_end_matches('\r');
+                    
+                    // Check for end of code block
+                    if line.trim() == "```" && in_code_block {
+                        lines.push(line.to_string());
+                        break;
+                    }
+                    
+                    lines.push(line.to_string());
+                }
+                Err(e) => return Err(anyhow::anyhow!("Failed to read input: {}", e)),
+            }
+        }
+        
+        let full_input = lines.join("\n");
+        if full_input.trim().is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(full_input))
         }
     }
     

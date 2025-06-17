@@ -22,12 +22,7 @@ Njord is an interactive LLM REPL that aims to provide a powerful terminal-based 
 
 Based on current progress, the next most valuable features to implement are:
 
-1. **Multi-line Input Support** - Improve user experience
-   - Allow users to input longer prompts more easily
-   - Critical for practical usage with complex prompts
-   - Should support triple-backtick blocks for code input
-
-3. **Code Block Extraction** - Parse and manage code from responses
+1. **Code Block Extraction** - Parse and manage code from responses
    - Extract code blocks from markdown responses
    - Number and catalog code blocks for easy reference
    - Foundation for advanced code management features
@@ -59,7 +54,7 @@ Based on current progress, the next most valuable features to implement are:
   - [x] Text coloring for responses
   - [x] Real-time streaming response display
   - [x] Message numbering and timestamps
-  - [ ] Multi-line input support
+  - [x] Multi-line input support with triple-backtick blocks
   - [ ] Input history with arrow keys
   - [ ] Tab completion for commands
 

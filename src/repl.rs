@@ -139,6 +139,10 @@ impl Repl {
                 println!("  /goto N - Jump back to message N");
                 println!("  /history - Show conversation history");
                 println!("  /quit - Exit Njord");
+                println!();
+                println!("Input tips:");
+                println!("  Start with ``` for multi-line input (end with ``` on its own line)");
+                println!("  Use this for code, long prompts, or formatted text");
             }
             Command::Models => {
                 if let Some(provider_name) = &self.current_provider {
