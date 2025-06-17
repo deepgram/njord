@@ -432,8 +432,9 @@ impl Repl {
             content: message.to_string(),
         };
         
-        let mut user_message_added = false;
-        let mut message_number = 0;
+        // Don't add user message to history until we have a successful response
+        let message_number = self.session.messages.len() + 1;
+        self.ui.print_user_message(message_number, &message);
         
         for attempt in 1..=max_retries {
             if attempt > 1 {
@@ -449,18 +450,15 @@ impl Repl {
                 }
             }
             
-            // Only add to session history on first attempt
-            if attempt == 1 {
-                message_number = self.session.add_message(user_message.clone());
-                user_message_added = true;
-                self.ui.print_user_message(message_number, &message);
-            }
-            
             // Send to LLM provider and handle streaming response
             if let Some(provider_name) = &self.current_provider {
                 if let Some(provider) = self.providers.get(provider_name) {
+                    // Create request with user message included but not yet in session history
+                    let mut request_messages: Vec<Message> = self.session.messages.iter().map(|nm| nm.message.clone()).collect();
+                    request_messages.push(user_message.clone());
+                    
                     let chat_request = ChatRequest {
-                        messages: self.session.messages.iter().map(|nm| nm.message.clone()).collect(),
+                        messages: request_messages,
                         model: self.session.current_model.clone(),
                         temperature: self.session.temperature,
                         stream: true,
@@ -496,10 +494,7 @@ impl Repl {
                                     }
                                     _ = cancel_token.cancelled() => {
                                         self.ui.print_info("\nRequest cancelled");
-                                        // Remove user message from history when cancelled
-                                        if user_message_added && self.session.messages.last().map(|m| &m.message.role) == Some(&"user".to_string()) {
-                                            self.session.messages.pop();
-                                        }
+                                        // User message was never added to history, so nothing to remove
                                         return Err(anyhow::anyhow!("Request cancelled"));
                                     }
                                 }
@@ -509,10 +504,7 @@ impl Repl {
                                 if attempt < max_retries {
                                     continue; // Retry on stream error
                                 } else {
-                                    // Remove user message from history on final failure
-                                    if user_message_added && self.session.messages.last().map(|m| &m.message.role) == Some(&"user".to_string()) {
-                                        self.session.messages.pop();
-                                    }
+                                    // User message was never added to history, so nothing to remove
                                     return Err(anyhow::anyhow!("Stream error on final attempt"));
                                 }
                             }
@@ -521,6 +513,8 @@ impl Repl {
                             
                             // Add the complete response to the session with metadata
                             if !full_response.is_empty() {
+                                // Now that we have a successful response, add both user and assistant messages
+                                self.session.add_message(user_message.clone());
                                 let assistant_message = Message {
                                     role: "assistant".to_string(),
                                     content: full_response,
@@ -536,10 +530,7 @@ impl Repl {
                                     self.ui.print_error("Empty response received, retrying...");
                                     continue;
                                 } else {
-                                    // Remove user message from history on final failure
-                                    if user_message_added && self.session.messages.last().map(|m| &m.message.role) == Some(&"user".to_string()) {
-                                        self.session.messages.pop();
-                                    }
+                                    // User message was never added to history, so nothing to remove
                                     return Err(anyhow::anyhow!("Empty response on final attempt"));
                                 }
                             }
@@ -549,10 +540,7 @@ impl Repl {
                                 self.ui.print_error(&format!("API error (attempt {}/{}): {}", attempt, max_retries, e));
                                 continue; // Retry on API error
                             } else {
-                                // Remove user message from history on final failure
-                                if user_message_added && self.session.messages.last().map(|m| &m.message.role) == Some(&"user".to_string()) {
-                                    self.session.messages.pop();
-                                }
+                                // User message was never added to history, so nothing to remove
                                 return Err(e);
                             }
                         }

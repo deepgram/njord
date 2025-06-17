@@ -51,6 +51,10 @@ impl UI {
                     // User pressed Enter on pre-filled input without changes
                     self.editor.add_history_entry(initial_input)?;
                     Ok(Some(initial_input.to_string()))
+                } else if !initial_input.is_empty() && input == initial_input {
+                    // User didn't change the pre-filled input, just pressed Enter
+                    self.editor.add_history_entry(&line)?;
+                    Ok(Some(input.to_string()))
                 } else {
                     // Add to history for arrow key navigation
                     self.editor.add_history_entry(&line)?;
