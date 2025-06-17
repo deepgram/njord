@@ -63,7 +63,6 @@ impl LLMProvider for OpenAIProvider {
                                 buffer.push_str(&chunk);
                                 
                                 // Process complete lines
-                                let mut found_content = false;
                                 while let Some(line_end) = buffer.find('\n') {
                                     let line = buffer[..line_end].trim().to_string();
                                     buffer = buffer[line_end + 1..].to_string();
@@ -83,7 +82,6 @@ impl LLMProvider for OpenAIProvider {
                                                 .and_then(|content| content.as_str())
                                             {
                                                 if !content.is_empty() {
-                                                    found_content = true;
                                                     return Some((Ok(content.to_string()), (buffer, byte_stream)));
                                                 }
                                             }
@@ -92,9 +90,7 @@ impl LLMProvider for OpenAIProvider {
                                 }
                                 
                                 // If we didn't find content in this chunk, continue to next chunk
-                                if !found_content {
-                                    continue;
-                                }
+                                continue;
                             }
                             Some(Err(e)) => {
                                 return Some((Err(anyhow::anyhow!("Stream error: {}", e)), (buffer, byte_stream)));
