@@ -239,6 +239,50 @@ impl Repl {
                     }
                 }
             }
+            Command::History => {
+                if self.session.messages.is_empty() {
+                    self.ui.print_info("No messages in current session");
+                } else {
+                    self.ui.print_info(&format!("Session history ({} messages):", self.session.messages.len()));
+                    if let Some(name) = &self.session.name {
+                        println!("Session name: {}", name);
+                    }
+                    println!("Created: {}", self.session.created_at.format("%Y-%m-%d %H:%M:%S UTC"));
+                    println!("Model: {}", self.session.current_model);
+                    println!("Temperature: {}", self.session.temperature);
+                    println!();
+                    
+                    for numbered_message in &self.session.messages {
+                        let timestamp = numbered_message.timestamp.format("%H:%M:%S");
+                        let role_color = if numbered_message.message.role == "user" {
+                            "\x1b[1;34m" // Blue for user
+                        } else {
+                            "\x1b[1;35m" // Magenta for assistant
+                        };
+                        
+                        println!("{}[{}] {} {}\x1b[0m: {}", 
+                            role_color,
+                            numbered_message.number,
+                            numbered_message.message.role.chars().next().unwrap().to_uppercase().collect::<String>() + &numbered_message.message.role[1..],
+                            timestamp,
+                            numbered_message.message.content
+                        );
+                        println!();
+                    }
+                }
+            }
+            Command::Goto(message_number) => {
+                match self.session.goto(message_number) {
+                    Ok(()) => {
+                        self.ui.print_info(&format!("Jumped to message {}, removed {} later messages", 
+                            message_number, 
+                            self.session.messages.len().saturating_sub(message_number)));
+                    }
+                    Err(e) => {
+                        self.ui.print_error(&e.to_string());
+                    }
+                }
+            }
             _ => {
                 self.ui.print_info(&format!("Command not yet implemented: {:?}", command));
             }
