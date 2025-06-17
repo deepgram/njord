@@ -1,6 +1,6 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use futures::{Stream, StreamExt};
+use futures::Stream;
 use reqwest::Client;
 use serde_json::json;
 
@@ -46,11 +46,88 @@ impl LLMProvider for OpenAIProvider {
             return Err(anyhow::anyhow!("OpenAI API error: {}", error_text));
         }
         
-        // Temporarily disable streaming to debug the truncation issue
-        // TODO: Re-enable streaming once we fix the SSE parsing
-        if false && request.stream {
-            // Streaming disabled for now
-            let stream = futures::stream::once(async { Ok("Streaming temporarily disabled".to_string()) });
+        if request.stream {
+            // Handle streaming response with proper SSE parsing
+            use futures::stream::unfold;
+            use futures::StreamExt;
+            
+            let mut buffer = String::new();
+            let mut byte_stream = response.bytes_stream();
+            
+            let stream = unfold(
+                (buffer, byte_stream),
+                |(mut buffer, mut byte_stream)| async move {
+                    loop {
+                        match byte_stream.next().await {
+                            Some(Ok(bytes)) => {
+                                let chunk = String::from_utf8_lossy(&bytes);
+                                buffer.push_str(&chunk);
+                                
+                                // Process complete lines ending with \n
+                                while let Some(newline_pos) = buffer.find('\n') {
+                                    let line = buffer[..newline_pos].trim();
+                                    buffer = buffer[newline_pos + 1..].to_string();
+                                    
+                                    // Parse SSE data lines
+                                    if let Some(json_str) = line.strip_prefix("data: ") {
+                                        if json_str.trim() == "[DONE]" {
+                                            return None; // End of stream
+                                        }
+                                        
+                                        // Parse the JSON chunk
+                                        if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(json_str) {
+                                            if let Some(content) = json_val
+                                                .get("choices")
+                                                .and_then(|c| c.as_array())
+                                                .and_then(|arr| arr.first())
+                                                .and_then(|choice| choice.get("delta"))
+                                                .and_then(|delta| delta.get("content"))
+                                                .and_then(|content| content.as_str())
+                                            {
+                                                if !content.is_empty() {
+                                                    return Some((Ok(content.to_string()), (buffer, byte_stream)));
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                // Continue to next chunk if no complete line found
+                            }
+                            Some(Err(e)) => {
+                                return Some((Err(anyhow::anyhow!("Stream error: {}", e)), (buffer, byte_stream)));
+                            }
+                            None => {
+                                // Stream ended - process any remaining complete lines in buffer
+                                while let Some(newline_pos) = buffer.find('\n') {
+                                    let line = buffer[..newline_pos].trim();
+                                    buffer = buffer[newline_pos + 1..].to_string();
+                                    
+                                    if let Some(json_str) = line.strip_prefix("data: ") {
+                                        if json_str.trim() != "[DONE]" {
+                                            if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(json_str) {
+                                                if let Some(content) = json_val
+                                                    .get("choices")
+                                                    .and_then(|c| c.as_array())
+                                                    .and_then(|arr| arr.first())
+                                                    .and_then(|choice| choice.get("delta"))
+                                                    .and_then(|delta| delta.get("content"))
+                                                    .and_then(|content| content.as_str())
+                                                {
+                                                    if !content.is_empty() {
+                                                        return Some((Ok(content.to_string()), (String::new(), byte_stream)));
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                return None; // Stream truly ended
+                            }
+                        }
+                    }
+                }
+            );
+            
             Ok(Box::new(Box::pin(stream)))
         } else {
             // Handle non-streaming response
