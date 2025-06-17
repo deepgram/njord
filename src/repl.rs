@@ -86,17 +86,21 @@ impl Repl {
                             }
                         }
                         Err(e) => {
-                            eprintln!("Error: {}", e);
+                            self.ui.print_error(&e.to_string());
                         }
                     }
                 } else {
                     // Handle regular chat message
-                    self.handle_message(input).await?;
+                    if let Err(e) = self.handle_message(input).await {
+                        self.ui.print_error(&e.to_string());
+                    }
                 }
                 
                 // Save history after each interaction
                 self.history.set_current_session(self.session.clone());
-                self.history.save()?;
+                if let Err(e) = self.history.save() {
+                    self.ui.print_error(&format!("Failed to save history: {}", e));
+                }
             }
         }
         
@@ -107,7 +111,7 @@ impl Repl {
         match command {
             Command::Quit => return Ok(false),
             Command::Help => {
-                println!("Available commands:");
+                self.ui.print_info("Available commands:");
                 println!("  /model MODEL - Switch to a different model");
                 println!("  /models - List available models");
                 println!("  /chat new - Start a new chat session");
@@ -122,7 +126,7 @@ impl Repl {
             Command::Models => {
                 if let Some(provider_name) = &self.current_provider {
                     if let Some(provider) = self.providers.get(provider_name) {
-                        println!("Available models for {}:", provider_name);
+                        self.ui.print_info(&format!("Available models for {}:", provider_name));
                         for model in provider.get_models() {
                             println!("  {}", model);
                         }
@@ -131,15 +135,15 @@ impl Repl {
             }
             Command::ChatNew => {
                 self.session = ChatSession::new(self.config.default_model.clone(), self.config.temperature);
-                println!("Started new chat session");
+                self.ui.print_info("Started new chat session");
             }
             Command::Undo(count) => {
                 let count = count.unwrap_or(1);
                 self.session.undo(count)?;
-                println!("Removed last {} message(s)", count);
+                self.ui.print_info(&format!("Removed last {} message(s)", count));
             }
             _ => {
-                println!("Command not yet implemented: {:?}", command);
+                self.ui.print_info(&format!("Command not yet implemented: {:?}", command));
             }
         }
         
@@ -153,7 +157,7 @@ impl Repl {
         };
         
         let message_number = self.session.add_message(user_message);
-        println!("User {}: {}", message_number, self.session.messages.last().unwrap().message.content);
+        self.ui.print_user_message(message_number, &self.session.messages.last().unwrap().message.content);
         
         // Send to LLM provider and handle streaming response
         if let Some(provider_name) = &self.current_provider {
@@ -167,27 +171,24 @@ impl Repl {
                 
                 match provider.chat(chat_request).await {
                     Ok(mut stream) => {
-                        print!("Agent {}: ", message_number + 1);
+                        self.ui.print_agent_prefix(message_number + 1);
                         let mut full_response = String::new();
                         
                         while let Some(chunk) = stream.next().await {
                             match chunk {
                                 Ok(content) => {
                                     if !content.is_empty() {
-                                        print!("{}", content);
+                                        self.ui.print_agent_chunk(&content);
                                         full_response.push_str(&content);
-                                        // Flush stdout to show streaming effect
-                                        use std::io::{self, Write};
-                                        io::stdout().flush().unwrap();
                                     }
                                 }
                                 Err(e) => {
-                                    eprintln!("\nError in stream: {}", e);
+                                    self.ui.print_error(&format!("Stream error: {}", e));
                                     break;
                                 }
                             }
                         }
-                        println!(); // New line after response
+                        self.ui.print_agent_newline();
                         
                         // Add the complete response to the session
                         if !full_response.is_empty() {
@@ -199,7 +200,7 @@ impl Repl {
                         }
                     }
                     Err(e) => {
-                        eprintln!("Error calling LLM provider: {}", e);
+                        self.ui.print_error(&format!("Error calling LLM provider: {}", e));
                     }
                 }
             }

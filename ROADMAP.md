@@ -33,17 +33,18 @@ Njord is an interactive LLM REPL that aims to provide a powerful terminal-based 
   - [ ] Support for Gemini Pro models
 
 ### Input/Output System
-- [ ] **Proper TUI Input Handling**
+- [x] **Simple REPL Interface** (replacing broken TUI)
+  - [x] Standard input/output with prompt
+  - [x] Text coloring for responses
   - [ ] Multi-line input support
   - [ ] Input history with arrow keys
   - [ ] Tab completion for commands
-  - [ ] Syntax highlighting for input
 
 - [ ] **Response Display**
-  - [ ] Real-time streaming response display
+  - [x] Real-time streaming response display
   - [ ] Markdown rendering in terminal
   - [ ] Code syntax highlighting
-  - [ ] Message numbering and timestamps
+  - [x] Message numbering and timestamps
 
 ### Core Commands Implementation
 - [ ] **Chat Management**
@@ -76,11 +77,11 @@ Njord is an interactive LLM REPL that aims to provide a powerful terminal-based 
   - [ ] `/exec N` - Execute code block (with safety prompts)
 
 ### Enhanced UI/UX
-- [ ] **Improved TUI Interface**
-  - [ ] Split-pane view (conversation + sidebar)
-  - [ ] Message threading visualization
+- [ ] **Enhanced REPL Interface**
+  - [ ] Better text coloring and formatting
   - [ ] Progress indicators for streaming
-  - [ ] Status bar with current model/session info
+  - [ ] Status information display
+  - [ ] Optional pager for long responses
 
 - [ ] **Customization**
   - [ ] Theme support
@@ -151,6 +152,12 @@ Njord is an interactive LLM REPL that aims to provide a powerful terminal-based 
   - [ ] Memory usage optimization
 
 ## Technical Debt and Improvements
+
+### Known Issues
+- [x] **TUI Input Handling Broken** - Replaced with simple REPL
+- [x] **Overcomplicated UI** - Simplified to standard terminal interface
+- [ ] **Streaming Response Parsing** - OpenAI SSE parsing needs improvement
+- [ ] **Error Handling** - Need better user-friendly error messages
 
 ### Code Quality
 - [ ] **Testing**
