@@ -1,6 +1,7 @@
 use anyhow::Result;
 use std::collections::HashMap;
 use futures::StreamExt;
+use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 use crate::{
@@ -23,11 +24,11 @@ pub struct Repl {
     queued_message: Option<String>,
     active_request_token: Option<CancellationToken>,
     interrupted_message: Option<String>,
-    global_cancel_token: CancellationToken,
+    ctrl_c_rx: mpsc::UnboundedReceiver<()>,
 }
 
 impl Repl {
-    pub async fn new(config: Config, global_cancel_token: CancellationToken) -> Result<Self> {
+    pub async fn new(config: Config, ctrl_c_rx: mpsc::UnboundedReceiver<()>) -> Result<Self> {
         let mut providers = HashMap::new();
         let mut current_provider = None;
         
@@ -96,7 +97,7 @@ impl Repl {
             queued_message: None,
             active_request_token: None,
             interrupted_message: None,
-            global_cancel_token,
+            ctrl_c_rx,
         })
     }
     
@@ -104,10 +105,6 @@ impl Repl {
         self.ui.draw_welcome()?;
         
         loop {
-            // Reset global cancellation token at the start of each loop iteration
-            if self.global_cancel_token.is_cancelled() {
-                self.global_cancel_token = CancellationToken::new();
-            }
             // Determine what message to show in prompt
             let prompt_message = if let Some(interrupted) = &self.interrupted_message {
                 Some((interrupted.as_str(), "interrupted"))
@@ -373,9 +370,8 @@ impl Repl {
     }
     
     async fn handle_message(&mut self, message: String) -> Result<()> {
-        // Create cancellation token for this request, linked to global token
+        // Create cancellation token for this request
         let cancel_token = CancellationToken::new();
-        let global_token = self.global_cancel_token.clone();
         self.active_request_token = Some(cancel_token.clone());
         
         // Try to send the message with retry logic
@@ -387,8 +383,8 @@ impl Repl {
                 self.ui.print_info("Request interrupted. Message available for editing.");
                 return Ok(());
             }
-            _ = global_token.cancelled() => {
-                // Global cancellation (Ctrl-C) - cancel local token and queue message
+            _ = self.ctrl_c_rx.recv() => {
+                // Ctrl-C received - cancel local token and queue message
                 cancel_token.cancel();
                 self.interrupted_message = Some(message);
                 self.ui.print_info("Request interrupted by Ctrl-C. Message available for editing.");
@@ -405,7 +401,7 @@ impl Repl {
             }
             Err(e) => {
                 // Check if this was a cancellation
-                if cancel_token.is_cancelled() || global_token.is_cancelled() {
+                if cancel_token.is_cancelled() {
                     self.interrupted_message = Some(message);
                     self.ui.print_info("Request interrupted. Message available for editing.");
                     return Ok(());
