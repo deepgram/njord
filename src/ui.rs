@@ -45,8 +45,12 @@ impl UI {
         match self.editor.readline_with_initial(&prompt, (initial_input, "")) {
             Ok(line) => {
                 let input = line.trim();
-                if input.is_empty() {
+                if input.is_empty() && initial_input.is_empty() {
                     Ok(None)
+                } else if input.is_empty() && !initial_input.is_empty() {
+                    // User pressed Enter on pre-filled input without changes
+                    self.editor.add_history_entry(initial_input)?;
+                    Ok(Some(initial_input.to_string()))
                 } else {
                     // Add to history for arrow key navigation
                     self.editor.add_history_entry(&line)?;

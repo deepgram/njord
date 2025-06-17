@@ -432,6 +432,9 @@ impl Repl {
             content: message.to_string(),
         };
         
+        let mut user_message_added = false;
+        let mut message_number = 0;
+        
         for attempt in 1..=max_retries {
             if attempt > 1 {
                 let delay = std::time::Duration::from_millis(1000 * (1 << (attempt - 2))); // Exponential backoff: 1s, 2s, 4s
@@ -447,13 +450,11 @@ impl Repl {
             }
             
             // Only add to session history on first attempt
-            let message_number = if attempt == 1 {
-                let num = self.session.add_message(user_message.clone());
-                self.ui.print_user_message(num, &message);
-                num
-            } else {
-                self.session.messages.len()
-            };
+            if attempt == 1 {
+                message_number = self.session.add_message(user_message.clone());
+                user_message_added = true;
+                self.ui.print_user_message(message_number, &message);
+            }
             
             // Send to LLM provider and handle streaming response
             if let Some(provider_name) = &self.current_provider {
@@ -495,8 +496,8 @@ impl Repl {
                                     }
                                     _ = cancel_token.cancelled() => {
                                         self.ui.print_info("\nRequest cancelled");
-                                        // Always remove user message from history when cancelled
-                                        if self.session.messages.last().map(|m| &m.message.role) == Some(&"user".to_string()) {
+                                        // Remove user message from history when cancelled
+                                        if user_message_added && self.session.messages.last().map(|m| &m.message.role) == Some(&"user".to_string()) {
                                             self.session.messages.pop();
                                         }
                                         return Err(anyhow::anyhow!("Request cancelled"));
@@ -509,7 +510,7 @@ impl Repl {
                                     continue; // Retry on stream error
                                 } else {
                                     // Remove user message from history on final failure
-                                    if self.session.messages.last().map(|m| &m.message.role) == Some(&"user".to_string()) {
+                                    if user_message_added && self.session.messages.last().map(|m| &m.message.role) == Some(&"user".to_string()) {
                                         self.session.messages.pop();
                                     }
                                     return Err(anyhow::anyhow!("Stream error on final attempt"));
@@ -536,7 +537,7 @@ impl Repl {
                                     continue;
                                 } else {
                                     // Remove user message from history on final failure
-                                    if self.session.messages.last().map(|m| &m.message.role) == Some(&"user".to_string()) {
+                                    if user_message_added && self.session.messages.last().map(|m| &m.message.role) == Some(&"user".to_string()) {
                                         self.session.messages.pop();
                                     }
                                     return Err(anyhow::anyhow!("Empty response on final attempt"));
@@ -549,7 +550,7 @@ impl Repl {
                                 continue; // Retry on API error
                             } else {
                                 // Remove user message from history on final failure
-                                if self.session.messages.last().map(|m| &m.message.role) == Some(&"user".to_string()) {
+                                if user_message_added && self.session.messages.last().map(|m| &m.message.role) == Some(&"user".to_string()) {
                                     self.session.messages.pop();
                                 }
                                 return Err(e);
