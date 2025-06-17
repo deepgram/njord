@@ -1,0 +1,58 @@
+use anyhow::Result;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::fs;
+use std::path::PathBuf;
+
+use crate::session::ChatSession;
+
+const HISTORY_FILE: &str = ".llm-history";
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct History {
+    pub current_session: Option<ChatSession>,
+    pub saved_sessions: HashMap<String, ChatSession>,
+}
+
+impl History {
+    pub fn new() -> Self {
+        Self {
+            current_session: None,
+            saved_sessions: HashMap::new(),
+        }
+    }
+    
+    pub fn load() -> Result<Self> {
+        let path = PathBuf::from(HISTORY_FILE);
+        
+        if !path.exists() {
+            return Ok(Self::new());
+        }
+        
+        let content = fs::read_to_string(&path)?;
+        let history: History = serde_json::from_str(&content)?;
+        Ok(history)
+    }
+    
+    pub fn save(&self) -> Result<()> {
+        let content = serde_json::to_string_pretty(self)?;
+        fs::write(HISTORY_FILE, content)?;
+        Ok(())
+    }
+    
+    pub fn set_current_session(&mut self, session: ChatSession) {
+        self.current_session = Some(session);
+    }
+    
+    pub fn save_session(&mut self, name: String, session: ChatSession) {
+        self.saved_sessions.insert(name, session);
+    }
+    
+    pub fn load_session(&self, name: &str) -> Option<&ChatSession> {
+        self.saved_sessions.get(name)
+    }
+    
+    pub fn list_sessions(&self) -> Vec<&String> {
+        self.saved_sessions.keys().collect()
+    }
+}
