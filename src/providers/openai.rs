@@ -46,98 +46,11 @@ impl LLMProvider for OpenAIProvider {
             return Err(anyhow::anyhow!("OpenAI API error: {}", error_text));
         }
         
-        if request.stream {
-            // Handle streaming response with proper SSE parsing
-            use futures::stream::unfold;
-            
-            let buffer = String::new();
-            let byte_stream = response.bytes_stream();
-            
-            let stream = unfold(
-                (buffer, byte_stream),
-                |(mut buffer, mut byte_stream)| async move {
-                    loop {
-                        match byte_stream.next().await {
-                            Some(Ok(bytes)) => {
-                                let chunk = String::from_utf8_lossy(&bytes);
-                                buffer.push_str(&chunk);
-                                
-                                // Process complete lines
-                                while let Some(line_end) = buffer.find('\n') {
-                                    let line = buffer[..line_end].trim().to_string();
-                                    buffer = buffer[line_end + 1..].to_string();
-                                    
-                                    if let Some(json_str) = line.strip_prefix("data: ") {
-                                        if json_str.trim() == "[DONE]" {
-                                            return None; // End of stream
-                                        }
-                                        
-                                        if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(json_str) {
-                                            if let Some(content) = json_val
-                                                .get("choices")
-                                                .and_then(|c| c.as_array())
-                                                .and_then(|arr| arr.first())
-                                                .and_then(|choice| choice.get("delta"))
-                                                .and_then(|delta| delta.get("content"))
-                                                .and_then(|content| content.as_str())
-                                            {
-                                                if !content.is_empty() {
-                                                    return Some((Ok(content.to_string()), (buffer, byte_stream)));
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                
-                                // If we didn't find content in this chunk, continue to next chunk
-                                continue;
-                            }
-                            Some(Err(e)) => {
-                                return Some((Err(anyhow::anyhow!("Stream error: {}", e)), (buffer, byte_stream)));
-                            }
-                            None => {
-                                // Stream ended - process any remaining content in buffer
-                                let remaining_buffer = buffer.trim();
-                                if !remaining_buffer.is_empty() {
-                                    // Split by lines and also check for incomplete lines
-                                    let mut lines: Vec<&str> = remaining_buffer.lines().collect();
-                                    
-                                    // If buffer doesn't end with newline, the last part might be an incomplete line
-                                    if !buffer.ends_with('\n') && !remaining_buffer.is_empty() {
-                                        // Check if the remaining content looks like a data line
-                                        if remaining_buffer.starts_with("data: ") {
-                                            lines.push(remaining_buffer);
-                                        }
-                                    }
-                                    
-                                    for line in lines {
-                                        if let Some(json_str) = line.trim().strip_prefix("data: ") {
-                                            if json_str.trim() != "[DONE]" && !json_str.trim().is_empty() {
-                                                if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(json_str) {
-                                                    if let Some(content) = json_val
-                                                        .get("choices")
-                                                        .and_then(|c| c.as_array())
-                                                        .and_then(|arr| arr.first())
-                                                        .and_then(|choice| choice.get("delta"))
-                                                        .and_then(|delta| delta.get("content"))
-                                                        .and_then(|content| content.as_str())
-                                                    {
-                                                        if !content.is_empty() {
-                                                            return Some((Ok(content.to_string()), (String::new(), byte_stream)));
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                return None; // Stream ended
-                            }
-                        }
-                    }
-                }
-            );
-            
+        // Temporarily disable streaming to debug the truncation issue
+        // TODO: Re-enable streaming once we fix the SSE parsing
+        if false && request.stream {
+            // Streaming disabled for now
+            let stream = futures::stream::once(async { Ok("Streaming temporarily disabled".to_string()) });
             Ok(Box::new(Box::pin(stream)))
         } else {
             // Handle non-streaming response

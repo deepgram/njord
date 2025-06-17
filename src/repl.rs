@@ -202,7 +202,7 @@ impl Repl {
                     messages: self.session.messages.iter().map(|nm| nm.message.clone()).collect(),
                     model: self.session.current_model.clone(),
                     temperature: self.session.temperature,
-                    stream: true,
+                    stream: false, // Disable streaming temporarily to test
                 };
                 
                 match provider.chat(chat_request).await {
