@@ -13,6 +13,7 @@ pub struct ChatSession {
     pub updated_at: DateTime<Utc>,
     pub messages: Vec<NumberedMessage>,
     pub current_model: String,
+    pub current_provider: Option<String>,
     pub temperature: f32,
     pub system_prompt: Option<String>,
 }
@@ -42,6 +43,7 @@ impl ChatSession {
             updated_at: now,
             messages: Vec::new(),
             current_model: model,
+            current_provider: None,
             temperature,
             system_prompt: None,
         }

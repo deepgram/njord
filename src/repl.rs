@@ -55,7 +55,7 @@ impl Repl {
         
         let history = History::load()?;
         
-        let session = if config.new_session {
+        let mut session = if config.new_session {
             ChatSession::new(config.default_model.clone(), config.temperature)
         } else if let Some(session_name) = &config.load_session {
             history.load_session(session_name)
@@ -66,6 +66,16 @@ impl Repl {
                 .clone()
                 .unwrap_or_else(|| ChatSession::new(config.default_model.clone(), config.temperature))
         };
+        
+        // Restore provider from session if available and valid
+        if let Some(session_provider) = &session.current_provider {
+            if providers.contains_key(session_provider) {
+                current_provider = Some(session_provider.clone());
+            }
+        }
+        
+        // Update session with current provider
+        session.current_provider = current_provider.clone();
         
         let command_parser = CommandParser::new()?;
         let ui = UI::new()?;
@@ -156,6 +166,7 @@ impl Repl {
             }
             Command::ChatNew => {
                 self.session = ChatSession::new(self.config.default_model.clone(), self.config.temperature);
+                self.session.current_provider = self.current_provider.clone();
                 self.ui.print_info("Started new chat session");
             }
             Command::Undo(count) => {
@@ -181,6 +192,7 @@ impl Repl {
             Command::Provider(provider_name) => {
                 if self.providers.contains_key(&provider_name) {
                     self.current_provider = Some(provider_name.clone());
+                    self.session.current_provider = Some(provider_name.clone());
                     self.ui.print_info(&format!("Switched to provider: {}", provider_name));
                 } else {
                     let available_providers: Vec<String> = self.providers.keys().cloned().collect();
@@ -208,7 +220,17 @@ impl Repl {
             Command::ChatLoad(name) => {
                 if let Some(session) = self.history.load_session(&name).cloned() {
                     self.session = session;
-                    self.ui.print_info(&format!("Loaded session '{}'", name));
+                    // Restore provider from session if available and valid
+                    if let Some(session_provider) = &self.session.current_provider {
+                        if self.providers.contains_key(session_provider) {
+                            self.current_provider = Some(session_provider.clone());
+                            self.ui.print_info(&format!("Loaded session '{}' (provider: {})", name, session_provider));
+                        } else {
+                            self.ui.print_info(&format!("Loaded session '{}' (provider '{}' not available)", name, session_provider));
+                        }
+                    } else {
+                        self.ui.print_info(&format!("Loaded session '{}'", name));
+                    }
                     self.ui.print_info(&format!("Session has {} messages", self.session.messages.len()));
                 } else {
                     self.ui.print_error(&format!("Session '{}' not found", name));
