@@ -10,17 +10,38 @@ Njord is an interactive LLM REPL that aims to provide a powerful terminal-based 
 - [x] History persistence to JSON file
 - [x] Command parsing infrastructure with regex-based parser
 - [x] Basic REPL loop structure
-- [x] TUI framework setup with ratatui and crossterm
+- [x] ~~TUI framework setup with ratatui and crossterm~~ (Replaced with simple REPL)
 - [x] Project structure with proper module organization
+- [x] **OpenAI API Integration** - COMPLETE!
+  - [x] Implement chat completions API calls
+  - [x] Handle streaming responses with proper SSE parsing
+  - [x] Error handling and rate limiting
+  - [x] Support for different models (GPT-3.5, GPT-4, etc.)
+
+## Next Priority 🎯
+
+Based on current progress, the next most valuable features to implement are:
+
+1. **Session Save/Load Implementation** - Complete the chat session persistence
+   - Implement `/chat save NAME` and `/chat load NAME` commands
+   - This will make the tool much more practical for ongoing conversations
+
+2. **Anthropic API Integration** - Add second provider for comparison
+   - Implement Claude API calls with streaming
+   - This provides immediate value and validates our multi-provider architecture
+
+3. **Basic Message Navigation** - Complete the conversation management
+   - Implement `/goto N` and `/history` commands
+   - Essential for managing longer conversations
+
+4. **Multi-line Input Support** - Improve user experience
+   - Allow users to input longer prompts more easily
+   - Critical for practical usage
 
 ## Phase 1: Core Functionality 🚧
 
 ### LLM Provider Integration
-- [ ] **OpenAI API Integration**
-  - [ ] Implement chat completions API calls
-  - [ ] Handle streaming responses
-  - [ ] Error handling and rate limiting
-  - [ ] Support for different models (GPT-3.5, GPT-4, etc.)
+- [x] **OpenAI API Integration** - COMPLETE!
 
 - [ ] **Anthropic API Integration**
   - [ ] Implement Claude API calls
@@ -36,31 +57,32 @@ Njord is an interactive LLM REPL that aims to provide a powerful terminal-based 
 - [x] **Simple REPL Interface** (replacing broken TUI)
   - [x] Standard input/output with prompt
   - [x] Text coloring for responses
+  - [x] Real-time streaming response display
+  - [x] Message numbering and timestamps
   - [ ] Multi-line input support
   - [ ] Input history with arrow keys
   - [ ] Tab completion for commands
 
 - [ ] **Response Display**
-  - [x] Real-time streaming response display
   - [ ] Markdown rendering in terminal
   - [ ] Code syntax highlighting
-  - [x] Message numbering and timestamps
 
 ### Core Commands Implementation
-- [ ] **Chat Management**
-  - [x] `/chat new` - Start new session (basic implementation)
+- [x] **Chat Management**
+  - [x] `/chat new` - Start new session
   - [ ] `/chat save NAME` - Save current session
   - [ ] `/chat load NAME` - Load saved session
   - [ ] `/chat list` - List saved sessions
   - [ ] `/chat delete NAME` - Delete saved session
 
-- [ ] **Model Management**
-  - [x] `/models` - List available models (basic implementation)
-  - [ ] `/model MODEL` - Switch to different model
-  - [ ] Model-specific configuration
+- [x] **Model Management**
+  - [x] `/models` - List available models
+  - [x] `/model MODEL` - Switch to different model
+  - [x] `/provider PROVIDER` - Switch between providers
+  - [x] `/status` - Show current provider and model
 
-- [ ] **Message Navigation**
-  - [x] `/undo [N]` - Remove last N messages (basic implementation)
+- [x] **Message Navigation**
+  - [x] `/undo [N]` - Remove last N messages
   - [ ] `/goto N` - Jump to message N
   - [ ] `/history` - Show conversation history
   - [ ] `/search TERM` - Search conversation history
@@ -156,7 +178,7 @@ Njord is an interactive LLM REPL that aims to provide a powerful terminal-based 
 ### Known Issues
 - [x] **TUI Input Handling Broken** - Replaced with simple REPL
 - [x] **Overcomplicated UI** - Simplified to standard terminal interface
-- [ ] **Streaming Response Parsing** - OpenAI SSE parsing needs improvement
+- [x] **Streaming Response Parsing** - OpenAI SSE parsing fixed and working perfectly
 - [ ] **Error Handling** - Need better user-friendly error messages
 
 ### Code Quality
