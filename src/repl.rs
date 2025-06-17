@@ -23,10 +23,11 @@ pub struct Repl {
     queued_message: Option<String>,
     active_request_token: Option<CancellationToken>,
     interrupted_message: Option<String>,
+    global_cancel_token: CancellationToken,
 }
 
 impl Repl {
-    pub async fn new(config: Config) -> Result<Self> {
+    pub async fn new(config: Config, global_cancel_token: CancellationToken) -> Result<Self> {
         let mut providers = HashMap::new();
         let mut current_provider = None;
         
@@ -95,6 +96,7 @@ impl Repl {
             queued_message: None,
             active_request_token: None,
             interrupted_message: None,
+            global_cancel_token,
         })
     }
     
@@ -120,6 +122,16 @@ impl Repl {
                         self.ui.print_info("Request cancelled");
                     }
                     // Clear all queued/interrupted messages
+                    self.queued_message = None;
+                    self.interrupted_message = None;
+                    continue;
+                }
+                
+                // Check if global cancellation was triggered
+                if self.global_cancel_token.is_cancelled() {
+                    // Reset the global token for next time
+                    self.global_cancel_token = CancellationToken::new();
+                    // Clear any queued/interrupted messages
                     self.queued_message = None;
                     self.interrupted_message = None;
                     continue;
@@ -366,8 +378,9 @@ impl Repl {
     }
     
     async fn handle_message(&mut self, message: String) -> Result<()> {
-        // Create cancellation token for this request
+        // Create cancellation token for this request, linked to global token
         let cancel_token = CancellationToken::new();
+        let global_token = self.global_cancel_token.clone();
         self.active_request_token = Some(cancel_token.clone());
         
         // Try to send the message with retry logic
@@ -377,6 +390,13 @@ impl Repl {
                 // Request was cancelled - queue as interrupted message
                 self.interrupted_message = Some(message);
                 self.ui.print_info("Request interrupted. Message available for editing.");
+                return Ok(());
+            }
+            _ = global_token.cancelled() => {
+                // Global cancellation (Ctrl-C) - cancel local token and queue message
+                cancel_token.cancel();
+                self.interrupted_message = Some(message);
+                self.ui.print_info("Request interrupted by Ctrl-C. Message available for editing.");
                 return Ok(());
             }
         };
@@ -390,7 +410,7 @@ impl Repl {
             }
             Err(e) => {
                 // Check if this was a cancellation
-                if cancel_token.is_cancelled() {
+                if cancel_token.is_cancelled() || global_token.is_cancelled() {
                     self.interrupted_message = Some(message);
                     self.ui.print_info("Request interrupted. Message available for editing.");
                     return Ok(());
