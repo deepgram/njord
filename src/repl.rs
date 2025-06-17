@@ -1,11 +1,12 @@
 use anyhow::Result;
 use std::collections::HashMap;
+use futures::StreamExt;
 
 use crate::{
     commands::{Command, CommandParser},
     config::Config,
     history::History,
-    providers::{create_provider, LLMProvider, Message},
+    providers::{create_provider, LLMProvider, Message, ChatRequest},
     session::ChatSession,
     ui::UI,
 };
@@ -154,8 +155,55 @@ impl Repl {
         let message_number = self.session.add_message(user_message);
         println!("User {}: {}", message_number, self.session.messages.last().unwrap().message.content);
         
-        // TODO: Send to LLM provider and handle streaming response
-        println!("Agent {}: [Response would be streamed here]", message_number + 1);
+        // Send to LLM provider and handle streaming response
+        if let Some(provider_name) = &self.current_provider {
+            if let Some(provider) = self.providers.get(provider_name) {
+                let chat_request = ChatRequest {
+                    messages: self.session.messages.iter().map(|nm| nm.message.clone()).collect(),
+                    model: self.session.current_model.clone(),
+                    temperature: self.session.temperature,
+                    stream: true,
+                };
+                
+                match provider.chat(chat_request).await {
+                    Ok(mut stream) => {
+                        print!("Agent {}: ", message_number + 1);
+                        let mut full_response = String::new();
+                        
+                        while let Some(chunk) = stream.next().await {
+                            match chunk {
+                                Ok(content) => {
+                                    if !content.is_empty() {
+                                        print!("{}", content);
+                                        full_response.push_str(&content);
+                                        // Flush stdout to show streaming effect
+                                        use std::io::{self, Write};
+                                        io::stdout().flush().unwrap();
+                                    }
+                                }
+                                Err(e) => {
+                                    eprintln!("\nError in stream: {}", e);
+                                    break;
+                                }
+                            }
+                        }
+                        println!(); // New line after response
+                        
+                        // Add the complete response to the session
+                        if !full_response.is_empty() {
+                            let assistant_message = Message {
+                                role: "assistant".to_string(),
+                                content: full_response,
+                            };
+                            self.session.add_message(assistant_message);
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Error calling LLM provider: {}", e);
+                    }
+                }
+            }
+        }
         
         Ok(())
     }
