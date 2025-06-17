@@ -92,6 +92,7 @@ impl CommandParser {
             "/stats" => Some(Command::Stats),
             "/status" => Some(Command::Status),
             "/retry" => Some(Command::Retry),
+            "/system" => Some(Command::System(String::new())),
             "/quit" | "/exit" => Some(Command::Quit),
             _ => {
                 if let Some(caps) = self.model_regex.captures(input) {
