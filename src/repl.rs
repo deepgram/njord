@@ -86,16 +86,22 @@ impl Repl {
         
         loop {
             if let Some(input) = self.ui.read_input()? {
-                if let Some(command) = self.command_parser.parse(&input) {
-                    match self.handle_command(command).await {
-                        Ok(should_continue) => {
-                            if !should_continue {
-                                break;
+                if input.starts_with('/') {
+                    // This is a command attempt
+                    if let Some(command) = self.command_parser.parse(&input) {
+                        match self.handle_command(command).await {
+                            Ok(should_continue) => {
+                                if !should_continue {
+                                    break;
+                                }
+                            }
+                            Err(e) => {
+                                self.ui.print_error(&e.to_string());
                             }
                         }
-                        Err(e) => {
-                            self.ui.print_error(&e.to_string());
-                        }
+                    } else {
+                        // Invalid command
+                        self.ui.print_error(&format!("Invalid command: '{}'. Type /help for available commands.", input));
                     }
                 } else {
                     // Handle regular chat message
