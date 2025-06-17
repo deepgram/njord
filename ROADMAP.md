@@ -231,10 +231,10 @@ export NJORD_EDITOR="vim"
 ## Success Metrics
 
 ### Phase 1 Success Criteria
-- [ ] Can successfully chat with at least one LLM provider
-- [ ] Streaming responses work smoothly
+- [x] Can successfully chat with at least one LLM provider (OpenAI complete!)
+- [x] Streaming responses work smoothly (Fixed and working perfectly!)
 - [ ] Basic session save/load functionality
-- [ ] Core commands are implemented and functional
+- [x] Core commands are implemented and functional (Most core commands done)
 
 ### Phase 2 Success Criteria
 - [ ] Code block extraction and management works
