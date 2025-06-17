@@ -55,7 +55,7 @@ Based on current progress, the next most valuable features to implement are:
   - [x] Real-time streaming response display
   - [x] Message numbering and timestamps
   - [x] Multi-line input support with triple-backtick blocks
-  - [ ] Input history with arrow keys
+  - [x] Input history with arrow keys and line editing
   - [ ] Tab completion for commands
 
 - [ ] **Response Display**

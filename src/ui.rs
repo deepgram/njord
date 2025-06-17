@@ -1,11 +1,16 @@
 use anyhow::Result;
+use rustyline::error::ReadlineError;
+use rustyline::{DefaultEditor, Editor};
 use std::io::{self, Write};
 
-pub struct UI;
+pub struct UI {
+    editor: DefaultEditor,
+}
 
 impl UI {
     pub fn new() -> Result<Self> {
-        Ok(Self)
+        let editor = DefaultEditor::new()?;
+        Ok(Self { editor })
     }
     
     pub fn draw_welcome(&mut self) -> Result<()> {
@@ -26,24 +31,32 @@ impl UI {
     }
     
     pub fn read_input(&mut self) -> Result<Option<String>> {
-        print!("\x1b[1;32m>>> \x1b[0m");
-        io::stdout().flush()?;
-        
-        let mut input = String::new();
-        match io::stdin().read_line(&mut input) {
-            Ok(0) => Ok(Some("/quit".to_string())), // EOF
-            Ok(_) => {
-                let input = input.trim();
+        match self.editor.readline("\x1b[1;32m>>> \x1b[0m") {
+            Ok(line) => {
+                let input = line.trim();
                 if input.is_empty() {
                     Ok(None)
-                } else if input.starts_with("```") {
-                    // Multi-line input mode
-                    self.read_multiline_input(input.to_string())
                 } else {
-                    Ok(Some(input.to_string()))
+                    // Add to history for arrow key navigation
+                    self.editor.add_history_entry(&line)?;
+                    
+                    if input.starts_with("```") {
+                        // Multi-line input mode
+                        self.read_multiline_input(input.to_string())
+                    } else {
+                        Ok(Some(input.to_string()))
+                    }
                 }
             }
-            Err(e) => Err(anyhow::anyhow!("Failed to read input: {}", e)),
+            Err(ReadlineError::Interrupted) => {
+                // Ctrl-C
+                Ok(Some("/quit".to_string()))
+            }
+            Err(ReadlineError::Eof) => {
+                // Ctrl-D
+                Ok(Some("/quit".to_string()))
+            }
+            Err(err) => Err(anyhow::anyhow!("Failed to read input: {}", err)),
         }
     }
     
@@ -53,13 +66,8 @@ impl UI {
         println!("\x1b[2m(Multi-line mode - end with ``` on its own line)\x1b[0m");
         
         loop {
-            print!("\x1b[1;32m... \x1b[0m");
-            io::stdout().flush()?;
-            
-            let mut line = String::new();
-            match io::stdin().read_line(&mut line) {
-                Ok(0) => break, // EOF
-                Ok(_) => {
+            match self.editor.readline("\x1b[1;32m... \x1b[0m") {
+                Ok(line) => {
                     let line = line.trim_end_matches('\n').trim_end_matches('\r');
                     
                     // Check for end of code block
@@ -69,6 +77,9 @@ impl UI {
                     }
                     
                     lines.push(line.to_string());
+                }
+                Err(ReadlineError::Interrupted) | Err(ReadlineError::Eof) => {
+                    break; // Exit multi-line mode on Ctrl-C or Ctrl-D
                 }
                 Err(e) => return Err(anyhow::anyhow!("Failed to read input: {}", e)),
             }
