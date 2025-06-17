@@ -47,13 +47,6 @@ impl Repl {
             }
         }
         
-        // Set current provider based on priority (OpenAI first)
-        for preferred_provider in &provider_priority {
-            if providers.contains_key(*preferred_provider) {
-                current_provider = Some(preferred_provider.to_string());
-                break;
-            }
-        }
         
         if providers.is_empty() {
             return Err(anyhow::anyhow!("No valid API keys provided. Please set at least one API key."));
