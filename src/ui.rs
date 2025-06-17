@@ -74,6 +74,12 @@ impl UI {
             }
         }
         
+        // Remove the opening and closing ``` markers
+        if lines.len() >= 2 && lines[0].starts_with("```") && lines.last().unwrap().trim() == "```" {
+            lines.remove(0); // Remove opening ```
+            lines.pop(); // Remove closing ```
+        }
+        
         let full_input = lines.join("\n");
         if full_input.trim().is_empty() {
             Ok(None)
