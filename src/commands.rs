@@ -10,6 +10,7 @@ pub enum Command {
     ChatSave(String),
     ChatLoad(String),
     ChatList,
+    ChatDelete(String),
     Undo(Option<usize>),
     Goto(usize),
     History,
@@ -47,6 +48,7 @@ pub struct CommandParser {
     edit_regex: Regex,
     chat_save_regex: Regex,
     chat_load_regex: Regex,
+    chat_delete_regex: Regex,
     provider_regex: Regex,
 }
 
@@ -67,6 +69,7 @@ impl CommandParser {
             edit_regex: Regex::new(r"^/edit\s+(\d+)$")?,
             chat_save_regex: Regex::new(r"^/chat\s+save\s+(.+)$")?,
             chat_load_regex: Regex::new(r"^/chat\s+load\s+(.+)$")?,
+            chat_delete_regex: Regex::new(r"^/chat\s+delete\s+(.+)$")?,
             provider_regex: Regex::new(r"^/provider\s+(\w+)$")?,
         })
     }
@@ -120,6 +123,8 @@ impl CommandParser {
                     Some(Command::ChatSave(caps[1].to_string()))
                 } else if let Some(caps) = self.chat_load_regex.captures(input) {
                     Some(Command::ChatLoad(caps[1].to_string()))
+                } else if let Some(caps) = self.chat_delete_regex.captures(input) {
+                    Some(Command::ChatDelete(caps[1].to_string()))
                 } else if let Some(caps) = self.provider_regex.captures(input) {
                     Some(Command::Provider(caps[1].to_string()))
                 } else {

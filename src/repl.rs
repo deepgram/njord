@@ -125,9 +125,10 @@ impl Repl {
                 println!("  /provider PROVIDER - Switch provider (openai, anthropic, gemini)");
                 println!("  /status - Show current provider and model");
                 println!("  /chat new - Start a new chat session");
-                println!("  /chat save NAME - Save current session");
-                println!("  /chat load NAME - Load a saved session");
-                println!("  /chat list - List saved sessions");
+                println!("  /chat save NAME - Save current session with given name");
+                println!("  /chat load NAME - Load a previously saved session");
+                println!("  /chat list - List all saved sessions");
+                println!("  /chat delete NAME - Delete a saved session");
                 println!("  /undo [N] - Remove last N responses (default 1)");
                 println!("  /goto N - Jump back to message N");
                 println!("  /history - Show conversation history");
@@ -176,6 +177,66 @@ impl Repl {
                     self.ui.print_error(&format!("Provider '{}' not available. Available providers: {}", 
                         provider_name, 
                         available_providers.join(", ")));
+                }
+            }
+            Command::ChatSave(name) => {
+                if name.trim().is_empty() {
+                    self.ui.print_error("Session name cannot be empty");
+                } else if self.session.messages.is_empty() {
+                    self.ui.print_error("Cannot save empty session");
+                } else {
+                    match self.history.save_session(name.clone(), self.session.clone()) {
+                        Ok(()) => {
+                            self.ui.print_info(&format!("Session saved as '{}'", name));
+                        }
+                        Err(e) => {
+                            self.ui.print_error(&format!("Failed to save session: {}", e));
+                        }
+                    }
+                }
+            }
+            Command::ChatLoad(name) => {
+                if let Some(session) = self.history.load_session(&name).cloned() {
+                    self.session = session;
+                    self.ui.print_info(&format!("Loaded session '{}'", name));
+                    self.ui.print_info(&format!("Session has {} messages", self.session.messages.len()));
+                } else {
+                    self.ui.print_error(&format!("Session '{}' not found", name));
+                    let available_sessions = self.history.list_sessions();
+                    if !available_sessions.is_empty() {
+                        self.ui.print_info("Available sessions:");
+                        for session_name in available_sessions {
+                            println!("  {}", session_name);
+                        }
+                    }
+                }
+            }
+            Command::ChatList => {
+                let sessions = self.history.list_sessions();
+                if sessions.is_empty() {
+                    self.ui.print_info("No saved sessions");
+                } else {
+                    self.ui.print_info("Saved sessions:");
+                    for session_name in sessions {
+                        if let Some(session) = self.history.load_session(session_name) {
+                            let message_count = session.messages.len();
+                            let created = session.created_at.format("%Y-%m-%d %H:%M");
+                            println!("  {} ({} messages, created {})", session_name, message_count, created);
+                        }
+                    }
+                }
+            }
+            Command::ChatDelete(name) => {
+                match self.history.delete_session(&name) {
+                    Ok(true) => {
+                        self.ui.print_info(&format!("Session '{}' deleted", name));
+                    }
+                    Ok(false) => {
+                        self.ui.print_error(&format!("Session '{}' not found", name));
+                    }
+                    Err(e) => {
+                        self.ui.print_error(&format!("Failed to delete session: {}", e));
+                    }
                 }
             }
             _ => {

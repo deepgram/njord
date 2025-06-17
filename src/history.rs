@@ -44,17 +44,27 @@ impl History {
         self.current_session = Some(session);
     }
     
-    #[allow(dead_code)]
-    pub fn save_session(&mut self, name: String, session: ChatSession) {
+    pub fn save_session(&mut self, name: String, mut session: ChatSession) -> Result<()> {
+        // Set the session name when saving
+        session.name = Some(name.clone());
         self.saved_sessions.insert(name, session);
+        self.save()?;
+        Ok(())
     }
     
     pub fn load_session(&self, name: &str) -> Option<&ChatSession> {
         self.saved_sessions.get(name)
     }
     
-    #[allow(dead_code)]
     pub fn list_sessions(&self) -> Vec<&String> {
         self.saved_sessions.keys().collect()
+    }
+    
+    pub fn delete_session(&mut self, name: &str) -> Result<bool> {
+        let existed = self.saved_sessions.remove(name).is_some();
+        if existed {
+            self.save()?;
+        }
+        Ok(existed)
     }
 }
