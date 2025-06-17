@@ -104,6 +104,10 @@ impl Repl {
         self.ui.draw_welcome()?;
         
         loop {
+            // Reset global cancellation token at the start of each loop iteration
+            if self.global_cancel_token.is_cancelled() {
+                self.global_cancel_token = CancellationToken::new();
+            }
             // Determine what message to show in prompt
             let prompt_message = if let Some(interrupted) = &self.interrupted_message {
                 Some((interrupted.as_str(), "interrupted"))
@@ -388,8 +392,6 @@ impl Repl {
                 cancel_token.cancel();
                 self.interrupted_message = Some(message);
                 self.ui.print_info("Request interrupted by Ctrl-C. Message available for editing.");
-                // Reset the global token for next time
-                self.global_cancel_token = CancellationToken::new();
                 return Ok(());
             }
         };
@@ -406,10 +408,6 @@ impl Repl {
                 if cancel_token.is_cancelled() || global_token.is_cancelled() {
                     self.interrupted_message = Some(message);
                     self.ui.print_info("Request interrupted. Message available for editing.");
-                    // Reset the global token if it was cancelled
-                    if global_token.is_cancelled() {
-                        self.global_cancel_token = CancellationToken::new();
-                    }
                     return Ok(());
                 }
                 

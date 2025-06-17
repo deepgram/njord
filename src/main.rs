@@ -25,14 +25,11 @@ async fn main() -> Result<()> {
     let global_cancel_token = CancellationToken::new();
     let cancel_token_for_signal = global_cancel_token.clone();
     
-    // Set up Ctrl-C handler that can be reset
-    let cancel_token_for_signal_clone = cancel_token_for_signal.clone();
+    // Set up Ctrl-C handler
     tokio::spawn(async move {
         loop {
             if let Ok(()) = signal::ctrl_c().await {
-                cancel_token_for_signal_clone.cancel();
-                // Wait a bit before listening for the next Ctrl-C
-                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                cancel_token_for_signal.cancel();
             }
         }
     });
