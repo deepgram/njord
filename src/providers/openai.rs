@@ -47,67 +47,40 @@ impl LLMProvider for OpenAIProvider {
         }
         
         if request.stream {
-            // Handle streaming response
-            let mut buffer = String::new();
+            // Handle streaming response - simplified approach
             let stream = response
                 .bytes_stream()
-                .filter_map(move |chunk| {
-                    async move {
-                        match chunk {
-                            Ok(bytes) => {
-                                let text = String::from_utf8_lossy(&bytes);
-                                buffer.push_str(&text);
-                                
-                                let mut results = Vec::new();
-                                let lines: Vec<&str> = buffer.lines().collect();
-                                
-                                // Process complete lines, keep incomplete line in buffer
-                                for (i, line) in lines.iter().enumerate() {
-                                    if line.starts_with("data: ") {
-                                        let json_str = &line[6..]; // Remove "data: " prefix
-                                        
-                                        if json_str.trim() == "[DONE]" {
-                                            continue;
-                                        }
-                                        
-                                        if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(json_str) {
-                                            if let Some(choices) = json_val.get("choices").and_then(|c| c.as_array()) {
-                                                if let Some(choice) = choices.first() {
-                                                    if let Some(delta) = choice.get("delta").and_then(|d| d.as_object()) {
-                                                        if let Some(content) = delta.get("content").and_then(|c| c.as_str()) {
-                                                            if !content.is_empty() {
-                                                                results.push(Ok(content.to_string()));
-                                                            }
-                                                        }
-                                                    }
-                                                }
+                .map(|chunk| {
+                    match chunk {
+                        Ok(bytes) => {
+                            let text = String::from_utf8_lossy(&bytes);
+                            // Simple parsing - look for content in each chunk
+                            for line in text.lines() {
+                                if let Some(json_str) = line.strip_prefix("data: ") {
+                                    if json_str.trim() == "[DONE]" {
+                                        continue;
+                                    }
+                                    if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(json_str) {
+                                        if let Some(content) = json_val
+                                            .get("choices")
+                                            .and_then(|c| c.as_array())
+                                            .and_then(|arr| arr.first())
+                                            .and_then(|choice| choice.get("delta"))
+                                            .and_then(|delta| delta.get("content"))
+                                            .and_then(|content| content.as_str())
+                                        {
+                                            if !content.is_empty() {
+                                                return Ok(content.to_string());
                                             }
-                                        }
-                                        
-                                        // Clear processed line from buffer
-                                        if i == lines.len() - 1 && !text.ends_with('\n') {
-                                            // Keep incomplete line
-                                            buffer = line.to_string();
-                                        } else {
-                                            // Line is complete, remove it
-                                            buffer = buffer.replacen(&format!("{}\n", line), "", 1);
                                         }
                                     }
                                 }
-                                
-                                if results.is_empty() {
-                                    None
-                                } else {
-                                    Some(futures::stream::iter(results))
-                                }
                             }
-                            Err(e) => Some(futures::stream::once(async move { 
-                                Err(anyhow::anyhow!("Stream error: {}", e)) 
-                            })),
+                            Ok(String::new()) // Return empty string if no content found
                         }
+                        Err(e) => Err(anyhow::anyhow!("Stream error: {}", e)),
                     }
-                })
-                .flatten();
+                });
             
             Ok(Box::new(Box::pin(stream)))
         } else {
