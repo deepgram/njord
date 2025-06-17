@@ -24,6 +24,8 @@ pub struct NumberedMessage {
     pub message: Message,
     pub timestamp: DateTime<Utc>,
     pub code_blocks: Vec<CodeBlock>,
+    pub provider: Option<String>,
+    pub model: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -58,6 +60,25 @@ impl ChatSession {
             message,
             timestamp: Utc::now(),
             code_blocks,
+            provider: None,
+            model: None,
+        });
+        
+        self.updated_at = Utc::now();
+        number
+    }
+    
+    pub fn add_message_with_metadata(&mut self, message: Message, provider: Option<String>, model: Option<String>) -> usize {
+        let number = self.messages.len() + 1;
+        let code_blocks = self.extract_code_blocks(&message.content);
+        
+        self.messages.push(NumberedMessage {
+            number,
+            message,
+            timestamp: Utc::now(),
+            code_blocks,
+            provider,
+            model,
         });
         
         self.updated_at = Utc::now();

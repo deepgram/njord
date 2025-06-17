@@ -292,13 +292,23 @@ impl Repl {
                             "\x1b[1;35m" // Magenta for assistant
                         };
                         
-                        println!("{}[{}] {} {}\x1b[0m: {}", 
+                        let mut header = format!("{}[{}] {} {}", 
                             role_color,
                             numbered_message.number,
                             numbered_message.message.role.chars().next().unwrap().to_uppercase().collect::<String>() + &numbered_message.message.role[1..],
-                            timestamp,
-                            numbered_message.message.content
+                            timestamp
                         );
+                        
+                        // Add provider/model info for assistant messages
+                        if numbered_message.message.role == "assistant" {
+                            if let (Some(provider), Some(model)) = (&numbered_message.provider, &numbered_message.model) {
+                                header.push_str(&format!(" ({}:{})", provider, model));
+                            } else if let Some(provider) = &numbered_message.provider {
+                                header.push_str(&format!(" ({})", provider));
+                            }
+                        }
+                        
+                        println!("{}\x1b[0m: {}", header, numbered_message.message.content);
                         println!();
                     }
                 }
@@ -363,13 +373,17 @@ impl Repl {
                         }
                         self.ui.print_agent_newline();
                         
-                        // Add the complete response to the session
+                        // Add the complete response to the session with metadata
                         if !full_response.is_empty() {
                             let assistant_message = Message {
                                 role: "assistant".to_string(),
                                 content: full_response,
                             };
-                            self.session.add_message(assistant_message);
+                            self.session.add_message_with_metadata(
+                                assistant_message,
+                                self.current_provider.clone(),
+                                Some(self.session.current_model.clone())
+                            );
                         }
                     }
                     Err(e) => {
