@@ -61,21 +61,30 @@ impl LLMProvider for OpenAIProvider {
                         match byte_stream.next().await {
                             Some(Ok(bytes)) => {
                                 let chunk = String::from_utf8_lossy(&bytes);
+                                eprintln!("DEBUG: Received chunk: '{}'", chunk);
                                 buffer.push_str(&chunk);
+                                eprintln!("DEBUG: Buffer now: '{}'", buffer);
                                 
                                 // Process complete lines ending with \n
                                 while let Some(newline_pos) = buffer.find('\n') {
                                     let line = buffer[..newline_pos].trim().to_string();
                                     buffer = buffer[newline_pos + 1..].to_string();
                                     
+                                    // DEBUG: Print raw line
+                                    eprintln!("DEBUG: Raw line: '{}'", line);
+                                    
                                     // Parse SSE data lines
                                     if let Some(json_str) = line.strip_prefix("data: ") {
+                                        eprintln!("DEBUG: JSON string: '{}'", json_str);
+                                        
                                         if json_str.trim() == "[DONE]" {
+                                            eprintln!("DEBUG: Found [DONE], ending stream");
                                             return None; // End of stream
                                         }
                                         
                                         // Parse the JSON chunk
                                         if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(json_str) {
+                                            eprintln!("DEBUG: Parsed JSON: {}", json_val);
                                             if let Some(content) = json_val
                                                 .get("choices")
                                                 .and_then(|c| c.as_array())
@@ -85,9 +94,12 @@ impl LLMProvider for OpenAIProvider {
                                                 .and_then(|content| content.as_str())
                                             {
                                                 if !content.is_empty() {
+                                                    eprintln!("DEBUG: Returning content: '{}'", content);
                                                     return Some((Ok(content.to_string()), (buffer, byte_stream)));
                                                 }
                                             }
+                                        } else {
+                                            eprintln!("DEBUG: Failed to parse JSON: '{}'", json_str);
                                         }
                                     }
                                 }
@@ -97,10 +109,13 @@ impl LLMProvider for OpenAIProvider {
                                 return Some((Err(anyhow::anyhow!("Stream error: {}", e)), (buffer, byte_stream)));
                             }
                             None => {
+                                eprintln!("DEBUG: Stream ended, buffer contains: '{}'", buffer);
                                 // Stream ended - process any remaining complete lines in buffer
                                 while let Some(newline_pos) = buffer.find('\n') {
                                     let line = buffer[..newline_pos].trim().to_string();
                                     buffer = buffer[newline_pos + 1..].to_string();
+                                    
+                                    eprintln!("DEBUG: Final line: '{}'", line);
                                     
                                     if let Some(json_str) = line.strip_prefix("data: ") {
                                         if json_str.trim() != "[DONE]" {
@@ -114,6 +129,7 @@ impl LLMProvider for OpenAIProvider {
                                                     .and_then(|content| content.as_str())
                                                 {
                                                     if !content.is_empty() {
+                                                        eprintln!("DEBUG: Final content: '{}'", content);
                                                         return Some((Ok(content.to_string()), (String::new(), byte_stream)));
                                                     }
                                                 }
@@ -121,6 +137,7 @@ impl LLMProvider for OpenAIProvider {
                                         }
                                     }
                                 }
+                                eprintln!("DEBUG: Stream truly ended, no more content");
                                 return None; // Stream truly ended
                             }
                         }
