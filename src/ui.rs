@@ -70,6 +70,8 @@ impl UI {
     }
     
     pub fn read_input(&mut self) -> Result<Option<String>> {
+        // For now, just return a simple quit command to test compilation
+        // TODO: Implement proper input handling
         if event::poll(std::time::Duration::from_millis(100))? {
             if let Event::Key(KeyEvent { code, .. }) = event::read()? {
                 match code {

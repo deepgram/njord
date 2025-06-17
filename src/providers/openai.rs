@@ -1,6 +1,6 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use futures::Stream;
+use futures::{stream, Stream, StreamExt};
 use reqwest::Client;
 
 use super::{LLMProvider, ChatRequest};
@@ -23,7 +23,8 @@ impl OpenAIProvider {
 impl LLMProvider for OpenAIProvider {
     async fn chat(&self, _request: ChatRequest) -> Result<Box<dyn Stream<Item = Result<String>> + Unpin + Send>> {
         // TODO: Implement OpenAI API integration
-        todo!("OpenAI provider implementation")
+        let stream = stream::once(async { Ok("TODO: OpenAI implementation".to_string()) });
+        Ok(Box::new(stream))
     }
     
     fn get_models(&self) -> Vec<String> {
