@@ -24,7 +24,7 @@ impl LLMProvider for AnthropicProvider {
     async fn chat(&self, _request: ChatRequest) -> Result<Box<dyn Stream<Item = Result<String>> + Unpin + Send>> {
         // TODO: Implement Anthropic API integration
         let stream = stream::once(async { Ok("TODO: Anthropic implementation".to_string()) });
-        Ok(Box::pin(stream))
+        Ok(Box::new(Box::pin(stream)))
     }
     
     fn get_models(&self) -> Vec<String> {

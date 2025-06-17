@@ -24,7 +24,7 @@ impl LLMProvider for GeminiProvider {
     async fn chat(&self, _request: ChatRequest) -> Result<Box<dyn Stream<Item = Result<String>> + Unpin + Send>> {
         // TODO: Implement Gemini API integration
         let stream = stream::once(async { Ok("TODO: Gemini implementation".to_string()) });
-        Ok(Box::pin(stream))
+        Ok(Box::new(Box::pin(stream)))
     }
     
     fn get_models(&self) -> Vec<String> {

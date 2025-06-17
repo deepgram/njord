@@ -6,15 +6,15 @@ use clap::Parser;
 #[command(version)]
 pub struct Args {
     /// OpenAI API key
-    #[arg(long, env)]
+    #[arg(long, env = "OPENAI_API_KEY")]
     pub openai_key: Option<String>,
     
     /// Anthropic API key
-    #[arg(long, env)]
+    #[arg(long, env = "ANTHROPIC_API_KEY")]
     pub anthropic_key: Option<String>,
     
     /// Google Gemini API key
-    #[arg(long, env)]
+    #[arg(long, env = "GEMINI_API_KEY")]
     pub gemini_key: Option<String>,
     
     /// Default model to use
