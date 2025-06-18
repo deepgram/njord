@@ -182,7 +182,6 @@ impl Repl {
     }
     
     fn display_startup_status(&self) {
-        println!();
         if let Some(provider_name) = &self.current_provider {
             println!("\x1b[1;36mCurrent Configuration:\x1b[0m");
             println!("  Provider: {}", provider_name);
