@@ -129,15 +129,12 @@ impl LLMProvider for AnthropicProvider {
                                     // Parse SSE data lines
                                     if let Some(json_str) = line.strip_prefix("data: ") {
                                         if json_str.trim() == "[DONE]" {
-                                            eprintln!("Debug - Anthropic stream done");
                                             // If we have pending content, yield it first
                                             if let Some(content) = pending_content.pop() {
-                                                return Some((Ok(content), (buffer, byte_stream, pending_content)));
+                                                return Some((Ok(content), (buffer, byte_stream, pending_content, content_block_types)));
                                             }
                                             return None; // End of stream
                                         }
-                                        
-                                        eprintln!("Debug - Anthropic SSE JSON: {}", json_str);
                                         
                                         // Parse the JSON chunk
                                         if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(json_str) {
