@@ -139,9 +139,8 @@ impl History {
     }
     
     fn create_excerpt(&self, content: &str, term_lower: &str) -> String {
-        const MIN_EXCERPT_LENGTH: usize = 120;  // Minimum excerpt length
-        const MAX_EXCERPT_LENGTH: usize = 300;  // Maximum excerpt length
-        const CONTEXT_LENGTH: usize = 60;       // Context around match
+        const CONTEXT_SIZE: usize = 80;  // Context on each side of match
+        const MAX_EXCERPT_LENGTH: usize = 300;  // Maximum total excerpt length
         
         let content_lower = content.to_lowercase();
         
@@ -149,75 +148,55 @@ impl History {
         if let Some(match_start) = content_lower.find(term_lower) {
             let match_end = match_start + term_lower.len();
             
-            // Start with desired context around the match
-            let mut excerpt_start = match_start.saturating_sub(CONTEXT_LENGTH);
-            let mut excerpt_end = std::cmp::min(content.len(), match_end + CONTEXT_LENGTH);
-            
-            // Ensure minimum excerpt length
-            let current_length = excerpt_end - excerpt_start;
-            if current_length < MIN_EXCERPT_LENGTH {
-                let needed_extra = MIN_EXCERPT_LENGTH - current_length;
-                let extra_before = needed_extra / 2;
-                let extra_after = needed_extra - extra_before;
-                
-                // Extend backwards if possible
-                if excerpt_start >= extra_before {
-                    excerpt_start -= extra_before;
-                } else {
-                    // Can't extend backwards enough, extend forwards more
-                    let remaining = extra_before - excerpt_start;
-                    excerpt_start = 0;
-                    excerpt_end = std::cmp::min(content.len(), excerpt_end + extra_after + remaining);
-                }
-                
-                // Extend forwards if possible
-                if excerpt_end + extra_after <= content.len() {
-                    excerpt_end += extra_after;
-                } else {
-                    // Can't extend forwards enough, extend backwards more if possible
-                    let remaining = extra_after - (content.len() - excerpt_end);
-                    excerpt_end = content.len();
-                    excerpt_start = excerpt_start.saturating_sub(remaining);
-                }
-            }
-            
-            // Find good break points (word boundaries)
-            if excerpt_start > 0 {
-                if let Some(space_pos) = content[excerpt_start..match_start].rfind(' ') {
-                    excerpt_start += space_pos + 1;
-                }
-            }
-            
-            if excerpt_end < content.len() {
-                if let Some(space_pos) = content[match_end..excerpt_end].find(' ') {
-                    excerpt_end = match_end + space_pos;
-                }
-            }
+            // Calculate excerpt bounds: (match_start - CONTEXT_SIZE) to (match_end + CONTEXT_SIZE)
+            let excerpt_start = match_start.saturating_sub(CONTEXT_SIZE);
+            let excerpt_end = std::cmp::min(content.len(), match_end + CONTEXT_SIZE);
             
             // Ensure we don't exceed maximum length
-            if excerpt_end - excerpt_start > MAX_EXCERPT_LENGTH {
-                let excess = (excerpt_end - excerpt_start) - MAX_EXCERPT_LENGTH;
-                excerpt_end -= excess;
+            let (final_start, final_end) = if excerpt_end - excerpt_start > MAX_EXCERPT_LENGTH {
+                // Truncate while keeping the match centered
+                let available_space = MAX_EXCERPT_LENGTH.saturating_sub(term_lower.len());
+                let context_per_side = available_space / 2;
                 
-                // Re-find word boundary
-                if excerpt_end < content.len() {
-                    if let Some(space_pos) = content[match_end..excerpt_end].rfind(' ') {
-                        excerpt_end = match_end + space_pos;
-                    }
-                }
-            }
+                let new_start = match_start.saturating_sub(context_per_side);
+                let new_end = std::cmp::min(content.len(), match_end + context_per_side);
+                (new_start, new_end)
+            } else {
+                (excerpt_start, excerpt_end)
+            };
+            
+            // Find good break points (word boundaries) to avoid cutting words
+            let actual_start = if final_start > 0 {
+                // Look for a space before the match to break cleanly
+                content[final_start..match_start]
+                    .rfind(' ')
+                    .map(|pos| final_start + pos + 1)
+                    .unwrap_or(final_start)
+            } else {
+                0
+            };
+            
+            let actual_end = if final_end < content.len() {
+                // Look for a space after the match to break cleanly
+                content[match_end..final_end]
+                    .find(' ')
+                    .map(|pos| match_end + pos)
+                    .unwrap_or(final_end)
+            } else {
+                content.len()
+            };
             
             let mut excerpt = String::new();
             
             // Add leading ellipsis if we're not at the start
-            if excerpt_start > 0 {
+            if actual_start > 0 {
                 excerpt.push_str("...");
             }
             
             // Add the excerpt with highlighted term using terminal colors
-            let before_match = &content[excerpt_start..match_start];
+            let before_match = &content[actual_start..match_start];
             let matched_term = &content[match_start..match_end];
-            let after_match = &content[match_end..excerpt_end];
+            let after_match = &content[match_end..actual_end];
             
             excerpt.push_str(before_match);
             excerpt.push_str("\x1b[1;33m");  // Bold yellow for highlighting
@@ -226,15 +205,15 @@ impl History {
             excerpt.push_str(after_match);
             
             // Add trailing ellipsis if we're not at the end
-            if excerpt_end < content.len() {
+            if actual_end < content.len() {
                 excerpt.push_str("...");
             }
             
             excerpt
         } else {
             // Fallback: just show the beginning of the content
-            if content.len() > MIN_EXCERPT_LENGTH {
-                format!("{}...", &content[..MIN_EXCERPT_LENGTH])
+            if content.len() > CONTEXT_SIZE * 2 {
+                format!("{}...", &content[..CONTEXT_SIZE * 2])
             } else {
                 content.to_string()
             }
