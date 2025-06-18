@@ -115,6 +115,9 @@ impl Repl {
     pub async fn run(&mut self) -> Result<()> {
         self.ui.draw_welcome()?;
         
+        // Display current session status at startup
+        self.display_startup_status();
+        
         loop {
             // Determine what message to show in prompt
             let prompt_message = if let Some(interrupted) = &self.interrupted_message {
@@ -176,6 +179,34 @@ impl Repl {
         }
         
         Ok(())
+    }
+    
+    fn display_startup_status(&self) {
+        println!();
+        if let Some(provider_name) = &self.current_provider {
+            println!("\x1b[1;36mCurrent Configuration:\x1b[0m");
+            println!("  Provider: {}", provider_name);
+            println!("  Model: {}", self.session.current_model);
+            println!("  Temperature: {}", self.session.temperature);
+            if let Some(system_prompt) = &self.session.system_prompt {
+                println!("  System prompt: {}", system_prompt);
+            } else {
+                println!("  System prompt: (none)");
+            }
+            
+            // Show session info if we have messages
+            if !self.session.messages.is_empty() {
+                println!("  Session: {} messages", self.session.messages.len());
+                if let Some(name) = &self.session.name {
+                    println!("  Session name: {}", name);
+                }
+            } else {
+                println!("  Session: new");
+            }
+        } else {
+            println!("\x1b[1;31mNo provider available\x1b[0m");
+        }
+        println!();
     }
     
     async fn handle_command(&mut self, command: Command) -> Result<bool> {
