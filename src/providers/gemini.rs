@@ -210,4 +210,8 @@ impl LLMProvider for GeminiProvider {
     fn get_name(&self) -> &str {
         "gemini"
     }
+    
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }

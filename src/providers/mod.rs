@@ -29,6 +29,7 @@ pub trait LLMProvider: Send + Sync {
     fn get_models(&self) -> Vec<String>;
     #[allow(dead_code)]
     fn get_name(&self) -> &str;
+    fn as_any(&self) -> &dyn std::any::Any;
 }
 
 pub fn create_provider(name: &str, api_key: &str) -> Result<Box<dyn LLMProvider>> {
