@@ -20,13 +20,23 @@ impl AnthropicProvider {
         })
     }
     
-    fn supports_thinking(&self, model: &str) -> bool {
+    pub fn supports_thinking(&self, model: &str) -> bool {
         // Models that support thinking
         matches!(model, 
             "claude-opus-4-20250514" | 
             "claude-sonnet-4-20250514" | 
             "claude-3-7-sonnet-20250219"
         )
+    }
+    
+    pub fn supports_temperature(&self, model: &str) -> bool {
+        // All Anthropic models support temperature
+        true
+    }
+    
+    pub fn supports_streaming(&self, model: &str) -> bool {
+        // All Anthropic models support streaming
+        true
     }
     
     fn convert_messages(&self, messages: &[Message]) -> (Option<String>, Vec<serde_json::Value>) {
@@ -280,4 +290,7 @@ impl LLMProvider for AnthropicProvider {
         "anthropic"
     }
     
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }

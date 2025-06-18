@@ -186,13 +186,20 @@ impl Repl {
             println!("\x1b[1;36mCurrent Configuration:\x1b[0m");
             println!("  Provider: {}", provider_name);
             println!("  Model: {}", self.session.current_model);
-            println!("  Temperature: {}", self.session.temperature);
+            
+            // Show temperature with capability check
+            let temp_display = self.get_temperature_display();
+            println!("  Temperature: {}", temp_display);
+            
             if let Some(system_prompt) = &self.session.system_prompt {
                 println!("  System prompt: {}", system_prompt);
             } else {
                 println!("  System prompt: (none)");
             }
-            println!("  Thinking: {}", if self.session.thinking_enabled { "enabled" } else { "disabled" });
+            
+            // Show thinking with capability check
+            let thinking_display = self.get_thinking_display();
+            println!("  Thinking: {}", thinking_display);
             
             // Show session info if we have messages
             if !self.session.messages.is_empty() {
@@ -207,6 +214,60 @@ impl Repl {
             println!("\x1b[1;31mNo provider available\x1b[0m");
         }
         println!();
+    }
+    
+    fn get_temperature_display(&self) -> String {
+        if let Some(provider_name) = &self.current_provider {
+            if let Some(provider) = self.providers.get(provider_name) {
+                let supports_temp = match provider_name.as_str() {
+                    "openai" => {
+                        if let Some(openai_provider) = provider.as_any().downcast_ref::<crate::providers::openai::OpenAIProvider>() {
+                            openai_provider.supports_temperature(&self.session.current_model)
+                        } else { true }
+                    }
+                    "anthropic" => true, // All Anthropic models support temperature
+                    "gemini" => true,    // All Gemini models support temperature
+                    _ => true
+                };
+                
+                if supports_temp {
+                    self.session.temperature.to_string()
+                } else {
+                    "N/A".to_string()
+                }
+            } else {
+                self.session.temperature.to_string()
+            }
+        } else {
+            self.session.temperature.to_string()
+        }
+    }
+    
+    fn get_thinking_display(&self) -> String {
+        if let Some(provider_name) = &self.current_provider {
+            if let Some(provider) = self.providers.get(provider_name) {
+                let supports_thinking = match provider_name.as_str() {
+                    "anthropic" => {
+                        if let Some(anthropic_provider) = provider.as_any().downcast_ref::<crate::providers::anthropic::AnthropicProvider>() {
+                            anthropic_provider.supports_thinking(&self.session.current_model)
+                        } else { false }
+                    }
+                    "openai" => false,  // OpenAI models don't support thinking
+                    "gemini" => false,  // Gemini models don't support thinking
+                    _ => false
+                };
+                
+                if supports_thinking {
+                    if self.session.thinking_enabled { "enabled" } else { "disabled" }
+                } else {
+                    "N/A"
+                }
+            } else {
+                if self.session.thinking_enabled { "enabled" } else { "disabled" }
+            }
+        } else {
+            if self.session.thinking_enabled { "enabled" } else { "disabled" }
+        }
     }
     
     async fn handle_command(&mut self, command: Command) -> Result<bool> {
@@ -278,13 +339,18 @@ impl Repl {
                 if let Some(provider_name) = &self.current_provider {
                     self.ui.print_info(&format!("Current provider: {}", provider_name));
                     self.ui.print_info(&format!("Current model: {}", self.session.current_model));
-                    self.ui.print_info(&format!("Temperature: {}", self.session.temperature));
+                    
+                    let temp_display = self.get_temperature_display();
+                    self.ui.print_info(&format!("Temperature: {}", temp_display));
+                    
                     if let Some(system_prompt) = &self.session.system_prompt {
                         self.ui.print_info(&format!("System prompt: {}", system_prompt));
                     } else {
                         self.ui.print_info("System prompt: (none)");
                     }
-                    self.ui.print_info(&format!("Thinking: {}", if self.session.thinking_enabled { "enabled" } else { "disabled" }));
+                    
+                    let thinking_display = self.get_thinking_display();
+                    self.ui.print_info(&format!("Thinking: {}", thinking_display));
                 } else {
                     self.ui.print_error("No provider selected");
                 }

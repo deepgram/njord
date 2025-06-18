@@ -24,14 +24,20 @@ impl OpenAIProvider {
         model.starts_with("o1") || model.starts_with("o3") || model.starts_with("o4")
     }
     
-    fn supports_temperature(&self, model: &str) -> bool {
-        // Models that don't support custom temperature
-        !matches!(model, "o4-mini" | "o3-pro" | "o1-pro") && !self.is_reasoning_model(model)
-    }
     
     fn supports_streaming(&self, model: &str) -> bool {
         // Based on your analysis, these models don't support streaming
         !matches!(model, "o3-pro" | "o1-pro")
+    }
+    
+    pub fn supports_temperature(&self, model: &str) -> bool {
+        // Models that don't support custom temperature
+        !matches!(model, "o4-mini" | "o3-pro" | "o1-pro") && !self.is_reasoning_model(model)
+    }
+    
+    pub fn supports_thinking(&self, model: &str) -> bool {
+        // OpenAI models don't support thinking
+        false
     }
     
 }
@@ -253,4 +259,7 @@ impl LLMProvider for OpenAIProvider {
         "openai"
     }
     
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }

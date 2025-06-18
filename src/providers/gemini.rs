@@ -20,6 +20,21 @@ impl GeminiProvider {
         })
     }
     
+    pub fn supports_thinking(&self, model: &str) -> bool {
+        // Gemini models don't support thinking
+        false
+    }
+    
+    pub fn supports_temperature(&self, model: &str) -> bool {
+        // All Gemini models support temperature
+        true
+    }
+    
+    pub fn supports_streaming(&self, model: &str) -> bool {
+        // All Gemini models support streaming
+        true
+    }
+    
     fn convert_messages(&self, messages: &[Message]) -> Vec<serde_json::Value> {
         let mut contents = Vec::new();
         
@@ -237,5 +252,9 @@ impl LLMProvider for GeminiProvider {
     
     fn get_name(&self) -> &str {
         "gemini"
+    }
+    
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
     }
 }
