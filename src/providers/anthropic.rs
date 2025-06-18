@@ -22,7 +22,11 @@ impl AnthropicProvider {
     
     fn supports_thinking(&self, model: &str) -> bool {
         // Models that support thinking
-        model.starts_with("claude-sonnet-4") || model.starts_with("claude-3-7-sonnet")
+        matches!(model, 
+            "claude-opus-4-20250514" | 
+            "claude-sonnet-4-20250514" | 
+            "claude-3-7-sonnet-20250219"
+        )
     }
     
     fn convert_messages(&self, messages: &[Message]) -> (Option<String>, Vec<serde_json::Value>) {
@@ -65,7 +69,10 @@ impl LLMProvider for AnthropicProvider {
         
         // Enable thinking for supported models
         if request.thinking && self.supports_thinking(&request.model) {
-            payload["thinking"] = json!(true);
+            payload["thinking"] = json!({
+                "type": "enabled",
+                "budget_tokens": 20000
+            });
         }
         
         let response = self.client
@@ -125,24 +132,23 @@ impl LLMProvider for AnthropicProvider {
                                             if let Some(event_type) = json_val.get("type").and_then(|t| t.as_str()) {
                                                 match event_type {
                                                     "content_block_delta" => {
+                                                        // Check if this is a thinking content block
+                                                        let is_thinking = json_val
+                                                            .get("content_block")
+                                                            .and_then(|cb| cb.get("type"))
+                                                            .and_then(|t| t.as_str()) == Some("thinking");
+                                                        
                                                         if let Some(content) = json_val
                                                             .get("delta")
                                                             .and_then(|delta| delta.get("text"))
                                                             .and_then(|text| text.as_str())
                                                         {
                                                             if !content.is_empty() {
-                                                                pending_content.insert(0, format!("content:{}", content));
-                                                            }
-                                                        }
-                                                    }
-                                                    "thinking_delta" => {
-                                                        if let Some(thinking) = json_val
-                                                            .get("delta")
-                                                            .and_then(|delta| delta.get("text"))
-                                                            .and_then(|text| text.as_str())
-                                                        {
-                                                            if !thinking.is_empty() {
-                                                                pending_content.insert(0, format!("thinking:{}", thinking));
+                                                                if is_thinking {
+                                                                    pending_content.insert(0, format!("thinking:{}", content));
+                                                                } else {
+                                                                    pending_content.insert(0, format!("content:{}", content));
+                                                                }
                                                             }
                                                         }
                                                     }
