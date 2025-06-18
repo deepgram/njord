@@ -2,7 +2,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use futures::Stream;
 use reqwest::Client;
-use serde_json::{json, Value};
+use serde_json::json;
 
 use super::{LLMProvider, ChatRequest, Message};
 
@@ -154,7 +154,6 @@ impl LLMProvider for GeminiProvider {
             Ok(Box::new(Box::pin(stream)))
         }
     }
-    }
     
     fn get_models(&self) -> Vec<String> {
         vec![
@@ -167,5 +166,4 @@ impl LLMProvider for GeminiProvider {
     fn get_name(&self) -> &str {
         "gemini"
     }
-    
 }
