@@ -203,6 +203,9 @@ impl Repl {
             let thinking_display = self.get_thinking_display();
             println!("  Thinking: {}", thinking_display);
             
+            println!("  Max tokens: {}", self.session.max_tokens);
+            println!("  Thinking budget: {}", self.session.thinking_budget);
+            
             // Show session info if we have messages
             if !self.session.messages.is_empty() {
                 println!("  Session: {} messages", self.session.messages.len());
@@ -364,6 +367,9 @@ impl Repl {
                     
                     let thinking_display = self.get_thinking_display();
                     self.ui.print_info(&format!("Thinking: {}", thinking_display));
+                    
+                    self.ui.print_info(&format!("Max tokens: {}", self.session.max_tokens));
+                    self.ui.print_info(&format!("Thinking budget: {}", self.session.thinking_budget));
                 } else {
                     self.ui.print_error("No provider selected");
                 }
