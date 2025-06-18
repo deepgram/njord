@@ -139,8 +139,8 @@ impl History {
     }
     
     fn create_excerpt(&self, content: &str, term_lower: &str) -> String {
-        const EXCERPT_LENGTH: usize = 120;
-        const CONTEXT_LENGTH: usize = 40;
+        const EXCERPT_LENGTH: usize = 200;  // Increased from 120
+        const CONTEXT_LENGTH: usize = 80;   // Increased from 40
         
         let content_lower = content.to_lowercase();
         
@@ -178,15 +178,15 @@ impl History {
                 excerpt.push_str("...");
             }
             
-            // Add the excerpt with highlighted term
+            // Add the excerpt with highlighted term using terminal colors
             let before_match = &content[excerpt_start..match_start];
             let matched_term = &content[match_start..match_end];
             let after_match = &content[match_end..excerpt_end];
             
             excerpt.push_str(before_match);
-            excerpt.push_str("**");
+            excerpt.push_str("\x1b[1;33m");  // Bold yellow for highlighting
             excerpt.push_str(matched_term);
-            excerpt.push_str("**");
+            excerpt.push_str("\x1b[0m");     // Reset formatting
             excerpt.push_str(after_match);
             
             // Add trailing ellipsis if we're not at the end
@@ -194,10 +194,39 @@ impl History {
                 excerpt.push_str("...");
             }
             
-            // Ensure the excerpt isn't too long
-            if excerpt.len() > EXCERPT_LENGTH + 20 { // +20 for ellipsis and highlighting
-                excerpt.truncate(EXCERPT_LENGTH);
-                excerpt.push_str("...");
+            // Ensure the excerpt isn't too long (accounting for ANSI codes)
+            let visible_length = excerpt.chars().filter(|c| !c.is_control()).count();
+            if visible_length > EXCERPT_LENGTH {
+                // Truncate more carefully to preserve highlighting
+                let mut truncated = String::new();
+                let mut char_count = 0;
+                let mut in_ansi = false;
+                
+                for ch in excerpt.chars() {
+                    if ch == '\x1b' {
+                        in_ansi = true;
+                    }
+                    
+                    truncated.push(ch);
+                    
+                    if !in_ansi && !ch.is_control() {
+                        char_count += 1;
+                        if char_count >= EXCERPT_LENGTH - 3 {
+                            break;
+                        }
+                    }
+                    
+                    if in_ansi && ch == 'm' {
+                        in_ansi = false;
+                    }
+                }
+                
+                // Ensure we close any open formatting
+                if !truncated.ends_with("\x1b[0m") {
+                    truncated.push_str("\x1b[0m");
+                }
+                truncated.push_str("...");
+                excerpt = truncated;
             }
             
             excerpt
