@@ -211,7 +211,4 @@ impl LLMProvider for GeminiProvider {
         "gemini"
     }
     
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
 }

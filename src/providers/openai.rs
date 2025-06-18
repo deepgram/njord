@@ -29,10 +29,6 @@ impl OpenAIProvider {
         !matches!(model, "o3-pro" | "o1-pro")
     }
     
-    fn requires_responses_api(&self, model: &str) -> bool {
-        // Based on your analysis, these models require the responses API
-        matches!(model, "o3-pro" | "o1-pro")
-    }
 }
 
 #[async_trait]
@@ -199,45 +195,8 @@ impl LLMProvider for OpenAIProvider {
                 .unwrap_or("No response content")
                 .to_string();
             
-            // For non-streaming models, simulate streaming by yielding content in chunks
-            if !can_stream && !content.is_empty() {
-                use futures::stream;
-                use std::time::Duration;
-                
-                // Split content into words and move them into the closure
-                let words: Vec<String> = content.split_whitespace().map(|s| s.to_string()).collect();
-                let chunk_size = 3; // Words per chunk
-                
-                let stream = stream::unfold(
-                    (words, 0),
-                    move |(words, mut index)| async move {
-                        if index >= words.len() {
-                            return None;
-                        }
-                        
-                        // Take next chunk of words
-                        let end_index = std::cmp::min(index + chunk_size, words.len());
-                        let chunk_words = &words[index..end_index];
-                        let chunk = if index == 0 {
-                            chunk_words.join(" ")
-                        } else {
-                            format!(" {}", chunk_words.join(" "))
-                        };
-                        
-                        index = end_index;
-                        
-                        // Add small delay to simulate streaming
-                        tokio::time::sleep(Duration::from_millis(50)).await;
-                        
-                        Some((Ok(chunk), (words, index)))
-                    }
-                );
-                
-                Ok(Box::new(Box::pin(stream)))
-            } else {
-                let stream = futures::stream::once(async move { Ok(content) });
-                Ok(Box::new(Box::pin(stream)))
-            }
+            let stream = futures::stream::once(async move { Ok(content) });
+            Ok(Box::new(Box::pin(stream)))
         }
     }
     
@@ -261,7 +220,4 @@ impl LLMProvider for OpenAIProvider {
         "openai"
     }
     
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
 }
