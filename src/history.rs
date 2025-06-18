@@ -40,10 +40,6 @@ impl History {
         Ok(())
     }
     
-    pub fn set_current_session(&mut self, session: ChatSession) {
-        self.current_session = Some(session);
-    }
-    
     pub fn save_session(&mut self, name: String, mut session: ChatSession) -> Result<()> {
         // Set the session name when saving
         session.name = Some(name.clone());
