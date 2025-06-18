@@ -26,7 +26,7 @@ impl OpenAIProvider {
     
     fn supports_temperature(&self, model: &str) -> bool {
         // Models that don't support custom temperature
-        !matches!(model.as_str(), "o4-mini" | "o3-pro" | "o1-pro") && !self.is_reasoning_model(model)
+        !matches!(model, "o4-mini" | "o3-pro" | "o1-pro") && !self.is_reasoning_model(model)
     }
     
     fn supports_streaming(&self, model: &str) -> bool {
