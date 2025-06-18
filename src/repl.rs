@@ -352,9 +352,9 @@ impl Repl {
                 self.ui.print_info("Started new chat session");
             }
             Command::ChatContinue(session_name) => {
-                let target_session = if let Some(name) = session_name {
+                let target_session = if let Some(ref name) = session_name {
                     // Continue specific named session
-                    self.history.load_session(&name).cloned()
+                    self.history.load_session(name).cloned()
                 } else {
                     // Continue most recent session
                     self.history.get_most_recent_session().cloned()
@@ -378,8 +378,8 @@ impl Repl {
                     self.ui.print_info(&format!("Continuing session: {} ({} messages)", 
                         session_name, self.session.messages.len()));
                 } else {
-                    if session_name.is_some() {
-                        self.ui.print_error(&format!("Session '{}' not found", session_name.unwrap()));
+                    if let Some(name) = session_name {
+                        self.ui.print_error(&format!("Session '{}' not found", name));
                     } else {
                         self.ui.print_error("No recent sessions found");
                     }
