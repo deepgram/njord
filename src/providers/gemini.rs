@@ -78,6 +78,9 @@ impl LLMProvider for GeminiProvider {
             // The Gemini streaming format is complex and needs more investigation
             let json_response: serde_json::Value = response.json().await?;
             
+            // Debug: print the actual response structure
+            eprintln!("Debug - Gemini response structure: {}", serde_json::to_string_pretty(&json_response).unwrap_or_default());
+            
             let content = json_response
                 .get("candidates")
                 .and_then(|candidates| candidates.as_array())
@@ -88,7 +91,10 @@ impl LLMProvider for GeminiProvider {
                 .and_then(|arr| arr.first())
                 .and_then(|part| part.get("text"))
                 .and_then(|text| text.as_str())
-                .unwrap_or("No response content")
+                .unwrap_or_else(|| {
+                    eprintln!("Debug - Failed to parse Gemini response content");
+                    "No response content found"
+                })
                 .to_string();
             
             let stream = futures::stream::once(async move { Ok(content) });
@@ -97,6 +103,9 @@ impl LLMProvider for GeminiProvider {
             // Handle non-streaming response
             let json_response: serde_json::Value = response.json().await?;
             
+            // Debug: print the actual response structure
+            eprintln!("Debug - Gemini non-streaming response structure: {}", serde_json::to_string_pretty(&json_response).unwrap_or_default());
+            
             let content = json_response
                 .get("candidates")
                 .and_then(|candidates| candidates.as_array())
@@ -107,7 +116,10 @@ impl LLMProvider for GeminiProvider {
                 .and_then(|arr| arr.first())
                 .and_then(|part| part.get("text"))
                 .and_then(|text| text.as_str())
-                .unwrap_or("No response content")
+                .unwrap_or_else(|| {
+                    eprintln!("Debug - Failed to parse Gemini non-streaming response content");
+                    "No response content found"
+                })
                 .to_string();
             
             let stream = futures::stream::once(async move { Ok(content) });
