@@ -532,7 +532,10 @@ impl Repl {
                 }
             }
             Command::ChatLoad(name) => {
-                if let Some(session) = self.history.load_session(&name) {
+                // First, clone the session if it exists
+                let session_to_load = self.history.load_session(&name).cloned();
+                
+                if let Some(session) = session_to_load {
                     // Auto-save current session if it has interactions
                     if let Err(e) = self.history.auto_save_session(&self.session) {
                         self.ui.print_error(&format!("Failed to auto-save current session: {}", e));
