@@ -1,8 +1,9 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use futures::{stream, Stream, StreamExt};
+use futures::{Stream, StreamExt};
 use reqwest::Client;
 use serde_json::{json, Value};
+use tokio::io::AsyncBufReadExt;
 use tokio_stream::wrappers::LinesStream;
 use tokio_util::io::StreamReader;
 
