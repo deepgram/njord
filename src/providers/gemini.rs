@@ -48,7 +48,7 @@ impl LLMProvider for GeminiProvider {
     async fn chat(&self, request: ChatRequest) -> Result<Box<dyn Stream<Item = Result<String>> + Unpin + Send>> {
         let url = if request.stream {
             format!(
-                "https://generativelanguage.googleapis.com/v1beta/models/{}:streamGenerateContent?key={}",
+                "https://generativelanguage.googleapis.com/v1beta/models/{}:streamGenerateContent?alt=sse&key={}",
                 request.model, self.api_key
             )
         } else {
@@ -198,8 +198,6 @@ impl LLMProvider for GeminiProvider {
             // Handle non-streaming response
             let json_response: serde_json::Value = response.json().await?;
             
-            eprintln!("Debug - Gemini non-streaming response: {}", serde_json::to_string_pretty(&json_response).unwrap_or_default());
-            
             let content = json_response
                 .get("candidates")
                 .and_then(|candidates| candidates.as_array())
@@ -210,13 +208,8 @@ impl LLMProvider for GeminiProvider {
                 .and_then(|arr| arr.first())
                 .and_then(|part| part.get("text"))
                 .and_then(|text| text.as_str())
-                .unwrap_or_else(|| {
-                    eprintln!("Debug - Gemini non-streaming content parsing failed");
-                    "No response content"
-                })
+                .unwrap_or("No response content")
                 .to_string();
-            
-            eprintln!("Debug - Gemini non-streaming final content: {:?}", content);
             
             let stream = futures::stream::once(async move { Ok(content) });
             Ok(Box::new(Box::pin(stream)))
