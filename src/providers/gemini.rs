@@ -81,47 +81,40 @@ impl LLMProvider for GeminiProvider {
             // Debug: print the actual response structure
             eprintln!("Debug - Gemini response structure: {}", serde_json::to_string_pretty(&json_response).unwrap_or_default());
             
-            let content = json_response
-                .get("candidates")
-                .and_then(|candidates| candidates.as_array())
-                .and_then(|arr| arr.first())
-                .and_then(|candidate| candidate.get("content"))
-                .and_then(|content| content.get("parts"))
-                .and_then(|parts| parts.as_array())
-                .and_then(|arr| arr.first())
-                .and_then(|part| part.get("text"))
-                .and_then(|text| text.as_str())
-                .unwrap_or_else(|| {
-                    eprintln!("Debug - Failed to parse Gemini response content");
-                    "No response content found"
-                })
-                .to_string();
+            // The response is an array of chunks, we need to concatenate all text parts
+            let mut content = String::new();
+            
+            if let Some(chunks) = json_response.as_array() {
+                for chunk in chunks {
+                    if let Some(candidates) = chunk.get("candidates") {
+                        if let Some(candidates_array) = candidates.as_array() {
+                            if let Some(candidate) = candidates_array.first() {
+                                if let Some(content_obj) = candidate.get("content") {
+                                    if let Some(parts) = content_obj.get("parts") {
+                                        if let Some(parts_array) = parts.as_array() {
+                                            if let Some(part) = parts_array.first() {
+                                                if let Some(text) = part.get("text") {
+                                                    if let Some(text_str) = text.as_str() {
+                                                        content.push_str(text_str);
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            if content.is_empty() {
+                eprintln!("Debug - Failed to parse Gemini response content");
+                content = "No response content found".to_string();
+            }
             
             let stream = futures::stream::once(async move { Ok(content) });
             Ok(Box::new(Box::pin(stream)))
-        } else {
-            // Handle non-streaming response
-            let json_response: serde_json::Value = response.json().await?;
-            
-            // Debug: print the actual response structure
-            eprintln!("Debug - Gemini non-streaming response structure: {}", serde_json::to_string_pretty(&json_response).unwrap_or_default());
-            
-            let content = json_response
-                .get("candidates")
-                .and_then(|candidates| candidates.as_array())
-                .and_then(|arr| arr.first())
-                .and_then(|candidate| candidate.get("content"))
-                .and_then(|content| content.get("parts"))
-                .and_then(|parts| parts.as_array())
-                .and_then(|arr| arr.first())
-                .and_then(|part| part.get("text"))
-                .and_then(|text| text.as_str())
-                .unwrap_or_else(|| {
-                    eprintln!("Debug - Failed to parse Gemini non-streaming response content");
-                    "No response content found"
-                })
-                .to_string();
-            
             let stream = futures::stream::once(async move { Ok(content) });
             Ok(Box::new(Box::pin(stream)))
         }
