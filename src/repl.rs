@@ -228,8 +228,7 @@ impl Repl {
                 let updated = session.updated_at.format("%m-%d %H:%M");
                 println!("  /chat load {} - {} messages ({})", name, message_count, updated);
             }
-            if let Some(most_recent) = self.history.get_most_recent_session() {
-                let name = most_recent.name.as_ref().unwrap_or(&most_recent.generate_auto_name());
+            if let Some(_most_recent) = self.history.get_most_recent_session() {
                 println!("  /chat continue - Continue most recent session");
             }
             println!();
@@ -366,7 +365,8 @@ impl Repl {
                             self.current_provider = Some(session_provider.clone());
                         }
                     }
-                    let session_name = self.session.name.as_ref().unwrap_or(&self.session.generate_auto_name());
+                    let auto_name = self.session.generate_auto_name();
+                    let session_name = self.session.name.as_ref().unwrap_or(&auto_name);
                     self.ui.print_info(&format!("Continuing most recent session: {} ({} messages)", 
                         session_name, self.session.messages.len()));
                 } else {
