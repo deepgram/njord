@@ -5,105 +5,153 @@ Njord is an interactive LLM REPL that aims to provide a powerful terminal-based 
 
 ## Current Status ✅
 - [x] Basic CLI argument parsing and configuration
-- [x] Provider architecture with OpenAI, Anthropic, and Gemini stubs
+- [x] Provider architecture with OpenAI, Anthropic, and Gemini implementations
 - [x] Chat session management with numbered messages and timestamps
 - [x] History persistence to JSON file
 - [x] Command parsing infrastructure with regex-based parser
-- [x] Basic REPL loop structure
+- [x] Basic REPL loop structure with professional UX
 - [x] ~~TUI framework setup with ratatui and crossterm~~ (Replaced with simple REPL)
 - [x] Project structure with proper module organization
+
+### **Multi-Provider LLM Integration** - COMPLETE! ✅
 - [x] **OpenAI API Integration** - COMPLETE!
-  - [x] Implement chat completions API calls
+  - [x] Implement chat completions API calls and Responses API
   - [x] Handle streaming responses with proper SSE parsing
-  - [x] Error handling and rate limiting
-  - [x] Support for different models (GPT-3.5, GPT-4, etc.)
+  - [x] Error handling and retry logic with exponential backoff
+  - [x] Support for latest models (o3-pro, o3, o4-mini, gpt-4.1, etc.)
+  - [x] Reasoning model support (o1, o3 series)
+  - [x] Temperature control for supported models
 
 - [x] **Anthropic API Integration** - COMPLETE!
   - [x] Implement Claude API calls with Messages API
   - [x] Handle streaming responses with SSE parsing
-  - [x] Support for Claude 3 model variants (Haiku, Sonnet, Opus, 3.5 Sonnet)
+  - [x] Support for Claude 4 and 3.x model variants (Sonnet, Opus, Haiku)
   - [x] Message format conversion (system messages handled properly)
+  - [x] Thinking mode support for supported models
+  - [x] Dynamic temperature handling (1.0 when thinking enabled)
+
+- [x] **Google Gemini API Integration** - COMPLETE!
+  - [x] Implement Gemini API calls with streaming
+  - [x] Support for Gemini 2.5 Pro, Flash, and Flash Lite models
+  - [x] Proper message format conversion
+  - [x] SSE streaming response handling
+
+### **Advanced Session Management** - COMPLETE! ✅
+- [x] **Rich Session Management System**
+  - [x] Always start with fresh sessions
+  - [x] Auto-saving sessions with LLM interactions
+  - [x] `/chat load NAME` - Load safe copy of session (non-destructive)
+  - [x] `/chat continue [NAME]` - Resume/modify saved session
+  - [x] `/chat save NAME` - Save current session with name
+  - [x] `/chat fork NAME` - Save current session and start fresh
+  - [x] `/chat merge NAME` - Merge another session into current
+  - [x] Automatic session naming with timestamps
+  - [x] Prevention of saving empty or command-only sessions
 
 ## Next Priority 🎯
 
+**🎉 Phase 1 & 2 Core Features are COMPLETE! 🎉**
+
 Based on current progress, the next most valuable features to implement are:
 
-1. **Google Gemini API Integration** - Complete the multi-provider support
-   - Implement Gemini API calls with streaming
-   - Support for Gemini Pro models
-   - Validate the provider architecture with a third implementation
-
-2. **Code Block Extraction** - Parse and manage code from responses
+1. **Code Block Extraction and Management** - Parse and manage code from responses
    - Extract code blocks from markdown responses
    - Number and catalog code blocks for easy reference
-   - Foundation for advanced code management features
+   - `/block N` - Display specific code block
+   - `/copy N` - Copy code block to clipboard
+   - `/save N FILENAME` - Save code block to file
+   - `/exec N` - Execute code block (with safety prompts)
 
-3. **Enhanced Error Handling** - Better user experience
-   - User-friendly error messages
-   - Graceful degradation when APIs are unavailable
-   - Better validation and feedback
-
-4. **Response Display Improvements** - Better formatting
+2. **Enhanced Response Display** - Better formatting and UX
    - Markdown rendering in terminal
    - Code syntax highlighting
    - Better text formatting and coloring
+   - Progress indicators for long responses
 
-## Phase 1: Core Functionality ✅
+3. **Advanced Search and Navigation**
+   - `/search TERM` - Search conversation history
+   - Better history navigation and filtering
+   - Session tagging and metadata
 
-### LLM Provider Integration
+4. **Export and Analysis Features**
+   - `/export FORMAT` - Export conversations (markdown, JSON, PDF)
+   - `/stats` - Show conversation statistics
+   - `/tokens` - Show token usage and costs
+   - Cost tracking per provider
+
+## Phase 1: Core Functionality ✅ COMPLETE!
+
+### LLM Provider Integration ✅ COMPLETE!
 - [x] **OpenAI API Integration** - COMPLETE!
+  - [x] Chat Completions API and Responses API support
+  - [x] Streaming with proper SSE parsing
+  - [x] Support for o3-pro, o3, o4-mini, gpt-4.1 series
+  - [x] Reasoning model handling (o1, o3 series)
 
 - [x] **Anthropic API Integration** - COMPLETE!
+  - [x] Messages API with streaming
+  - [x] Claude 4 and 3.x model support
+  - [x] Thinking mode for supported models
+  - [x] Dynamic temperature handling
 
-- [ ] **Google Gemini API Integration**
-  - [ ] Implement Gemini API calls
-  - [ ] Handle streaming responses
-  - [ ] Support for Gemini Pro models
+- [x] **Google Gemini API Integration** - COMPLETE!
+  - [x] Gemini API calls with streaming
+  - [x] Support for Gemini 2.5 Pro, Flash, Flash Lite
+  - [x] Proper message format conversion
 
-### Input/Output System
-- [x] **Simple REPL Interface** - COMPLETE!
-  - [x] Standard input/output with prompt
-  - [x] Text coloring for responses
+### Input/Output System ✅ COMPLETE!
+- [x] **Professional REPL Interface** - COMPLETE!
+  - [x] Standard input/output with colored prompts
   - [x] Real-time streaming response display
   - [x] Message numbering and timestamps
   - [x] Multi-line input support with triple-backtick blocks
   - [x] Input history with arrow keys and line editing
-  - [x] Ctrl-C handling for request interruption
-  - [x] Message retry and interruption queuing
+  - [x] Robust Ctrl-C handling for request interruption
+  - [x] Message retry and interruption queuing with UX feedback
+  - [x] Thinking mode display (dimmed/italic for thinking content)
   - [ ] Tab completion for commands
-
-- [ ] **Response Display**
   - [ ] Markdown rendering in terminal
   - [ ] Code syntax highlighting
 
-### Core Commands Implementation
-- [x] **Chat Management** - COMPLETE!
+### Core Commands Implementation ✅ COMPLETE!
+- [x] **Advanced Chat Management** - COMPLETE!
   - [x] `/chat new` - Start new session
-  - [x] `/chat save NAME` - Save current session
-  - [x] `/chat load NAME` - Load saved session
-  - [x] `/chat list` - List saved sessions
+  - [x] `/chat save NAME` - Save current session with name
+  - [x] `/chat load NAME` - Load safe copy of session (non-destructive)
+  - [x] `/chat continue [NAME]` - Resume/modify saved session
+  - [x] `/chat fork NAME` - Save current session and start fresh
+  - [x] `/chat list` - List saved sessions with metadata
   - [x] `/chat delete NAME` - Delete saved session
+  - [x] `/chat recent` - Show recent sessions
+  - [x] `/chat merge NAME` - Merge another session into current
 
 - [x] **Model Management** - COMPLETE!
-  - [x] `/models` - List available models
-  - [x] `/model MODEL` - Switch to different model
+  - [x] `/models` - List available models for current provider
+  - [x] `/model MODEL` - Switch to different model with validation
   - [x] `/provider PROVIDER` - Switch between providers
-  - [x] `/status` - Show current provider and model
+  - [x] `/status` - Show current provider, model, and settings
 
 - [x] **Message Navigation** - COMPLETE!
   - [x] `/undo [N]` - Remove last N messages
   - [x] `/goto N` - Jump to message N
-  - [x] `/history` - Show conversation history
+  - [x] `/history` - Show conversation history with metadata
   - [ ] `/search TERM` - Search conversation history
+
+- [x] **Configuration Management** - COMPLETE!
+  - [x] `/system [PROMPT]` - Set/view/clear system prompt
+  - [x] `/temp TEMPERATURE` - Set temperature with model validation
+  - [x] `/max-tokens TOKENS` - Set maximum output tokens
+  - [x] `/thinking-budget TOKENS` - Set thinking token budget
+  - [x] `/thinking on|off` - Enable/disable thinking for supported models
 
 ## Phase 2: Advanced Features 🚧
 
-**Current Focus: Multi-Provider Support and Enhanced UX**
+**Current Focus: Code Management and Enhanced UX**
 
-### Code Block Management
+### Code Block Management 🎯 NEXT PRIORITY
 - [ ] **Code Extraction and Management**
   - [ ] Extract code blocks from markdown responses
-  - [ ] Number and catalog code blocks
+  - [ ] Number and catalog code blocks per message
   - [ ] `/block N` - Display specific code block
   - [ ] `/copy N` - Copy code block to clipboard
   - [ ] `/save N FILENAME` - Save code block to file
@@ -111,24 +159,32 @@ Based on current progress, the next most valuable features to implement are:
 
 ### Enhanced UI/UX
 - [ ] **Enhanced REPL Interface**
-  - [ ] Better text coloring and formatting
-  - [ ] Progress indicators for streaming
-  - [ ] Status information display
+  - [ ] Markdown rendering in terminal
+  - [ ] Code syntax highlighting
+  - [ ] Progress indicators for long responses
   - [ ] Optional pager for long responses
+  - [ ] Tab completion for commands
 
 - [ ] **Customization**
   - [ ] Theme support
   - [ ] Configurable key bindings
   - [ ] Custom prompt templates
-  - [x] `/system PROMPT` - Set system prompt
 
-### Session Management
-- [ ] **Advanced Session Features**
-  - [ ] Session branching (fork conversations)
-  - [ ] Session merging
+### Advanced Session Features ✅ MOSTLY COMPLETE!
+- [x] **Session Management** - COMPLETE!
+  - [x] Session forking (save and start fresh)
+  - [x] Session merging
+  - [x] Auto-save functionality with LLM interaction detection
+  - [x] Session metadata (timestamps, provider/model tracking)
+  - [x] Safe session loading (non-destructive copies)
   - [ ] Session templates
-  - [ ] Auto-save functionality
-  - [ ] Session metadata (tags, descriptions)
+  - [ ] Session tagging and descriptions
+
+### Search and Navigation
+- [ ] **Advanced Search**
+  - [ ] `/search TERM` - Search conversation history
+  - [ ] Search across all saved sessions
+  - [ ] Filter by provider, model, or date range
 
 ## Phase 3: Power User Features 🚀
 
@@ -244,25 +300,29 @@ export NJORD_EDITOR="vim"
 
 ## Success Metrics
 
-### Phase 1 Success Criteria
-- [x] Can successfully chat with at least one LLM provider (OpenAI complete!)
-- [x] Streaming responses work smoothly (Fixed and working perfectly!)
-- [x] Basic session save/load functionality (COMPLETE!)
-- [x] Core commands are implemented and functional (COMPLETE!)
-- [x] Multi-provider support working (OpenAI + Anthropic complete!)
-- [x] Robust error handling and retry logic (COMPLETE!)
-- [x] Professional UX with input history and interruption (COMPLETE!)
+### Phase 1 Success Criteria ✅ ALL COMPLETE!
+- [x] Can successfully chat with multiple LLM providers (OpenAI, Anthropic, Gemini!)
+- [x] Streaming responses work smoothly with proper SSE parsing
+- [x] Advanced session save/load functionality with rich management
+- [x] All core commands implemented and functional
+- [x] Multi-provider support working (OpenAI + Anthropic + Gemini complete!)
+- [x] Robust error handling and retry logic with exponential backoff
+- [x] Professional UX with input history, interruption, and retry queuing
+- [x] Thinking mode support for Anthropic models
+- [x] Auto-saving with LLM interaction detection
 
-**🎉 Phase 1 is now COMPLETE! 🎉**
+**🎉 Phase 1 is COMPLETE! 🎉**
+**🎉 Phase 2 Session Management is COMPLETE! 🎉**
 
-**🚀 Phase 2 is now IN PROGRESS! 🚀**
+**🚀 Phase 2 Code Management is now IN PROGRESS! 🚀**
 
-**Current Status**: Two major providers (OpenAI and Anthropic) are fully implemented with streaming support. The core REPL functionality is robust with proper error handling, retry logic, session management, and professional UX. Next focus is completing Gemini integration and adding code block management features.
+**Current Status**: All three major providers (OpenAI, Anthropic, and Gemini) are fully implemented with streaming support. The session management system is sophisticated with auto-saving, safe loading, forking, merging, and continuation features. The REPL has professional UX with robust error handling, retry logic, and thinking mode support. Next focus is code block extraction and management features.
 
 ### Phase 2 Success Criteria
 - [ ] Code block extraction and management works
-- [ ] Advanced TUI provides good user experience
-- [ ] Session management is robust and reliable
+- [x] Session management is robust and reliable (COMPLETE!)
+- [x] Multi-provider workflows are seamless (COMPLETE!)
+- [ ] Enhanced response display with markdown rendering
 
 ### Phase 3 Success Criteria
 - [ ] Multi-provider workflows are seamless
