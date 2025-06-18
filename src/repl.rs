@@ -351,14 +351,22 @@ impl Repl {
                 self.session.current_provider = self.current_provider.clone();
                 self.ui.print_info("Started new chat session");
             }
-            Command::ChatContinue => {
-                if let Some(most_recent) = self.history.get_most_recent_session().cloned() {
+            Command::ChatContinue(session_name) => {
+                let target_session = if let Some(name) = session_name {
+                    // Continue specific named session
+                    self.history.load_session(&name).cloned()
+                } else {
+                    // Continue most recent session
+                    self.history.get_most_recent_session().cloned()
+                };
+                
+                if let Some(target_session) = target_session {
                     // Auto-save current session if it has interactions
                     if let Err(e) = self.history.auto_save_session(&self.session) {
                         self.ui.print_error(&format!("Failed to auto-save current session: {}", e));
                     }
                     
-                    self.session = most_recent;
+                    self.session = target_session;
                     // Restore provider from session if available and valid
                     if let Some(session_provider) = &self.session.current_provider {
                         if self.providers.contains_key(session_provider) {
@@ -367,10 +375,14 @@ impl Repl {
                     }
                     let auto_name = self.session.generate_auto_name();
                     let session_name = self.session.name.as_ref().unwrap_or(&auto_name);
-                    self.ui.print_info(&format!("Continuing most recent session: {} ({} messages)", 
+                    self.ui.print_info(&format!("Continuing session: {} ({} messages)", 
                         session_name, self.session.messages.len()));
                 } else {
-                    self.ui.print_error("No recent sessions found");
+                    if session_name.is_some() {
+                        self.ui.print_error(&format!("Session '{}' not found", session_name.unwrap()));
+                    } else {
+                        self.ui.print_error("No recent sessions found");
+                    }
                 }
             }
             Command::ChatRecent => {
@@ -402,23 +414,6 @@ impl Repl {
                         }
                         Err(e) => {
                             self.ui.print_error(&format!("Failed to fork session: {}", e));
-                        }
-                    }
-                }
-            }
-            Command::ChatBranch(name) => {
-                let branch_name = name.unwrap_or_else(|| format!("branch-{}", self.session.generate_auto_name()));
-                
-                if self.session.messages.is_empty() {
-                    self.ui.print_error("Cannot branch empty session");
-                } else {
-                    match self.history.save_session(branch_name.clone(), self.session.clone()) {
-                        Ok(()) => {
-                            self.ui.print_info(&format!("Checkpoint saved as '{}' ({} messages)", branch_name, self.session.messages.len()));
-                            self.ui.print_info("Continuing in current session");
-                        }
-                        Err(e) => {
-                            self.ui.print_error(&format!("Failed to create branch: {}", e));
                         }
                     }
                 }
