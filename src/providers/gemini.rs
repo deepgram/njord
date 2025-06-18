@@ -20,17 +20,17 @@ impl GeminiProvider {
         })
     }
     
-    pub fn supports_thinking(&self, model: &str) -> bool {
+    pub fn supports_thinking(&self, _model: &str) -> bool {
         // Gemini models don't support thinking
         false
     }
     
-    pub fn supports_temperature(&self, model: &str) -> bool {
+    pub fn supports_temperature(&self, _model: &str) -> bool {
         // All Gemini models support temperature
         true
     }
     
-    pub fn supports_streaming(&self, model: &str) -> bool {
+    pub fn supports_streaming(&self, _model: &str) -> bool {
         // All Gemini models support streaming
         true
     }

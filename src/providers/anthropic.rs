@@ -29,12 +29,12 @@ impl AnthropicProvider {
         )
     }
     
-    pub fn supports_temperature(&self, model: &str) -> bool {
+    pub fn supports_temperature(&self, _model: &str) -> bool {
         // All Anthropic models support temperature
         true
     }
     
-    pub fn supports_streaming(&self, model: &str) -> bool {
+    pub fn supports_streaming(&self, _model: &str) -> bool {
         // All Anthropic models support streaming
         true
     }

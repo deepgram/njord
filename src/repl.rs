@@ -258,15 +258,15 @@ impl Repl {
                 };
                 
                 if supports_thinking {
-                    if self.session.thinking_enabled { "enabled" } else { "disabled" }
+                    if self.session.thinking_enabled { "enabled".to_string() } else { "disabled".to_string() }
                 } else {
-                    "N/A"
+                    "N/A".to_string()
                 }
             } else {
-                if self.session.thinking_enabled { "enabled" } else { "disabled" }
+                if self.session.thinking_enabled { "enabled".to_string() } else { "disabled".to_string() }
             }
         } else {
-            if self.session.thinking_enabled { "enabled" } else { "disabled" }
+            if self.session.thinking_enabled { "enabled".to_string() } else { "disabled".to_string() }
         }
     }
     
