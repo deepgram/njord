@@ -1,11 +1,8 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use futures::{Stream, StreamExt};
+use futures::Stream;
 use reqwest::Client;
 use serde_json::{json, Value};
-use tokio::io::AsyncBufReadExt;
-use tokio_stream::wrappers::LinesStream;
-use tokio_util::io::StreamReader;
 
 use super::{LLMProvider, ChatRequest, Message};
 
@@ -76,47 +73,130 @@ impl LLMProvider for GeminiProvider {
             return Err(anyhow::anyhow!("Gemini API error: {}", error_text));
         }
         
-        let stream = response.bytes_stream();
-        let reader = StreamReader::new(stream.map(|result| {
-            result.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
-        }));
-        
-        let lines_stream = LinesStream::new(reader.lines());
-        let content_stream = lines_stream.map(|line_result| {
-            match line_result {
-                Ok(line) => {
-                    if line.trim().is_empty() {
-                        return Ok("".to_string());
+        if request.stream {
+            // Handle streaming response with proper line-by-line parsing
+            use futures::stream::unfold;
+            use futures::StreamExt;
+            
+            let buffer = String::new();
+            let byte_stream = response.bytes_stream();
+            
+            let stream = unfold(
+                (buffer, byte_stream, Vec::<String>::new()),
+                |(mut buffer, mut byte_stream, mut pending_content)| async move {
+                    // First, check if we have pending content to yield
+                    if let Some(content) = pending_content.pop() {
+                        return Some((Ok(content), (buffer, byte_stream, pending_content)));
                     }
                     
-                    // Parse the JSON response
-                    match serde_json::from_str::<Value>(&line) {
-                        Ok(json) => {
-                            if let Some(candidates) = json.get("candidates") {
-                                if let Some(candidate) = candidates.get(0) {
-                                    if let Some(content) = candidate.get("content") {
-                                        if let Some(parts) = content.get("parts") {
-                                            if let Some(part) = parts.get(0) {
-                                                if let Some(text) = part.get("text") {
-                                                    if let Some(text_str) = text.as_str() {
-                                                        return Ok(text_str.to_string());
+                    loop {
+                        match byte_stream.next().await {
+                            Some(Ok(bytes)) => {
+                                let chunk = String::from_utf8_lossy(&bytes);
+                                buffer.push_str(&chunk);
+                                
+                                // Process ALL complete lines ending with \n
+                                while let Some(newline_pos) = buffer.find('\n') {
+                                    let line = buffer[..newline_pos].trim().to_string();
+                                    buffer = buffer[newline_pos + 1..].to_string();
+                                    
+                                    if line.is_empty() {
+                                        continue;
+                                    }
+                                    
+                                    // Parse the JSON response
+                                    if let Ok(json) = serde_json::from_str::<Value>(&line) {
+                                        if let Some(candidates) = json.get("candidates") {
+                                            if let Some(candidate) = candidates.get(0) {
+                                                if let Some(content) = candidate.get("content") {
+                                                    if let Some(parts) = content.get("parts") {
+                                                        if let Some(part) = parts.get(0) {
+                                                            if let Some(text) = part.get("text") {
+                                                                if let Some(text_str) = text.as_str() {
+                                                                    if !text_str.is_empty() {
+                                                                        pending_content.insert(0, text_str.to_string());
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
                                                     }
                                                 }
                                             }
                                         }
                                     }
                                 }
+                                
+                                // If we have pending content, yield the first piece
+                                if let Some(content) = pending_content.pop() {
+                                    return Some((Ok(content), (buffer, byte_stream, pending_content)));
+                                }
+                                // Continue to next chunk if no content to yield
                             }
-                            Ok("".to_string())
+                            Some(Err(e)) => {
+                                return Some((Err(anyhow::anyhow!("Stream error: {}", e)), (buffer, byte_stream, pending_content)));
+                            }
+                            None => {
+                                // Stream ended - process any remaining complete lines in buffer
+                                while let Some(newline_pos) = buffer.find('\n') {
+                                    let line = buffer[..newline_pos].trim().to_string();
+                                    buffer = buffer[newline_pos + 1..].to_string();
+                                    
+                                    if !line.is_empty() {
+                                        if let Ok(json) = serde_json::from_str::<Value>(&line) {
+                                            if let Some(candidates) = json.get("candidates") {
+                                                if let Some(candidate) = candidates.get(0) {
+                                                    if let Some(content) = candidate.get("content") {
+                                                        if let Some(parts) = content.get("parts") {
+                                                            if let Some(part) = parts.get(0) {
+                                                                if let Some(text) = part.get("text") {
+                                                                    if let Some(text_str) = text.as_str() {
+                                                                        if !text_str.is_empty() {
+                                                                            pending_content.insert(0, text_str.to_string());
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                // Yield any remaining pending content
+                                if let Some(content) = pending_content.pop() {
+                                    return Some((Ok(content), (String::new(), byte_stream, pending_content)));
+                                }
+                                
+                                return None; // Stream truly ended
+                            }
                         }
-                        Err(_) => Ok("".to_string()),
                     }
                 }
-                Err(e) => Err(anyhow::anyhow!("Stream error: {}", e)),
-            }
-        });
-        
-        Ok(Box::new(Box::pin(content_stream)))
+            );
+            
+            Ok(Box::new(Box::pin(stream)))
+        } else {
+            // Handle non-streaming response
+            let json_response: serde_json::Value = response.json().await?;
+            
+            let content = json_response
+                .get("candidates")
+                .and_then(|candidates| candidates.as_array())
+                .and_then(|arr| arr.first())
+                .and_then(|candidate| candidate.get("content"))
+                .and_then(|content| content.get("parts"))
+                .and_then(|parts| parts.as_array())
+                .and_then(|arr| arr.first())
+                .and_then(|part| part.get("text"))
+                .and_then(|text| text.as_str())
+                .unwrap_or("No response content")
+                .to_string();
+            
+            let stream = futures::stream::once(async move { Ok(content) });
+            Ok(Box::new(Box::pin(stream)))
+        }
     }
     
     fn get_models(&self) -> Vec<String> {
