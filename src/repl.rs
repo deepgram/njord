@@ -225,7 +225,16 @@ impl Repl {
                             openai_provider.supports_temperature(&self.session.current_model)
                         } else { true }
                     }
-                    "anthropic" => true, // All Anthropic models support temperature
+                    "anthropic" => {
+                        // For Anthropic, temperature is N/A when thinking is enabled
+                        if self.session.thinking_enabled {
+                            if let Some(anthropic_provider) = provider.as_any().downcast_ref::<crate::providers::anthropic::AnthropicProvider>() {
+                                !anthropic_provider.supports_thinking(&self.session.current_model)
+                            } else { true }
+                        } else {
+                            true // All Anthropic models support temperature when thinking is disabled
+                        }
+                    }
                     "gemini" => true,    // All Gemini models support temperature
                     _ => true
                 };
