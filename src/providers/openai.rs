@@ -34,27 +34,39 @@ impl OpenAIProvider {
 #[async_trait]
 impl LLMProvider for OpenAIProvider {
     async fn chat(&self, request: ChatRequest) -> Result<Box<dyn Stream<Item = Result<String>> + Unpin + Send>> {
-        // Use Responses API for all models since all support it
-        let url = "https://api.openai.com/v1/responses";
+        // Use different APIs based on model requirements
+        let use_responses_api = matches!(request.model.as_str(), "o3-pro" | "o1-pro");
+        
+        let (url, payload) = if use_responses_api {
+            // Use Responses API for models that require it
+            let url = "https://api.openai.com/v1/responses";
+            let mut payload = json!({
+                "model": request.model,
+                "input": request.messages
+            });
+            
+            // Only add temperature for non-reasoning models
+            if !self.is_reasoning_model(&request.model) {
+                payload["temperature"] = json!(request.temperature);
+            }
+            
+            (url, payload)
+        } else {
+            // Use Chat Completions API for regular models
+            let url = "https://api.openai.com/v1/chat/completions";
+            let payload = json!({
+                "model": request.model,
+                "messages": request.messages,
+                "temperature": request.temperature,
+                "stream": request.stream
+            });
+            
+            (url, payload)
+        };
         
         // Check if model supports streaming
         let can_stream = self.supports_streaming(&request.model);
         let should_stream = request.stream && can_stream;
-        
-        let mut payload = json!({
-            "model": request.model,
-            "input": request.messages
-        });
-        
-        // Add streaming if supported
-        if should_stream {
-            payload["stream"] = json!(true);
-        }
-        
-        // Only add temperature for non-reasoning models
-        if !self.is_reasoning_model(&request.model) {
-            payload["temperature"] = json!(request.temperature);
-        }
         
         let response = self.client
             .post(url)
@@ -69,8 +81,8 @@ impl LLMProvider for OpenAIProvider {
             return Err(anyhow::anyhow!("OpenAI API error: {}", error_text));
         }
         
-        if should_stream {
-            // Handle streaming response with proper SSE parsing
+        if should_stream && !use_responses_api {
+            // Handle streaming response for Chat Completions API
             use futures::stream::unfold;
             use futures::StreamExt;
             
@@ -96,7 +108,6 @@ impl LLMProvider for OpenAIProvider {
                                     let line = buffer[..newline_pos].trim().to_string();
                                     buffer = buffer[newline_pos + 1..].to_string();
                                     
-                                    
                                     // Parse SSE data lines
                                     if let Some(json_str) = line.strip_prefix("data: ") {
                                         if json_str.trim() == "[DONE]" {
@@ -118,7 +129,7 @@ impl LLMProvider for OpenAIProvider {
                                                 .and_then(|content| content.as_str())
                                             {
                                                 if !content.is_empty() {
-                                                    pending_content.insert(0, content.to_string()); // Insert at beginning to maintain order
+                                                    pending_content.insert(0, content.to_string());
                                                 }
                                             }
                                         }
@@ -177,23 +188,36 @@ impl LLMProvider for OpenAIProvider {
             // Handle non-streaming response
             let json_response: serde_json::Value = response.json().await?;
             
-            // Parse response using the Responses API format
-            let content = json_response
-                .get("output")
-                .and_then(|output| output.as_array())
-                .and_then(|arr| {
-                    // Find the message object in the output array
-                    arr.iter().find(|item| {
-                        item.get("type").and_then(|t| t.as_str()) == Some("message")
+            let content = if use_responses_api {
+                // Parse response using the Responses API format
+                json_response
+                    .get("output")
+                    .and_then(|output| output.as_array())
+                    .and_then(|arr| {
+                        // Find the message object in the output array
+                        arr.iter().find(|item| {
+                            item.get("type").and_then(|t| t.as_str()) == Some("message")
+                        })
                     })
-                })
-                .and_then(|message| message.get("content"))
-                .and_then(|content| content.as_array())
-                .and_then(|arr| arr.first())
-                .and_then(|content_item| content_item.get("text"))
-                .and_then(|text| text.as_str())
-                .unwrap_or("No response content")
-                .to_string();
+                    .and_then(|message| message.get("content"))
+                    .and_then(|content| content.as_array())
+                    .and_then(|arr| arr.first())
+                    .and_then(|content_item| content_item.get("text"))
+                    .and_then(|text| text.as_str())
+                    .unwrap_or("No response content")
+                    .to_string()
+            } else {
+                // Parse response using the Chat Completions API format
+                json_response
+                    .get("choices")
+                    .and_then(|choices| choices.as_array())
+                    .and_then(|arr| arr.first())
+                    .and_then(|choice| choice.get("message"))
+                    .and_then(|msg| msg.get("content"))
+                    .and_then(|content| content.as_str())
+                    .unwrap_or("No response content")
+                    .to_string()
+            };
             
             let stream = futures::stream::once(async move { Ok(content) });
             Ok(Box::new(Box::pin(stream)))
