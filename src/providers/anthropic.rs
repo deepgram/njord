@@ -129,6 +129,7 @@ impl LLMProvider for AnthropicProvider {
                                     // Parse SSE data lines
                                     if let Some(json_str) = line.strip_prefix("data: ") {
                                         if json_str.trim() == "[DONE]" {
+                                            eprintln!("Debug - Anthropic stream done");
                                             // If we have pending content, yield it first
                                             if let Some(content) = pending_content.pop() {
                                                 return Some((Ok(content), (buffer, byte_stream, pending_content)));
@@ -136,11 +137,17 @@ impl LLMProvider for AnthropicProvider {
                                             return None; // End of stream
                                         }
                                         
+                                        eprintln!("Debug - Anthropic SSE JSON: {}", json_str);
+                                        
                                         // Parse the JSON chunk
                                         if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(json_str) {
                                             // Handle different event types
                                             if let Some(event_type) = json_val.get("type").and_then(|t| t.as_str()) {
+                                                eprintln!("Debug - Anthropic event type: {}", event_type);
                                                 match event_type {
+                                                    "content_block_start" => {
+                                                        eprintln!("Debug - Anthropic content_block_start: {}", serde_json::to_string_pretty(&json_val).unwrap_or_default());
+                                                    }
                                                     "content_block_delta" => {
                                                         // Check if this is a thinking content block
                                                         let is_thinking = json_val
@@ -151,6 +158,8 @@ impl LLMProvider for AnthropicProvider {
                                                         // Debug: print the content block info
                                                         if let Some(content_block) = json_val.get("content_block") {
                                                             eprintln!("Debug - Anthropic content_block: {}", serde_json::to_string_pretty(content_block).unwrap_or_default());
+                                                        } else {
+                                                            eprintln!("Debug - Anthropic content_block_delta without content_block field");
                                                         }
                                                         
                                                         if let Some(content) = json_val
@@ -163,6 +172,7 @@ impl LLMProvider for AnthropicProvider {
                                                                     eprintln!("Debug - Anthropic thinking content: {:?}", content);
                                                                     pending_content.insert(0, format!("thinking:{}", content));
                                                                 } else {
+                                                                    eprintln!("Debug - Anthropic regular content: {:?}", content);
                                                                     pending_content.insert(0, format!("content:{}", content));
                                                                 }
                                                             }
