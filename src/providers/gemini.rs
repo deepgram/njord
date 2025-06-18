@@ -81,46 +81,116 @@ impl LLMProvider for GeminiProvider {
         }
         
         if request.stream {
-            // For now, disable streaming for Gemini and use non-streaming response
-            // The Gemini streaming format is complex and needs more investigation
-            let json_response: serde_json::Value = response.json().await?;
+            // Handle streaming response
+            use futures::stream::unfold;
+            use futures::StreamExt;
             
-            // Debug: print the actual response structure
-            eprintln!("Debug - Gemini response structure: {}", serde_json::to_string_pretty(&json_response).unwrap_or_default());
+            let buffer = String::new();
+            let byte_stream = response.bytes_stream();
             
-            // The response is an array of chunks, we need to concatenate all text parts
-            let mut content = String::new();
-            
-            if let Some(chunks) = json_response.as_array() {
-                for chunk in chunks {
-                    if let Some(candidates) = chunk.get("candidates") {
-                        if let Some(candidates_array) = candidates.as_array() {
-                            if let Some(candidate) = candidates_array.first() {
-                                if let Some(content_obj) = candidate.get("content") {
-                                    if let Some(parts) = content_obj.get("parts") {
-                                        if let Some(parts_array) = parts.as_array() {
-                                            if let Some(part) = parts_array.first() {
-                                                if let Some(text) = part.get("text") {
-                                                    if let Some(text_str) = text.as_str() {
-                                                        content.push_str(text_str);
+            let stream = unfold(
+                (buffer, byte_stream, Vec::<String>::new()),
+                |(mut buffer, mut byte_stream, mut pending_content)| async move {
+                    // First, check if we have pending content to yield
+                    if let Some(content) = pending_content.pop() {
+                        return Some((Ok(content), (buffer, byte_stream, pending_content)));
+                    }
+                    
+                    loop {
+                        match byte_stream.next().await {
+                            Some(Ok(bytes)) => {
+                                let chunk = String::from_utf8_lossy(&bytes);
+                                buffer.push_str(&chunk);
+                                
+                                // Process complete JSON objects (Gemini sends one JSON per line)
+                                while let Some(newline_pos) = buffer.find('\n') {
+                                    let line = buffer[..newline_pos].trim().to_string();
+                                    buffer = buffer[newline_pos + 1..].to_string();
+                                    
+                                    if line.is_empty() {
+                                        continue;
+                                    }
+                                    
+                                    // Parse the JSON response
+                                    if let Ok(json) = serde_json::from_str::<serde_json::Value>(&line) {
+                                        if let Some(candidates) = json.get("candidates") {
+                                            if let Some(candidates_array) = candidates.as_array() {
+                                                if let Some(candidate) = candidates_array.first() {
+                                                    if let Some(content_obj) = candidate.get("content") {
+                                                        if let Some(parts) = content_obj.get("parts") {
+                                                            if let Some(parts_array) = parts.as_array() {
+                                                                if let Some(part) = parts_array.first() {
+                                                                    if let Some(text) = part.get("text") {
+                                                                        if let Some(text_str) = text.as_str() {
+                                                                            if !text_str.is_empty() {
+                                                                                pending_content.insert(0, text_str.to_string());
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
                                                     }
                                                 }
                                             }
                                         }
                                     }
                                 }
+                                
+                                // If we have pending content, yield the first piece
+                                if let Some(content) = pending_content.pop() {
+                                    return Some((Ok(content), (buffer, byte_stream, pending_content)));
+                                }
+                                // Continue to next chunk if no content to yield
+                            }
+                            Some(Err(e)) => {
+                                return Some((Err(anyhow::anyhow!("Stream error: {}", e)), (buffer, byte_stream, pending_content)));
+                            }
+                            None => {
+                                // Stream ended - process any remaining complete lines in buffer
+                                while let Some(newline_pos) = buffer.find('\n') {
+                                    let line = buffer[..newline_pos].trim().to_string();
+                                    buffer = buffer[newline_pos + 1..].to_string();
+                                    
+                                    if !line.is_empty() {
+                                        if let Ok(json) = serde_json::from_str::<serde_json::Value>(&line) {
+                                            if let Some(candidates) = json.get("candidates") {
+                                                if let Some(candidates_array) = candidates.as_array() {
+                                                    if let Some(candidate) = candidates_array.first() {
+                                                        if let Some(content_obj) = candidate.get("content") {
+                                                            if let Some(parts) = content_obj.get("parts") {
+                                                                if let Some(parts_array) = parts.as_array() {
+                                                                    if let Some(part) = parts_array.first() {
+                                                                        if let Some(text) = part.get("text") {
+                                                                            if let Some(text_str) = text.as_str() {
+                                                                                if !text_str.is_empty() {
+                                                                                    pending_content.insert(0, text_str.to_string());
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                // Yield any remaining pending content
+                                if let Some(content) = pending_content.pop() {
+                                    return Some((Ok(content), (String::new(), byte_stream, pending_content)));
+                                }
+                                
+                                return None; // Stream truly ended
                             }
                         }
                     }
                 }
-            }
+            );
             
-            if content.is_empty() {
-                eprintln!("Debug - Failed to parse Gemini response content");
-                content = "No response content found".to_string();
-            }
-            
-            let stream = futures::stream::once(async move { Ok(content) });
             Ok(Box::new(Box::pin(stream)))
         } else {
             // Handle non-streaming response (this path shouldn't be reached since we're using streaming URL)
