@@ -11,10 +11,9 @@ pub enum Command {
     ChatLoad(String),
     ChatList,
     ChatDelete(String),
-    ChatContinue,
+    ChatContinue(Option<String>),
     ChatRecent,
     ChatFork(String),
-    ChatBranch(Option<String>),
     ChatMerge(String),
     Undo(Option<usize>),
     Goto(usize),
@@ -60,8 +59,8 @@ pub struct CommandParser {
     chat_save_regex: Regex,
     chat_load_regex: Regex,
     chat_delete_regex: Regex,
+    chat_continue_regex: Regex,
     chat_fork_regex: Regex,
-    chat_branch_regex: Regex,
     chat_merge_regex: Regex,
     provider_regex: Regex,
 }
@@ -87,8 +86,8 @@ impl CommandParser {
             chat_save_regex: Regex::new(r"^/chat\s+save\s+(.+)$")?,
             chat_load_regex: Regex::new(r"^/chat\s+load\s+(.+)$")?,
             chat_delete_regex: Regex::new(r"^/chat\s+delete\s+(.+)$")?,
+            chat_continue_regex: Regex::new(r"^/chat\s+continue(?:\s+(.+))?$")?,
             chat_fork_regex: Regex::new(r"^/chat\s+fork\s+(.+)$")?,
-            chat_branch_regex: Regex::new(r"^/chat\s+branch(?:\s+(.+))?$")?,
             chat_merge_regex: Regex::new(r"^/chat\s+merge\s+(.+)$")?,
             provider_regex: Regex::new(r"^/provider\s+(\w+)$")?,
         })
@@ -105,7 +104,6 @@ impl CommandParser {
             "/models" => Some(Command::Models),
             "/chat new" => Some(Command::ChatNew),
             "/chat list" => Some(Command::ChatList),
-            "/chat continue" => Some(Command::ChatContinue),
             "/chat recent" => Some(Command::ChatRecent),
             "/history" => Some(Command::History),
             "/tokens" => Some(Command::Tokens),
@@ -156,11 +154,11 @@ impl CommandParser {
                     Some(Command::ChatLoad(caps[1].to_string()))
                 } else if let Some(caps) = self.chat_delete_regex.captures(input) {
                     Some(Command::ChatDelete(caps[1].to_string()))
+                } else if let Some(caps) = self.chat_continue_regex.captures(input) {
+                    let name = caps.get(1).map(|m| m.as_str().to_string());
+                    Some(Command::ChatContinue(name))
                 } else if let Some(caps) = self.chat_fork_regex.captures(input) {
                     Some(Command::ChatFork(caps[1].to_string()))
-                } else if let Some(caps) = self.chat_branch_regex.captures(input) {
-                    let name = caps.get(1).map(|m| m.as_str().to_string());
-                    Some(Command::ChatBranch(name))
                 } else if let Some(caps) = self.chat_merge_regex.captures(input) {
                     Some(Command::ChatMerge(caps[1].to_string()))
                 } else if let Some(caps) = self.provider_regex.captures(input) {

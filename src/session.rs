@@ -151,4 +151,23 @@ impl ChatSession {
     pub fn generate_auto_name(&self) -> String {
         self.created_at.format("%Y-%m-%d_%H:%M:%S").to_string()
     }
+    
+    pub fn create_copy(&self) -> Self {
+        let now = Utc::now();
+        Self {
+            id: Uuid::new_v4(),
+            name: None,
+            created_at: now,
+            updated_at: now,
+            messages: self.messages.clone(),
+            current_model: self.current_model.clone(),
+            current_provider: self.current_provider.clone(),
+            temperature: self.temperature,
+            max_tokens: self.max_tokens,
+            thinking_budget: self.thinking_budget,
+            system_prompt: self.system_prompt.clone(),
+            thinking_enabled: self.thinking_enabled,
+            has_llm_interaction: false, // Reset for new copy
+        }
+    }
 }
