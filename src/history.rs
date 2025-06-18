@@ -67,4 +67,30 @@ impl History {
         }
         Ok(existed)
     }
+    
+    pub fn auto_save_session(&mut self, session: &ChatSession) -> Result<Option<String>> {
+        if !session.should_auto_save() {
+            return Ok(None);
+        }
+        
+        let auto_name = session.generate_auto_name();
+        let mut session_to_save = session.clone();
+        session_to_save.name = Some(auto_name.clone());
+        
+        self.saved_sessions.insert(auto_name.clone(), session_to_save);
+        self.save()?;
+        Ok(Some(auto_name))
+    }
+    
+    pub fn get_recent_sessions(&self, limit: usize) -> Vec<(&String, &ChatSession)> {
+        let mut sessions: Vec<_> = self.saved_sessions.iter().collect();
+        sessions.sort_by(|a, b| b.1.updated_at.cmp(&a.1.updated_at));
+        sessions.into_iter().take(limit).collect()
+    }
+    
+    pub fn get_most_recent_session(&self) -> Option<&ChatSession> {
+        self.saved_sessions
+            .values()
+            .max_by_key(|session| session.updated_at)
+    }
 }
