@@ -128,9 +128,18 @@ impl UI {
         io::stdout().flush().unwrap();
     }
     
+    pub fn print_thinking_prefix(&self, number: usize) {
+        print!("\x1b[1;35mAgent {} (thinking)\x1b[0m: ", number);
+        io::stdout().flush().unwrap();
+    }
+    
     pub fn print_thinking_chunk(&self, chunk: &str) {
         print!("\x1b[2;3m{}\x1b[0m", chunk); // Dimmed and italic text for thinking
         io::stdout().flush().unwrap();
+    }
+    
+    pub fn print_thinking_end(&self) {
+        println!();
     }
     
     pub fn print_agent_newline(&self) {
