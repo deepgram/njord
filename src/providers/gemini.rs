@@ -201,9 +201,9 @@ impl LLMProvider for GeminiProvider {
     
     fn get_models(&self) -> Vec<String> {
         vec![
-            "gemini-1.5-flash".to_string(),
-            "gemini-1.5-pro".to_string(),
-            "gemini-1.0-pro".to_string(),
+            "gemini-2.5-pro".to_string(),
+            "gemini-2.5-flash".to_string(),
+            "gemini-2.5-flash-lite".to_string(),
         ]
     }
     

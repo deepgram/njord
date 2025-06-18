@@ -18,7 +18,7 @@ pub struct Args {
     pub gemini_key: Option<String>,
     
     /// Default model to use
-    #[arg(short, long, default_value = "gpt-3.5-turbo")]
+    #[arg(short, long, default_value = "claude-sonnet-4-20250514")]
     pub model: String,
     
     /// Temperature for responses (0.0 to 2.0)
