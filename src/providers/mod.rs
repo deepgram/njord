@@ -19,6 +19,8 @@ pub struct ChatRequest {
     pub messages: Vec<Message>,
     pub model: String,
     pub temperature: f32,
+    pub max_tokens: u32,
+    pub thinking_budget: u32,
     pub stream: bool,
     pub thinking: bool,
 }

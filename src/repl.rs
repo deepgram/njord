@@ -52,15 +52,15 @@ impl Repl {
         let history = History::load()?;
         
         let mut session = if config.new_session {
-            ChatSession::new(config.default_model.clone(), config.temperature)
+            ChatSession::new(config.default_model.clone(), config.temperature, config.max_tokens, config.thinking_budget)
         } else if let Some(session_name) = &config.load_session {
             history.load_session(session_name)
                 .cloned()
-                .unwrap_or_else(|| ChatSession::new(config.default_model.clone(), config.temperature))
+                .unwrap_or_else(|| ChatSession::new(config.default_model.clone(), config.temperature, config.max_tokens, config.thinking_budget))
         } else {
             history.current_session
                 .clone()
-                .unwrap_or_else(|| ChatSession::new(config.default_model.clone(), config.temperature))
+                .unwrap_or_else(|| ChatSession::new(config.default_model.clone(), config.temperature, config.max_tokens, config.thinking_budget))
         };
         
         // Restore provider from session if available and valid
@@ -88,10 +88,12 @@ impl Repl {
             }
         }
         
-        // If loading a new session or no session exists, use config temperature
-        // Otherwise, keep the session's stored temperature
+        // If loading a new session or no session exists, use config values
+        // Otherwise, keep the session's stored values
         if config.new_session || config.load_session.is_none() && history.current_session.is_none() {
             session.temperature = config.temperature;
+            session.max_tokens = config.max_tokens;
+            session.thinking_budget = config.thinking_budget;
         }
         
         let command_parser = CommandParser::new()?;
@@ -298,6 +300,8 @@ impl Repl {
                 println!("  /history - Show conversation history");
                 println!("  /system [PROMPT] - Set system prompt (empty to view, 'clear' to remove)");
                 println!("  /temp TEMPERATURE - Set temperature (0.0-2.0)");
+                println!("  /max-tokens TOKENS - Set maximum output tokens");
+                println!("  /thinking-budget TOKENS - Set thinking token budget");
                 println!("  /thinking on|off - Enable/disable thinking for supported models");
                 println!("  /quit - Exit Njord");
                 println!();
@@ -316,7 +320,7 @@ impl Repl {
                 }
             }
             Command::ChatNew => {
-                self.session = ChatSession::new(self.config.default_model.clone(), self.config.temperature);
+                self.session = ChatSession::new(self.config.default_model.clone(), self.config.temperature, self.config.max_tokens, self.config.thinking_budget);
                 self.session.current_provider = self.current_provider.clone();
                 self.ui.print_info("Started new chat session");
             }
@@ -544,6 +548,22 @@ impl Repl {
                     self.ui.print_info(&format!("Temperature set to {}", temp));
                 }
             }
+            Command::MaxTokens(tokens) => {
+                if tokens == 0 {
+                    self.ui.print_error("Max tokens must be greater than 0");
+                } else {
+                    self.session.max_tokens = tokens;
+                    self.ui.print_info(&format!("Max tokens set to {}", tokens));
+                }
+            }
+            Command::ThinkingBudget(budget) => {
+                if budget == 0 {
+                    self.ui.print_error("Thinking budget must be greater than 0");
+                } else {
+                    self.session.thinking_budget = budget;
+                    self.ui.print_info(&format!("Thinking budget set to {}", budget));
+                }
+            }
             Command::Thinking(enable) => {
                 self.session.thinking_enabled = enable;
                 self.ui.print_info(&format!("Thinking {}", if enable { "enabled" } else { "disabled" }));
@@ -663,6 +683,8 @@ impl Repl {
                         messages: request_messages,
                         model: self.session.current_model.clone(),
                         temperature: self.session.temperature,
+                        max_tokens: self.session.max_tokens,
+                        thinking_budget: self.session.thinking_budget,
                         stream: true,
                         thinking: self.session.thinking_enabled,
                     };

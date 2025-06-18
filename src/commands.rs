@@ -21,6 +21,8 @@ pub enum Command {
     Exec(usize),
     System(String),
     Temperature(f32),
+    MaxTokens(u32),
+    ThinkingBudget(u32),
     Thinking(bool),
     Tokens,
     Export(String),
@@ -45,6 +47,8 @@ pub struct CommandParser {
     exec_regex: Regex,
     system_regex: Regex,
     temp_regex: Regex,
+    max_tokens_regex: Regex,
+    thinking_budget_regex: Regex,
     thinking_regex: Regex,
     export_regex: Regex,
     edit_regex: Regex,
@@ -67,6 +71,8 @@ impl CommandParser {
             exec_regex: Regex::new(r"^/exec\s+(\d+)$")?,
             system_regex: Regex::new(r"^/system\s+(.+)$")?,
             temp_regex: Regex::new(r"^/temp\s+([\d.]+)$")?,
+            max_tokens_regex: Regex::new(r"^/max-tokens\s+(\d+)$")?,
+            thinking_budget_regex: Regex::new(r"^/thinking-budget\s+(\d+)$")?,
             thinking_regex: Regex::new(r"^/thinking\s+(on|off|true|false)$")?,
             export_regex: Regex::new(r"^/export\s+(\w+)$")?,
             edit_regex: Regex::new(r"^/edit\s+(\d+)$")?,
@@ -120,6 +126,10 @@ impl CommandParser {
                     Some(Command::System(caps[1].to_string()))
                 } else if let Some(caps) = self.temp_regex.captures(input) {
                     Some(Command::Temperature(caps[1].parse().unwrap_or(0.7)))
+                } else if let Some(caps) = self.max_tokens_regex.captures(input) {
+                    Some(Command::MaxTokens(caps[1].parse().unwrap_or(4096)))
+                } else if let Some(caps) = self.thinking_budget_regex.captures(input) {
+                    Some(Command::ThinkingBudget(caps[1].parse().unwrap_or(20000)))
                 } else if let Some(caps) = self.thinking_regex.captures(input) {
                     let enable = matches!(caps[1].as_ref(), "on" | "true");
                     Some(Command::Thinking(enable))

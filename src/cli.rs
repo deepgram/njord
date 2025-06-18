@@ -25,6 +25,14 @@ pub struct Args {
     #[arg(short, long, default_value = "0.7")]
     pub temperature: f32,
     
+    /// Maximum tokens for responses
+    #[arg(long, default_value = "4096")]
+    pub max_tokens: u32,
+    
+    /// Thinking token budget for supported models
+    #[arg(long, default_value = "20000")]
+    pub thinking_budget: u32,
+    
     /// Load a specific chat session
     #[arg(long)]
     pub load_session: Option<String>,

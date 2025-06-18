@@ -15,6 +15,8 @@ pub struct ChatSession {
     pub current_model: String,
     pub current_provider: Option<String>,
     pub temperature: f32,
+    pub max_tokens: u32,
+    pub thinking_budget: u32,
     pub system_prompt: Option<String>,
     pub thinking_enabled: bool,
 }
@@ -37,7 +39,7 @@ pub struct CodeBlock {
 }
 
 impl ChatSession {
-    pub fn new(model: String, temperature: f32) -> Self {
+    pub fn new(model: String, temperature: f32, max_tokens: u32, thinking_budget: u32) -> Self {
         let now = Utc::now();
         Self {
             id: Uuid::new_v4(),
@@ -48,6 +50,8 @@ impl ChatSession {
             current_model: model,
             current_provider: None,
             temperature,
+            max_tokens,
+            thinking_budget,
             system_prompt: None,
             thinking_enabled: false,
         }

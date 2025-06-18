@@ -69,9 +69,10 @@ impl LLMProvider for AnthropicProvider {
         
         // Set max_tokens based on whether thinking is enabled
         let max_tokens = if request.thinking && self.supports_thinking(&request.model) {
-            25000 // Must be greater than thinking budget_tokens (20000)
+            // Must be greater than thinking budget_tokens
+            std::cmp::max(request.max_tokens, request.thinking_budget + 1000)
         } else {
-            4096
+            request.max_tokens
         };
         
         let mut payload = json!({
@@ -89,7 +90,7 @@ impl LLMProvider for AnthropicProvider {
         if request.thinking && self.supports_thinking(&request.model) {
             payload["thinking"] = json!({
                 "type": "enabled",
-                "budget_tokens": 20000
+                "budget_tokens": request.thinking_budget
             });
             // Temperature must be 1.0 when thinking is enabled
             payload["temperature"] = json!(1.0);

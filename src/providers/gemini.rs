@@ -82,7 +82,7 @@ impl LLMProvider for GeminiProvider {
             "contents": contents,
             "generationConfig": {
                 "temperature": request.temperature,
-                "maxOutputTokens": 4096,
+                "maxOutputTokens": request.max_tokens,
             }
         });
         

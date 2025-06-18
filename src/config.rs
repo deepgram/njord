@@ -9,6 +9,8 @@ pub struct Config {
     pub api_keys: HashMap<String, String>,
     pub default_model: String,
     pub temperature: f32,
+    pub max_tokens: u32,
+    pub thinking_budget: u32,
     pub load_session: Option<String>,
     pub new_session: bool,
 }
@@ -51,6 +53,8 @@ impl Config {
             api_keys,
             default_model,
             temperature: args.temperature,
+            max_tokens: args.max_tokens,
+            thinking_budget: args.thinking_budget,
             load_session: args.load_session.clone(),
             new_session: args.new_session,
         })
