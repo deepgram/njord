@@ -46,10 +46,17 @@ impl GeminiProvider {
 #[async_trait]
 impl LLMProvider for GeminiProvider {
     async fn chat(&self, request: ChatRequest) -> Result<Box<dyn Stream<Item = Result<String>> + Unpin + Send>> {
-        let url = format!(
-            "https://generativelanguage.googleapis.com/v1beta/models/{}:streamGenerateContent?key={}",
-            request.model, self.api_key
-        );
+        let url = if request.stream {
+            format!(
+                "https://generativelanguage.googleapis.com/v1beta/models/{}:streamGenerateContent?key={}",
+                request.model, self.api_key
+            )
+        } else {
+            format!(
+                "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
+                request.model, self.api_key
+            )
+        };
         
         let contents = self.convert_messages(&request.messages);
         
