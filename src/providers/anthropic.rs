@@ -59,7 +59,6 @@ impl LLMProvider for AnthropicProvider {
             "model": request.model,
             "max_tokens": 4096,
             "messages": anthropic_messages,
-            "temperature": request.temperature,
             "stream": request.stream
         });
         
@@ -73,6 +72,10 @@ impl LLMProvider for AnthropicProvider {
                 "type": "enabled",
                 "budget_tokens": 20000
             });
+            // Temperature must be 1.0 when thinking is enabled
+            payload["temperature"] = json!(1.0);
+        } else {
+            payload["temperature"] = json!(request.temperature);
         }
         
         let response = self.client
