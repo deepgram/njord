@@ -24,6 +24,11 @@ impl OpenAIProvider {
         model.starts_with("o1") || model.starts_with("o3") || model.starts_with("o4")
     }
     
+    fn supports_temperature(&self, model: &str) -> bool {
+        // Models that don't support custom temperature
+        !matches!(model.as_str(), "o4-mini" | "o3-pro" | "o1-pro") && !self.is_reasoning_model(model)
+    }
+    
     fn supports_streaming(&self, model: &str) -> bool {
         // Based on your analysis, these models don't support streaming
         !matches!(model, "o3-pro" | "o1-pro")
@@ -54,12 +59,16 @@ impl LLMProvider for OpenAIProvider {
         } else {
             // Use Chat Completions API for regular models
             let url = "https://api.openai.com/v1/chat/completions";
-            let payload = json!({
+            let mut payload = json!({
                 "model": request.model,
                 "messages": request.messages,
-                "temperature": request.temperature,
                 "stream": request.stream
             });
+            
+            // Only add temperature for models that support it
+            if self.supports_temperature(&request.model) {
+                payload["temperature"] = json!(request.temperature);
+            }
             
             (url, payload)
         };
