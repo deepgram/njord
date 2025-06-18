@@ -192,6 +192,7 @@ impl Repl {
             } else {
                 println!("  System prompt: (none)");
             }
+            println!("  Thinking: {}", if self.session.thinking_enabled { "enabled" } else { "disabled" });
             
             // Show session info if we have messages
             if !self.session.messages.is_empty() {
@@ -227,6 +228,7 @@ impl Repl {
                 println!("  /history - Show conversation history");
                 println!("  /system [PROMPT] - Set system prompt (empty to view, 'clear' to remove)");
                 println!("  /temp TEMPERATURE - Set temperature (0.0-2.0)");
+                println!("  /thinking on|off - Enable/disable thinking for supported models");
                 println!("  /quit - Exit Njord");
                 println!();
                 println!("Input tips:");
@@ -282,6 +284,7 @@ impl Repl {
                     } else {
                         self.ui.print_info("System prompt: (none)");
                     }
+                    self.ui.print_info(&format!("Thinking: {}", if self.session.thinking_enabled { "enabled" } else { "disabled" }));
                 } else {
                     self.ui.print_error("No provider selected");
                 }
@@ -466,6 +469,10 @@ impl Repl {
                     self.ui.print_info(&format!("Temperature set to {}", temp));
                 }
             }
+            Command::Thinking(enable) => {
+                self.session.thinking_enabled = enable;
+                self.ui.print_info(&format!("Thinking {}", if enable { "enabled" } else { "disabled" }));
+            }
             _ => {
                 self.ui.print_info(&format!("Command not yet implemented: {:?}", command));
             }
@@ -582,6 +589,7 @@ impl Repl {
                         model: self.session.current_model.clone(),
                         temperature: self.session.temperature,
                         stream: true,
+                        thinking: self.session.thinking_enabled,
                     };
                     
                     match provider.chat(chat_request).await {
@@ -598,8 +606,18 @@ impl Repl {
                                                 match chunk {
                                                     Ok(content) => {
                                                         if !content.is_empty() {
-                                                            self.ui.print_agent_chunk(&content);
-                                                            full_response.push_str(&content);
+                                                            if content.starts_with("thinking:") {
+                                                                let thinking_text = &content[9..]; // Remove "thinking:" prefix
+                                                                self.ui.print_thinking_chunk(thinking_text);
+                                                            } else if content.starts_with("content:") {
+                                                                let content_text = &content[8..]; // Remove "content:" prefix
+                                                                self.ui.print_agent_chunk(content_text);
+                                                                full_response.push_str(content_text);
+                                                            } else {
+                                                                // Fallback for providers that don't prefix
+                                                                self.ui.print_agent_chunk(&content);
+                                                                full_response.push_str(&content);
+                                                            }
                                                         }
                                                     }
                                                     Err(e) => {

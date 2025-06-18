@@ -20,6 +20,11 @@ impl AnthropicProvider {
         })
     }
     
+    fn supports_thinking(&self, model: &str) -> bool {
+        // Models that support thinking
+        model.starts_with("claude-sonnet-4") || model.starts_with("claude-3-7-sonnet")
+    }
+    
     fn convert_messages(&self, messages: &[Message]) -> (Option<String>, Vec<serde_json::Value>) {
         let mut system_message = None;
         let mut anthropic_messages = Vec::new();
@@ -56,6 +61,11 @@ impl LLMProvider for AnthropicProvider {
         
         if let Some(system) = system_message {
             payload["system"] = json!(system);
+        }
+        
+        // Enable thinking for supported models
+        if request.thinking && self.supports_thinking(&request.model) {
+            payload["thinking"] = json!(true);
         }
         
         let response = self.client
@@ -121,7 +131,18 @@ impl LLMProvider for AnthropicProvider {
                                                             .and_then(|text| text.as_str())
                                                         {
                                                             if !content.is_empty() {
-                                                                pending_content.insert(0, content.to_string());
+                                                                pending_content.insert(0, format!("content:{}", content));
+                                                            }
+                                                        }
+                                                    }
+                                                    "thinking_delta" => {
+                                                        if let Some(thinking) = json_val
+                                                            .get("delta")
+                                                            .and_then(|delta| delta.get("text"))
+                                                            .and_then(|text| text.as_str())
+                                                        {
+                                                            if !thinking.is_empty() {
+                                                                pending_content.insert(0, format!("thinking:{}", thinking));
                                                             }
                                                         }
                                                     }

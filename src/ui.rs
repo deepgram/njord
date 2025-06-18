@@ -128,6 +128,11 @@ impl UI {
         io::stdout().flush().unwrap();
     }
     
+    pub fn print_thinking_chunk(&self, chunk: &str) {
+        print!("\x1b[2m{}\x1b[0m", chunk); // Dimmed text for thinking
+        io::stdout().flush().unwrap();
+    }
+    
     pub fn print_agent_newline(&self) {
         println!();
     }

@@ -16,6 +16,7 @@ pub struct ChatSession {
     pub current_provider: Option<String>,
     pub temperature: f32,
     pub system_prompt: Option<String>,
+    pub thinking_enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,6 +49,7 @@ impl ChatSession {
             current_provider: None,
             temperature,
             system_prompt: None,
+            thinking_enabled: false,
         }
     }
     

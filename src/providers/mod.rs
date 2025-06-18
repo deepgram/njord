@@ -20,6 +20,7 @@ pub struct ChatRequest {
     pub model: String,
     pub temperature: f32,
     pub stream: bool,
+    pub thinking: bool,
 }
 
 #[async_trait]

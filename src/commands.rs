@@ -21,6 +21,7 @@ pub enum Command {
     Exec(usize),
     System(String),
     Temperature(f32),
+    Thinking(bool),
     Tokens,
     Export(String),
     Help,
@@ -44,6 +45,7 @@ pub struct CommandParser {
     exec_regex: Regex,
     system_regex: Regex,
     temp_regex: Regex,
+    thinking_regex: Regex,
     export_regex: Regex,
     edit_regex: Regex,
     chat_save_regex: Regex,
@@ -65,6 +67,7 @@ impl CommandParser {
             exec_regex: Regex::new(r"^/exec\s+(\d+)$")?,
             system_regex: Regex::new(r"^/system\s+(.+)$")?,
             temp_regex: Regex::new(r"^/temp\s+([\d.]+)$")?,
+            thinking_regex: Regex::new(r"^/thinking\s+(on|off|true|false)$")?,
             export_regex: Regex::new(r"^/export\s+(\w+)$")?,
             edit_regex: Regex::new(r"^/edit\s+(\d+)$")?,
             chat_save_regex: Regex::new(r"^/chat\s+save\s+(.+)$")?,
@@ -93,6 +96,7 @@ impl CommandParser {
             "/status" => Some(Command::Status),
             "/retry" => Some(Command::Retry),
             "/system" => Some(Command::System(String::new())),
+            "/thinking" => Some(Command::Thinking(!true)), // Toggle current state
             "/quit" | "/exit" => Some(Command::Quit),
             _ => {
                 if let Some(caps) = self.model_regex.captures(input) {
@@ -116,6 +120,9 @@ impl CommandParser {
                     Some(Command::System(caps[1].to_string()))
                 } else if let Some(caps) = self.temp_regex.captures(input) {
                     Some(Command::Temperature(caps[1].parse().unwrap_or(0.7)))
+                } else if let Some(caps) = self.thinking_regex.captures(input) {
+                    let enable = matches!(caps[1].as_ref(), "on" | "true");
+                    Some(Command::Thinking(enable))
                 } else if let Some(caps) = self.export_regex.captures(input) {
                     Some(Command::Export(caps[1].to_string()))
                 } else if let Some(caps) = self.edit_regex.captures(input) {
