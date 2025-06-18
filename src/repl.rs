@@ -594,9 +594,11 @@ impl Repl {
                     
                     match provider.chat(chat_request).await {
                         Ok(mut stream) => {
-                            self.ui.print_agent_prefix(message_number + 1);
                             let mut full_response = String::new();
                             let mut stream_error = false;
+                            let mut has_thinking = false;
+                            let mut has_content = false;
+                            let mut thinking_started = false;
                             
                             loop {
                                 tokio::select! {
@@ -608,13 +610,33 @@ impl Repl {
                                                         if !content.is_empty() {
                                                             if content.starts_with("thinking:") {
                                                                 let thinking_text = &content[9..]; // Remove "thinking:" prefix
+                                                                if !thinking_started {
+                                                                    self.ui.print_thinking_prefix(message_number + 1);
+                                                                    thinking_started = true;
+                                                                    has_thinking = true;
+                                                                }
                                                                 self.ui.print_thinking_chunk(thinking_text);
                                                             } else if content.starts_with("content:") {
                                                                 let content_text = &content[8..]; // Remove "content:" prefix
+                                                                if has_thinking && !has_content {
+                                                                    self.ui.print_thinking_end();
+                                                                    self.ui.print_agent_prefix(message_number + 1);
+                                                                    has_content = true;
+                                                                } else if !has_content {
+                                                                    self.ui.print_agent_prefix(message_number + 1);
+                                                                    has_content = true;
+                                                                }
                                                                 self.ui.print_agent_chunk(content_text);
                                                                 full_response.push_str(content_text);
                                                             } else {
                                                                 // Fallback for providers that don't prefix
+                                                                if !has_content {
+                                                                    if has_thinking {
+                                                                        self.ui.print_thinking_end();
+                                                                    }
+                                                                    self.ui.print_agent_prefix(message_number + 1);
+                                                                    has_content = true;
+                                                                }
                                                                 self.ui.print_agent_chunk(&content);
                                                                 full_response.push_str(&content);
                                                             }
