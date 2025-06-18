@@ -148,7 +148,7 @@ impl History {
         if let Some(match_start) = content_lower.find(term_lower) {
             let match_end = match_start + term_lower.len();
             
-            // Calculate excerpt bounds
+            // Calculate excerpt bounds - ensure we get context both before and after
             let excerpt_start = if match_start > CONTEXT_LENGTH {
                 // Find a good break point (space) before the match
                 let ideal_start = match_start.saturating_sub(CONTEXT_LENGTH);
@@ -160,9 +160,18 @@ impl History {
                 0
             };
             
-            let excerpt_end = if content.len() > match_end + CONTEXT_LENGTH {
+            // Ensure we get enough total context by extending the end if start is constrained
+            let min_total_length = CONTEXT_LENGTH * 2; // Want at least 160 chars total
+            let current_length = match_end - excerpt_start;
+            let needed_after = if current_length < min_total_length {
+                std::cmp::max(CONTEXT_LENGTH, min_total_length - current_length)
+            } else {
+                CONTEXT_LENGTH
+            };
+            
+            let excerpt_end = if content.len() > match_end + needed_after {
                 // Find a good break point (space) after the match
-                let ideal_end = std::cmp::min(content.len(), match_end + CONTEXT_LENGTH);
+                let ideal_end = std::cmp::min(content.len(), match_end + needed_after);
                 content[match_end..ideal_end]
                     .find(' ')
                     .map(|pos| match_end + pos)
