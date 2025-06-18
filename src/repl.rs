@@ -595,6 +595,49 @@ impl Repl {
                     }
                 }
             }
+            Command::Search(term) => {
+                if term.trim().is_empty() {
+                    self.ui.print_error("Search term cannot be empty");
+                } else {
+                    let results = self.history.search_all_sessions(&term, &self.session);
+                    
+                    if results.is_empty() {
+                        self.ui.print_info(&format!("No results found for '{}'", term));
+                    } else {
+                        self.ui.print_info(&format!("Search results for '{}' ({} matches):", term, results.len()));
+                        println!();
+                        
+                        let mut current_session = String::new();
+                        for result in results {
+                            // Print session header if this is a new session
+                            if result.session_name != current_session {
+                                if !current_session.is_empty() {
+                                    println!(); // Add spacing between sessions
+                                }
+                                println!("\x1b[1;36m[{}]\x1b[0m", result.session_name);
+                                current_session = result.session_name.clone();
+                            }
+                            
+                            // Print the search result
+                            let role_color = if result.role == "user" {
+                                "\x1b[1;34m" // Blue for user
+                            } else {
+                                "\x1b[1;35m" // Magenta for assistant
+                            };
+                            
+                            println!("  {}Message {} ({})\x1b[0m: {}", 
+                                role_color,
+                                result.message_number,
+                                result.role.chars().next().unwrap().to_uppercase().collect::<String>() + &result.role[1..],
+                                result.excerpt
+                            );
+                        }
+                        
+                        println!();
+                        self.ui.print_info("Use /goto N to jump to a message, or /chat load SESSION to switch sessions");
+                    }
+                }
+            }
             Command::History => {
                 if self.session.messages.is_empty() {
                     self.ui.print_info("No messages in current session");
