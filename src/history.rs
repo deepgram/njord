@@ -139,8 +139,9 @@ impl History {
     }
     
     fn create_excerpt(&self, content: &str, term_lower: &str) -> String {
-        const EXCERPT_LENGTH: usize = 200;  // Increased from 120
-        const CONTEXT_LENGTH: usize = 80;   // Increased from 40
+        const MIN_EXCERPT_LENGTH: usize = 120;  // Minimum excerpt length
+        const MAX_EXCERPT_LENGTH: usize = 300;  // Maximum excerpt length
+        const CONTEXT_LENGTH: usize = 60;       // Context around match
         
         let content_lower = content.to_lowercase();
         
@@ -148,37 +149,63 @@ impl History {
         if let Some(match_start) = content_lower.find(term_lower) {
             let match_end = match_start + term_lower.len();
             
-            // Calculate excerpt bounds - ensure we get context both before and after
-            let excerpt_start = if match_start > CONTEXT_LENGTH {
-                // Find a good break point (space) before the match
-                let ideal_start = match_start.saturating_sub(CONTEXT_LENGTH);
-                content[ideal_start..match_start]
-                    .rfind(' ')
-                    .map(|pos| ideal_start + pos + 1)
-                    .unwrap_or(ideal_start)
-            } else {
-                0
-            };
+            // Start with desired context around the match
+            let mut excerpt_start = match_start.saturating_sub(CONTEXT_LENGTH);
+            let mut excerpt_end = std::cmp::min(content.len(), match_end + CONTEXT_LENGTH);
             
-            // Ensure we get enough total context by extending the end if start is constrained
-            let min_total_length = CONTEXT_LENGTH * 2; // Want at least 160 chars total
-            let current_length = match_end - excerpt_start;
-            let needed_after = if current_length < min_total_length {
-                std::cmp::max(CONTEXT_LENGTH, min_total_length - current_length)
-            } else {
-                CONTEXT_LENGTH
-            };
+            // Ensure minimum excerpt length
+            let current_length = excerpt_end - excerpt_start;
+            if current_length < MIN_EXCERPT_LENGTH {
+                let needed_extra = MIN_EXCERPT_LENGTH - current_length;
+                let extra_before = needed_extra / 2;
+                let extra_after = needed_extra - extra_before;
+                
+                // Extend backwards if possible
+                if excerpt_start >= extra_before {
+                    excerpt_start -= extra_before;
+                } else {
+                    // Can't extend backwards enough, extend forwards more
+                    let remaining = extra_before - excerpt_start;
+                    excerpt_start = 0;
+                    excerpt_end = std::cmp::min(content.len(), excerpt_end + extra_after + remaining);
+                }
+                
+                // Extend forwards if possible
+                if excerpt_end + extra_after <= content.len() {
+                    excerpt_end += extra_after;
+                } else {
+                    // Can't extend forwards enough, extend backwards more if possible
+                    let remaining = extra_after - (content.len() - excerpt_end);
+                    excerpt_end = content.len();
+                    excerpt_start = excerpt_start.saturating_sub(remaining);
+                }
+            }
             
-            let excerpt_end = if content.len() > match_end + needed_after {
-                // Find a good break point (space) after the match
-                let ideal_end = std::cmp::min(content.len(), match_end + needed_after);
-                content[match_end..ideal_end]
-                    .find(' ')
-                    .map(|pos| match_end + pos)
-                    .unwrap_or(ideal_end)
-            } else {
-                content.len()
-            };
+            // Find good break points (word boundaries)
+            if excerpt_start > 0 {
+                if let Some(space_pos) = content[excerpt_start..match_start].rfind(' ') {
+                    excerpt_start += space_pos + 1;
+                }
+            }
+            
+            if excerpt_end < content.len() {
+                if let Some(space_pos) = content[match_end..excerpt_end].find(' ') {
+                    excerpt_end = match_end + space_pos;
+                }
+            }
+            
+            // Ensure we don't exceed maximum length
+            if excerpt_end - excerpt_start > MAX_EXCERPT_LENGTH {
+                let excess = (excerpt_end - excerpt_start) - MAX_EXCERPT_LENGTH;
+                excerpt_end -= excess;
+                
+                // Re-find word boundary
+                if excerpt_end < content.len() {
+                    if let Some(space_pos) = content[match_end..excerpt_end].rfind(' ') {
+                        excerpt_end = match_end + space_pos;
+                    }
+                }
+            }
             
             let mut excerpt = String::new();
             
@@ -203,46 +230,11 @@ impl History {
                 excerpt.push_str("...");
             }
             
-            // Ensure the excerpt isn't too long (accounting for ANSI codes)
-            let visible_length = excerpt.chars().filter(|c| !c.is_control()).count();
-            if visible_length > EXCERPT_LENGTH {
-                // Truncate more carefully to preserve highlighting
-                let mut truncated = String::new();
-                let mut char_count = 0;
-                let mut in_ansi = false;
-                
-                for ch in excerpt.chars() {
-                    if ch == '\x1b' {
-                        in_ansi = true;
-                    }
-                    
-                    truncated.push(ch);
-                    
-                    if !in_ansi && !ch.is_control() {
-                        char_count += 1;
-                        if char_count >= EXCERPT_LENGTH - 3 {
-                            break;
-                        }
-                    }
-                    
-                    if in_ansi && ch == 'm' {
-                        in_ansi = false;
-                    }
-                }
-                
-                // Ensure we close any open formatting
-                if !truncated.ends_with("\x1b[0m") {
-                    truncated.push_str("\x1b[0m");
-                }
-                truncated.push_str("...");
-                excerpt = truncated;
-            }
-            
             excerpt
         } else {
             // Fallback: just show the beginning of the content
-            if content.len() > EXCERPT_LENGTH {
-                format!("{}...", &content[..EXCERPT_LENGTH])
+            if content.len() > MIN_EXCERPT_LENGTH {
+                format!("{}...", &content[..MIN_EXCERPT_LENGTH])
             } else {
                 content.to_string()
             }
