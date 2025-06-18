@@ -81,7 +81,7 @@ impl LLMProvider for GeminiProvider {
         }
         
         if request.stream {
-            // Handle streaming response - Gemini sends a JSON array of response chunks
+            // Handle streaming response with proper SSE parsing
             use futures::stream::unfold;
             use futures::StreamExt;
             
@@ -100,27 +100,47 @@ impl LLMProvider for GeminiProvider {
                         match byte_stream.next().await {
                             Some(Ok(bytes)) => {
                                 let chunk = String::from_utf8_lossy(&bytes);
+                                eprintln!("Debug - Gemini SSE chunk: {:?}", chunk);
                                 buffer.push_str(&chunk);
                                 
-                                // Check if we have a complete JSON array (ends with ']')
-                                if buffer.trim_end().ends_with(']') {
-                                    // Try to parse the complete JSON array
-                                    if let Ok(json_array) = serde_json::from_str::<serde_json::Value>(&buffer) {
-                                        if let Some(chunks) = json_array.as_array() {
-                                            // Process all chunks in the array
-                                            for chunk in chunks {
-                                                if let Some(candidates) = chunk.get("candidates") {
-                                                    if let Some(candidates_array) = candidates.as_array() {
-                                                        if let Some(candidate) = candidates_array.first() {
-                                                            if let Some(content_obj) = candidate.get("content") {
-                                                                if let Some(parts) = content_obj.get("parts") {
-                                                                    if let Some(parts_array) = parts.as_array() {
-                                                                        if let Some(part) = parts_array.first() {
-                                                                            if let Some(text) = part.get("text") {
-                                                                                if let Some(text_str) = text.as_str() {
-                                                                                    if !text_str.is_empty() {
-                                                                                        pending_content.insert(0, text_str.to_string());
-                                                                                    }
+                                // Process complete lines ending with \n
+                                while let Some(newline_pos) = buffer.find('\n') {
+                                    let line = buffer[..newline_pos].trim().to_string();
+                                    buffer = buffer[newline_pos + 1..].to_string();
+                                    
+                                    if line.is_empty() {
+                                        continue;
+                                    }
+                                    
+                                    eprintln!("Debug - Gemini SSE line: {}", line);
+                                    
+                                    // Parse SSE data lines
+                                    if let Some(json_str) = line.strip_prefix("data: ") {
+                                        if json_str.trim() == "[DONE]" {
+                                            eprintln!("Debug - Gemini SSE stream done");
+                                            // If we have pending content, yield it first
+                                            if let Some(content) = pending_content.pop() {
+                                                return Some((Ok(content), (buffer, byte_stream, pending_content)));
+                                            }
+                                            return None; // End of stream
+                                        }
+                                        
+                                        eprintln!("Debug - Gemini SSE JSON: {}", json_str);
+                                        
+                                        // Parse the JSON chunk
+                                        if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(json_str) {
+                                            if let Some(candidates) = json_val.get("candidates") {
+                                                if let Some(candidates_array) = candidates.as_array() {
+                                                    if let Some(candidate) = candidates_array.first() {
+                                                        if let Some(content_obj) = candidate.get("content") {
+                                                            if let Some(parts) = content_obj.get("parts") {
+                                                                if let Some(parts_array) = parts.as_array() {
+                                                                    if let Some(part) = parts_array.first() {
+                                                                        if let Some(text) = part.get("text") {
+                                                                            if let Some(text_str) = text.as_str() {
+                                                                                if !text_str.is_empty() {
+                                                                                    eprintln!("Debug - Gemini SSE text found: {:?}", text_str);
+                                                                                    pending_content.insert(0, text_str.to_string());
                                                                                 }
                                                                             }
                                                                         }
@@ -131,31 +151,33 @@ impl LLMProvider for GeminiProvider {
                                                     }
                                                 }
                                             }
+                                        } else {
+                                            eprintln!("Debug - Gemini SSE JSON parse failed");
                                         }
-                                        
-                                        // If we have pending content, yield the first piece
-                                        if let Some(content) = pending_content.pop() {
-                                            return Some((Ok(content), (String::new(), byte_stream, pending_content)));
-                                        }
-                                        
-                                        // Array processed, stream should be done
-                                        return None;
                                     }
                                 }
                                 
-                                // Continue accumulating if we don't have a complete array yet
+                                // If we have pending content, yield the first piece
+                                if let Some(content) = pending_content.pop() {
+                                    return Some((Ok(content), (buffer, byte_stream, pending_content)));
+                                }
+                                // Continue to next chunk if no content to yield
                             }
                             Some(Err(e)) => {
+                                eprintln!("Debug - Gemini SSE error: {}", e);
                                 return Some((Err(anyhow::anyhow!("Stream error: {}", e)), (buffer, byte_stream, pending_content)));
                             }
                             None => {
-                                // Stream ended - try to parse whatever we have
-                                if !buffer.trim().is_empty() {
-                                    if let Ok(json_array) = serde_json::from_str::<serde_json::Value>(&buffer) {
-                                        if let Some(chunks) = json_array.as_array() {
-                                            // Process all chunks in the array
-                                            for chunk in chunks {
-                                                if let Some(candidates) = chunk.get("candidates") {
+                                eprintln!("Debug - Gemini SSE stream ended");
+                                // Stream ended - process any remaining complete lines in buffer
+                                while let Some(newline_pos) = buffer.find('\n') {
+                                    let line = buffer[..newline_pos].trim().to_string();
+                                    buffer = buffer[newline_pos + 1..].to_string();
+                                    
+                                    if let Some(json_str) = line.strip_prefix("data: ") {
+                                        if json_str.trim() != "[DONE]" {
+                                            if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(json_str) {
+                                                if let Some(candidates) = json_val.get("candidates") {
                                                     if let Some(candidates_array) = candidates.as_array() {
                                                         if let Some(candidate) = candidates_array.first() {
                                                             if let Some(content_obj) = candidate.get("content") {
