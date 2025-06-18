@@ -100,6 +100,7 @@ impl LLMProvider for GeminiProvider {
                         match byte_stream.next().await {
                             Some(Ok(bytes)) => {
                                 let chunk = String::from_utf8_lossy(&bytes);
+                                eprintln!("Debug - Gemini streaming chunk: {:?}", chunk);
                                 buffer.push_str(&chunk);
                                 
                                 // Process complete JSON objects (Gemini sends one JSON per line)
@@ -111,8 +112,11 @@ impl LLMProvider for GeminiProvider {
                                         continue;
                                     }
                                     
+                                    eprintln!("Debug - Gemini streaming line: {}", line);
+                                    
                                     // Parse the JSON response
                                     if let Ok(json) = serde_json::from_str::<serde_json::Value>(&line) {
+                                        eprintln!("Debug - Gemini streaming JSON: {}", serde_json::to_string_pretty(&json).unwrap_or_default());
                                         if let Some(candidates) = json.get("candidates") {
                                             if let Some(candidates_array) = candidates.as_array() {
                                                 if let Some(candidate) = candidates_array.first() {
@@ -123,6 +127,7 @@ impl LLMProvider for GeminiProvider {
                                                                     if let Some(text) = part.get("text") {
                                                                         if let Some(text_str) = text.as_str() {
                                                                             if !text_str.is_empty() {
+                                                                                eprintln!("Debug - Gemini streaming text found: {:?}", text_str);
                                                                                 pending_content.insert(0, text_str.to_string());
                                                                             }
                                                                         }
@@ -134,6 +139,8 @@ impl LLMProvider for GeminiProvider {
                                                 }
                                             }
                                         }
+                                    } else {
+                                        eprintln!("Debug - Gemini streaming JSON parse failed for line: {}", line);
                                     }
                                 }
                                 
@@ -144,9 +151,11 @@ impl LLMProvider for GeminiProvider {
                                 // Continue to next chunk if no content to yield
                             }
                             Some(Err(e)) => {
+                                eprintln!("Debug - Gemini streaming error: {}", e);
                                 return Some((Err(anyhow::anyhow!("Stream error: {}", e)), (buffer, byte_stream, pending_content)));
                             }
                             None => {
+                                eprintln!("Debug - Gemini streaming ended");
                                 // Stream ended - process any remaining complete lines in buffer
                                 while let Some(newline_pos) = buffer.find('\n') {
                                     let line = buffer[..newline_pos].trim().to_string();
@@ -196,6 +205,8 @@ impl LLMProvider for GeminiProvider {
             // Handle non-streaming response
             let json_response: serde_json::Value = response.json().await?;
             
+            eprintln!("Debug - Gemini non-streaming response: {}", serde_json::to_string_pretty(&json_response).unwrap_or_default());
+            
             let content = json_response
                 .get("candidates")
                 .and_then(|candidates| candidates.as_array())
@@ -206,8 +217,13 @@ impl LLMProvider for GeminiProvider {
                 .and_then(|arr| arr.first())
                 .and_then(|part| part.get("text"))
                 .and_then(|text| text.as_str())
-                .unwrap_or("No response content")
+                .unwrap_or_else(|| {
+                    eprintln!("Debug - Gemini non-streaming content parsing failed");
+                    "No response content"
+                })
                 .to_string();
+            
+            eprintln!("Debug - Gemini non-streaming final content: {:?}", content);
             
             let stream = futures::stream::once(async move { Ok(content) });
             Ok(Box::new(Box::pin(stream)))
