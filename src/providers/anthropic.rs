@@ -55,9 +55,16 @@ impl LLMProvider for AnthropicProvider {
         
         let (system_message, anthropic_messages) = self.convert_messages(&request.messages);
         
+        // Set max_tokens based on whether thinking is enabled
+        let max_tokens = if request.thinking && self.supports_thinking(&request.model) {
+            25000 // Must be greater than thinking budget_tokens (20000)
+        } else {
+            4096
+        };
+        
         let mut payload = json!({
             "model": request.model,
-            "max_tokens": 4096,
+            "max_tokens": max_tokens,
             "messages": anthropic_messages,
             "stream": request.stream
         });
