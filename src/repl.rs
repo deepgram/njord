@@ -51,16 +51,14 @@ impl Repl {
         
         let history = History::load()?;
         
-        let mut session = if config.new_session {
-            ChatSession::new(config.default_model.clone(), config.temperature, config.max_tokens, config.thinking_budget)
-        } else if let Some(session_name) = &config.load_session {
+        // Always start with a fresh session unless explicitly loading one
+        let mut session = if let Some(session_name) = &config.load_session {
             history.load_session(session_name)
                 .cloned()
                 .unwrap_or_else(|| ChatSession::new(config.default_model.clone(), config.temperature, config.max_tokens, config.thinking_budget))
         } else {
-            history.current_session
-                .clone()
-                .unwrap_or_else(|| ChatSession::new(config.default_model.clone(), config.temperature, config.max_tokens, config.thinking_budget))
+            // Always start fresh - no more automatic restoration of current session
+            ChatSession::new(config.default_model.clone(), config.temperature, config.max_tokens, config.thinking_budget)
         };
         
         // Restore provider from session if available and valid
@@ -88,9 +86,9 @@ impl Repl {
             }
         }
         
-        // If loading a new session or no session exists, use config values
-        // Otherwise, keep the session's stored values
-        if config.new_session || config.load_session.is_none() && history.current_session.is_none() {
+        // For fresh sessions, use config values
+        // For loaded sessions, keep their stored values
+        if config.load_session.is_none() {
             session.temperature = config.temperature;
             session.max_tokens = config.max_tokens;
             session.thinking_budget = config.thinking_budget;
@@ -117,8 +115,9 @@ impl Repl {
     pub async fn run(&mut self) -> Result<()> {
         self.ui.draw_welcome()?;
         
-        // Display current session status at startup
+        // Display current session status and recent sessions at startup
         self.display_startup_status();
+        self.display_recent_sessions();
         
         loop {
             // Determine what message to show in prompt
@@ -172,10 +171,9 @@ impl Repl {
                     }
                 }
                 
-                // Save history after each interaction
-                self.history.set_current_session(self.session.clone());
-                if let Err(e) = self.history.save() {
-                    self.ui.print_error(&format!("Failed to save history: {}", e));
+                // Auto-save session if it has LLM interactions
+                if let Err(e) = self.history.auto_save_session(&self.session) {
+                    self.ui.print_error(&format!("Failed to auto-save session: {}", e));
                 }
             }
         }
@@ -219,6 +217,23 @@ impl Repl {
             println!("\x1b[1;31mNo provider available\x1b[0m");
         }
         println!();
+    }
+    
+    fn display_recent_sessions(&self) {
+        let recent_sessions = self.history.get_recent_sessions(3);
+        if !recent_sessions.is_empty() {
+            println!("\x1b[1;36mRecent sessions:\x1b[0m");
+            for (name, session) in recent_sessions {
+                let message_count = session.messages.len();
+                let updated = session.updated_at.format("%m-%d %H:%M");
+                println!("  /chat load {} - {} messages ({})", name, message_count, updated);
+            }
+            if let Some(most_recent) = self.history.get_most_recent_session() {
+                let name = most_recent.name.as_ref().unwrap_or(&most_recent.generate_auto_name());
+                println!("  /chat continue - Continue most recent session");
+            }
+            println!();
+        }
     }
     
     fn get_temperature_display(&self) -> String {
@@ -298,6 +313,11 @@ impl Repl {
                 println!("  /chat load NAME - Load a previously saved session");
                 println!("  /chat list - List all saved sessions");
                 println!("  /chat delete NAME - Delete a saved session");
+                println!("  /chat continue - Continue the most recent session");
+                println!("  /chat recent - Show recent sessions");
+                println!("  /chat fork NAME - Save current session and start fresh");
+                println!("  /chat branch [NAME] - Create checkpoint and continue");
+                println!("  /chat merge NAME - Merge another session into current");
                 println!("  /undo [N] - Remove last N responses (default 1)");
                 println!("  /goto N - Jump back to message N");
                 println!("  /history - Show conversation history");
@@ -323,9 +343,109 @@ impl Repl {
                 }
             }
             Command::ChatNew => {
+                // Auto-save current session if it has interactions
+                if let Err(e) = self.history.auto_save_session(&self.session) {
+                    self.ui.print_error(&format!("Failed to auto-save current session: {}", e));
+                }
+                
                 self.session = ChatSession::new(self.config.default_model.clone(), self.config.temperature, self.config.max_tokens, self.config.thinking_budget);
                 self.session.current_provider = self.current_provider.clone();
                 self.ui.print_info("Started new chat session");
+            }
+            Command::ChatContinue => {
+                if let Some(most_recent) = self.history.get_most_recent_session().cloned() {
+                    // Auto-save current session if it has interactions
+                    if let Err(e) = self.history.auto_save_session(&self.session) {
+                        self.ui.print_error(&format!("Failed to auto-save current session: {}", e));
+                    }
+                    
+                    self.session = most_recent;
+                    // Restore provider from session if available and valid
+                    if let Some(session_provider) = &self.session.current_provider {
+                        if self.providers.contains_key(session_provider) {
+                            self.current_provider = Some(session_provider.clone());
+                        }
+                    }
+                    let session_name = self.session.name.as_ref().unwrap_or(&self.session.generate_auto_name());
+                    self.ui.print_info(&format!("Continuing most recent session: {} ({} messages)", 
+                        session_name, self.session.messages.len()));
+                } else {
+                    self.ui.print_error("No recent sessions found");
+                }
+            }
+            Command::ChatRecent => {
+                let recent_sessions = self.history.get_recent_sessions(10);
+                if recent_sessions.is_empty() {
+                    self.ui.print_info("No recent sessions found");
+                } else {
+                    self.ui.print_info("Recent sessions:");
+                    for (name, session) in recent_sessions {
+                        let message_count = session.messages.len();
+                        let updated = session.updated_at.format("%Y-%m-%d %H:%M");
+                        println!("  {} - {} messages (updated {})", name, message_count, updated);
+                    }
+                }
+            }
+            Command::ChatFork(name) => {
+                if name.trim().is_empty() {
+                    self.ui.print_error("Session name cannot be empty");
+                } else if self.session.messages.is_empty() {
+                    self.ui.print_error("Cannot fork empty session");
+                } else {
+                    match self.history.save_session(name.clone(), self.session.clone()) {
+                        Ok(()) => {
+                            self.ui.print_info(&format!("Session forked as '{}' ({} messages)", name, self.session.messages.len()));
+                            // Start fresh session
+                            self.session = ChatSession::new(self.config.default_model.clone(), self.config.temperature, self.config.max_tokens, self.config.thinking_budget);
+                            self.session.current_provider = self.current_provider.clone();
+                            self.ui.print_info("Started new session");
+                        }
+                        Err(e) => {
+                            self.ui.print_error(&format!("Failed to fork session: {}", e));
+                        }
+                    }
+                }
+            }
+            Command::ChatBranch(name) => {
+                let branch_name = name.unwrap_or_else(|| format!("branch-{}", self.session.generate_auto_name()));
+                
+                if self.session.messages.is_empty() {
+                    self.ui.print_error("Cannot branch empty session");
+                } else {
+                    match self.history.save_session(branch_name.clone(), self.session.clone()) {
+                        Ok(()) => {
+                            self.ui.print_info(&format!("Checkpoint saved as '{}' ({} messages)", branch_name, self.session.messages.len()));
+                            self.ui.print_info("Continuing in current session");
+                        }
+                        Err(e) => {
+                            self.ui.print_error(&format!("Failed to create branch: {}", e));
+                        }
+                    }
+                }
+            }
+            Command::ChatMerge(name) => {
+                if let Some(other_session) = self.history.load_session(&name).cloned() {
+                    let other_message_count = other_session.messages.len();
+                    match self.session.merge_session(&other_session) {
+                        Ok(()) => {
+                            self.ui.print_info(&format!("Merged {} messages from '{}' into current session", 
+                                other_message_count, name));
+                            self.ui.print_info(&format!("Current session now has {} messages", self.session.messages.len()));
+                        }
+                        Err(e) => {
+                            self.ui.print_error(&format!("Failed to merge session: {}", e));
+                        }
+                    }
+                } else {
+                    self.ui.print_error(&format!("Session '{}' not found", name));
+                    let available_sessions = self.history.list_sessions();
+                    if !available_sessions.is_empty() {
+                        self.ui.print_info("Available sessions:");
+                        for session_name in available_sessions.iter().take(5) {
+                            println!("  {}", session_name);
+                        }
+                    }
+                }
             }
             Command::Undo(count) => {
                 let count = count.unwrap_or(1);
@@ -418,6 +538,11 @@ impl Repl {
             }
             Command::ChatLoad(name) => {
                 if let Some(session) = self.history.load_session(&name).cloned() {
+                    // Auto-save current session if it has interactions
+                    if let Err(e) = self.history.auto_save_session(&self.session) {
+                        self.ui.print_error(&format!("Failed to auto-save current session: {}", e));
+                    }
+                    
                     self.session = session;
                     // Restore provider from session if available and valid
                     if let Some(session_provider) = &self.session.current_provider {
@@ -776,6 +901,9 @@ impl Repl {
                             
                             // Add the complete response to the session with metadata
                             if !full_response.is_empty() {
+                                // Mark that this session has had LLM interaction
+                                self.session.mark_llm_interaction();
+                                
                                 // Now that we have a successful response, add both user and assistant messages
                                 self.session.add_message(user_message.clone());
                                 let assistant_message = Message {

@@ -19,6 +19,8 @@ pub struct ChatSession {
     pub thinking_budget: u32,
     pub system_prompt: Option<String>,
     pub thinking_enabled: bool,
+    #[serde(default)]
+    pub has_llm_interaction: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -54,6 +56,7 @@ impl ChatSession {
             thinking_budget,
             system_prompt: None,
             thinking_enabled: false,
+            has_llm_interaction: false,
         }
     }
     
@@ -117,5 +120,35 @@ impl ChatSession {
         self.messages.truncate(message_number);
         self.updated_at = Utc::now();
         Ok(())
+    }
+    
+    pub fn mark_llm_interaction(&mut self) {
+        self.has_llm_interaction = true;
+    }
+    
+    pub fn should_auto_save(&self) -> bool {
+        self.has_llm_interaction && !self.messages.is_empty()
+    }
+    
+    pub fn merge_session(&mut self, other: &ChatSession) -> Result<()> {
+        let mut next_number = self.messages.len() + 1;
+        
+        for other_msg in &other.messages {
+            let mut new_msg = other_msg.clone();
+            new_msg.number = next_number;
+            self.messages.push(new_msg);
+            next_number += 1;
+        }
+        
+        self.updated_at = Utc::now();
+        if !other.messages.is_empty() {
+            self.has_llm_interaction = true;
+        }
+        
+        Ok(())
+    }
+    
+    pub fn generate_auto_name(&self) -> String {
+        self.created_at.format("%Y-%m-%d_%H:%M:%S").to_string()
     }
 }
