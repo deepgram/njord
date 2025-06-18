@@ -88,6 +88,12 @@ impl Repl {
             }
         }
         
+        // If loading a new session or no session exists, use config temperature
+        // Otherwise, keep the session's stored temperature
+        if config.new_session || config.load_session.is_none() && history.current_session.is_none() {
+            session.temperature = config.temperature;
+        }
+        
         let command_parser = CommandParser::new()?;
         let ui = UI::new()?;
         
@@ -190,6 +196,7 @@ impl Repl {
                 println!("  /goto N - Jump back to message N");
                 println!("  /history - Show conversation history");
                 println!("  /system [PROMPT] - Set system prompt (empty to view, 'clear' to remove)");
+                println!("  /temp TEMPERATURE - Set temperature (0.0-2.0)");
                 println!("  /quit - Exit Njord");
                 println!();
                 println!("Input tips:");
@@ -419,6 +426,14 @@ impl Repl {
                     // Set new system prompt
                     self.session.system_prompt = Some(prompt);
                     self.ui.print_info("System prompt updated");
+                }
+            }
+            Command::Temperature(temp) => {
+                if temp < 0.0 || temp > 2.0 {
+                    self.ui.print_error("Temperature must be between 0.0 and 2.0");
+                } else {
+                    self.session.temperature = temp;
+                    self.ui.print_info(&format!("Temperature set to {}", temp));
                 }
             }
             _ => {
