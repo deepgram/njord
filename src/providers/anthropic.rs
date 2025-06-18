@@ -148,6 +148,11 @@ impl LLMProvider for AnthropicProvider {
                                                             .and_then(|cb| cb.get("type"))
                                                             .and_then(|t| t.as_str()) == Some("thinking");
                                                         
+                                                        // Debug: print the content block info
+                                                        if let Some(content_block) = json_val.get("content_block") {
+                                                            eprintln!("Debug - Anthropic content_block: {}", serde_json::to_string_pretty(content_block).unwrap_or_default());
+                                                        }
+                                                        
                                                         if let Some(content) = json_val
                                                             .get("delta")
                                                             .and_then(|delta| delta.get("text"))
@@ -155,6 +160,7 @@ impl LLMProvider for AnthropicProvider {
                                                         {
                                                             if !content.is_empty() {
                                                                 if is_thinking {
+                                                                    eprintln!("Debug - Anthropic thinking content: {:?}", content);
                                                                     pending_content.insert(0, format!("thinking:{}", content));
                                                                 } else {
                                                                     pending_content.insert(0, format!("content:{}", content));
