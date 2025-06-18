@@ -532,25 +532,27 @@ impl Repl {
                 }
             }
             Command::ChatLoad(name) => {
-                if let Some(session) = self.history.load_session(&name).cloned() {
+                if let Some(session) = self.history.load_session(&name) {
                     // Auto-save current session if it has interactions
                     if let Err(e) = self.history.auto_save_session(&self.session) {
                         self.ui.print_error(&format!("Failed to auto-save current session: {}", e));
                     }
                     
-                    self.session = session;
+                    // Create a copy of the session (new ID, no name, fresh timestamps)
+                    self.session = session.create_copy();
+                    
                     // Restore provider from session if available and valid
                     if let Some(session_provider) = &self.session.current_provider {
                         if self.providers.contains_key(session_provider) {
                             self.current_provider = Some(session_provider.clone());
-                            self.ui.print_info(&format!("Loaded session '{}' (provider: {})", name, session_provider));
+                            self.ui.print_info(&format!("Loaded copy of session '{}' (provider: {})", name, session_provider));
                         } else {
-                            self.ui.print_info(&format!("Loaded session '{}' (provider '{}' not available)", name, session_provider));
+                            self.ui.print_info(&format!("Loaded copy of session '{}' (provider '{}' not available)", name, session_provider));
                         }
                     } else {
-                        self.ui.print_info(&format!("Loaded session '{}'", name));
+                        self.ui.print_info(&format!("Loaded copy of session '{}'", name));
                     }
-                    self.ui.print_info(&format!("Session has {} messages", self.session.messages.len()));
+                    self.ui.print_info(&format!("Session has {} messages (original '{}' unchanged)", self.session.messages.len(), name));
                 } else {
                     self.ui.print_error(&format!("Session '{}' not found", name));
                     let available_sessions = self.history.list_sessions();
