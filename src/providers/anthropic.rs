@@ -108,11 +108,11 @@ impl LLMProvider for AnthropicProvider {
             let byte_stream = response.bytes_stream();
             
             let stream = unfold(
-                (buffer, byte_stream, Vec::<String>::new()),
-                |(mut buffer, mut byte_stream, mut pending_content)| async move {
+                (buffer, byte_stream, Vec::<String>::new(), std::collections::HashMap::<usize, String>::new()),
+                |(mut buffer, mut byte_stream, mut pending_content, mut content_block_types)| async move {
                     // First, check if we have pending content to yield
                     if let Some(content) = pending_content.pop() {
-                        return Some((Ok(content), (buffer, byte_stream, pending_content)));
+                        return Some((Ok(content), (buffer, byte_stream, pending_content, content_block_types)));
                     }
                     
                     loop {
@@ -143,37 +143,44 @@ impl LLMProvider for AnthropicProvider {
                                         if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(json_str) {
                                             // Handle different event types
                                             if let Some(event_type) = json_val.get("type").and_then(|t| t.as_str()) {
-                                                eprintln!("Debug - Anthropic event type: {}", event_type);
                                                 match event_type {
                                                     "content_block_start" => {
-                                                        eprintln!("Debug - Anthropic content_block_start: {}", serde_json::to_string_pretty(&json_val).unwrap_or_default());
+                                                        // Track content block types by index
+                                                        if let Some(index) = json_val.get("index").and_then(|i| i.as_u64()) {
+                                                            if let Some(content_block) = json_val.get("content_block") {
+                                                                if let Some(block_type) = content_block.get("type").and_then(|t| t.as_str()) {
+                                                                    content_block_types.insert(index as usize, block_type.to_string());
+                                                                }
+                                                            }
+                                                        }
                                                     }
                                                     "content_block_delta" => {
-                                                        // Check if this is a thinking content block
-                                                        let is_thinking = json_val
-                                                            .get("content_block")
-                                                            .and_then(|cb| cb.get("type"))
-                                                            .and_then(|t| t.as_str()) == Some("thinking");
-                                                        
-                                                        // Debug: print the content block info
-                                                        if let Some(content_block) = json_val.get("content_block") {
-                                                            eprintln!("Debug - Anthropic content_block: {}", serde_json::to_string_pretty(content_block).unwrap_or_default());
-                                                        } else {
-                                                            eprintln!("Debug - Anthropic content_block_delta without content_block field");
-                                                        }
-                                                        
-                                                        if let Some(content) = json_val
-                                                            .get("delta")
-                                                            .and_then(|delta| delta.get("text"))
-                                                            .and_then(|text| text.as_str())
-                                                        {
-                                                            if !content.is_empty() {
-                                                                if is_thinking {
-                                                                    eprintln!("Debug - Anthropic thinking content: {:?}", content);
-                                                                    pending_content.insert(0, format!("thinking:{}", content));
-                                                                } else {
-                                                                    eprintln!("Debug - Anthropic regular content: {:?}", content);
-                                                                    pending_content.insert(0, format!("content:{}", content));
+                                                        // Get the index to determine content block type
+                                                        if let Some(index) = json_val.get("index").and_then(|i| i.as_u64()) {
+                                                            let index = index as usize;
+                                                            let is_thinking = content_block_types.get(&index) == Some(&"thinking".to_string());
+                                                            
+                                                            // Handle thinking deltas
+                                                            if is_thinking {
+                                                                if let Some(thinking_content) = json_val
+                                                                    .get("delta")
+                                                                    .and_then(|delta| delta.get("thinking"))
+                                                                    .and_then(|thinking| thinking.as_str())
+                                                                {
+                                                                    if !thinking_content.is_empty() {
+                                                                        pending_content.insert(0, format!("thinking:{}", thinking_content));
+                                                                    }
+                                                                }
+                                                            } else {
+                                                                // Handle regular text deltas
+                                                                if let Some(text_content) = json_val
+                                                                    .get("delta")
+                                                                    .and_then(|delta| delta.get("text"))
+                                                                    .and_then(|text| text.as_str())
+                                                                {
+                                                                    if !text_content.is_empty() {
+                                                                        pending_content.insert(0, format!("content:{}", text_content));
+                                                                    }
                                                                 }
                                                             }
                                                         }
@@ -181,7 +188,7 @@ impl LLMProvider for AnthropicProvider {
                                                     "message_stop" => {
                                                         // End of message
                                                         if let Some(content) = pending_content.pop() {
-                                                            return Some((Ok(content), (buffer, byte_stream, pending_content)));
+                                                            return Some((Ok(content), (buffer, byte_stream, pending_content, content_block_types)));
                                                         }
                                                         return None;
                                                     }
@@ -196,12 +203,12 @@ impl LLMProvider for AnthropicProvider {
                                 
                                 // If we have pending content, yield the first piece
                                 if let Some(content) = pending_content.pop() {
-                                    return Some((Ok(content), (buffer, byte_stream, pending_content)));
+                                    return Some((Ok(content), (buffer, byte_stream, pending_content, content_block_types)));
                                 }
                                 // Continue to next chunk if no content to yield
                             }
                             Some(Err(e)) => {
-                                return Some((Err(anyhow::anyhow!("Stream error: {}", e)), (buffer, byte_stream, pending_content)));
+                                return Some((Err(anyhow::anyhow!("Stream error: {}", e)), (buffer, byte_stream, pending_content, content_block_types)));
                             }
                             None => {
                                 // Stream ended - process any remaining complete lines in buffer
@@ -232,7 +239,7 @@ impl LLMProvider for AnthropicProvider {
                                 
                                 // Yield any remaining pending content
                                 if let Some(content) = pending_content.pop() {
-                                    return Some((Ok(content), (String::new(), byte_stream, pending_content)));
+                                    return Some((Ok(content), (String::new(), byte_stream, pending_content, content_block_types)));
                                 }
                                 
                                 return None; // Stream truly ended
