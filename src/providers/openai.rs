@@ -35,6 +35,7 @@ impl OpenAIProvider {
         !matches!(model, "o4-mini" | "o3-pro" | "o1-pro") && !self.is_reasoning_model(model)
     }
     
+    #[allow(dead_code)]
     pub fn supports_thinking(&self, _model: &str) -> bool {
         // OpenAI models don't support thinking
         false

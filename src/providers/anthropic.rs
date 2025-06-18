@@ -29,11 +29,13 @@ impl AnthropicProvider {
         )
     }
     
+    #[allow(dead_code)]
     pub fn supports_temperature(&self, _model: &str) -> bool {
         // All Anthropic models support temperature
         true
     }
     
+    #[allow(dead_code)]
     pub fn supports_streaming(&self, _model: &str) -> bool {
         // All Anthropic models support streaming
         true
