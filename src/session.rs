@@ -94,9 +94,28 @@ impl ChatSession {
         number
     }
     
-    fn extract_code_blocks(&self, _content: &str) -> Vec<CodeBlock> {
-        // TODO: Implement code block extraction from markdown
-        Vec::new()
+    fn extract_code_blocks(&self, content: &str) -> Vec<CodeBlock> {
+        let mut code_blocks = Vec::new();
+        let mut block_number = 1;
+        
+        // Find all code blocks using regex with DOTALL flag for multiline matching
+        let code_block_regex = regex::Regex::new(r"(?s)```(\w+)?\n(.*?)\n```").unwrap();
+        
+        for captures in code_block_regex.captures_iter(content) {
+            let language = captures.get(1).map(|m| m.as_str().to_string());
+            let code_content = captures.get(2).map(|m| m.as_str().to_string()).unwrap_or_default();
+            
+            if !code_content.trim().is_empty() {
+                code_blocks.push(CodeBlock {
+                    number: block_number,
+                    language,
+                    content: code_content,
+                });
+                block_number += 1;
+            }
+        }
+        
+        code_blocks
     }
     
     pub fn undo(&mut self, count: usize) -> Result<()> {

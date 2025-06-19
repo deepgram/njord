@@ -9,9 +9,16 @@ use crate::{
     config::Config,
     history::History,
     providers::{create_provider, get_provider_for_model, LLMProvider, Message, ChatRequest},
-    session::ChatSession,
+    session::{ChatSession, CodeBlock},
     ui::{UI, CompletionContext},
 };
+
+#[derive(Debug, Clone)]
+struct CodeBlockReference {
+    global_number: usize,
+    message_number: usize,
+    code_block: CodeBlock,
+}
 
 pub struct Repl {
     config: Config,
@@ -141,6 +148,85 @@ impl Repl {
     fn update_completion_context(&mut self) -> Result<()> {
         let context = Self::build_completion_context(&self.providers, &self.history);
         self.ui.update_completion_context(context)
+    }
+    
+    fn get_all_code_blocks(&self) -> Vec<CodeBlockReference> {
+        let mut all_blocks = Vec::new();
+        let mut global_block_number = 1;
+        
+        for numbered_message in &self.session.messages {
+            for code_block in &numbered_message.code_blocks {
+                all_blocks.push(CodeBlockReference {
+                    global_number: global_block_number,
+                    message_number: numbered_message.number,
+                    code_block: code_block.clone(),
+                });
+                global_block_number += 1;
+            }
+        }
+        
+        all_blocks
+    }
+    
+    fn execute_code_block(&mut self, block_ref: &CodeBlockReference) -> Result<()> {
+        let language = block_ref.code_block.language.as_deref().unwrap_or("unknown");
+        
+        match language {
+            "bash" | "sh" => {
+                self.ui.print_info("Executing bash script...");
+                let output = std::process::Command::new("bash")
+                    .arg("-c")
+                    .arg(&block_ref.code_block.content)
+                    .output()?;
+                
+                if !output.stdout.is_empty() {
+                    println!("Output:\n{}", String::from_utf8_lossy(&output.stdout));
+                }
+                if !output.stderr.is_empty() {
+                    println!("Error:\n{}", String::from_utf8_lossy(&output.stderr));
+                }
+                self.ui.print_info(&format!("Process exited with code: {}", output.status.code().unwrap_or(-1)));
+            }
+            "python" | "py" => {
+                self.ui.print_info("Executing Python script...");
+                let output = std::process::Command::new("python3")
+                    .arg("-c")
+                    .arg(&block_ref.code_block.content)
+                    .output()?;
+                
+                if !output.stdout.is_empty() {
+                    println!("Output:\n{}", String::from_utf8_lossy(&output.stdout));
+                }
+                if !output.stderr.is_empty() {
+                    println!("Error:\n{}", String::from_utf8_lossy(&output.stderr));
+                }
+                self.ui.print_info(&format!("Process exited with code: {}", output.status.code().unwrap_or(-1)));
+            }
+            "rust" => {
+                self.ui.print_info("Rust code execution not yet supported (requires compilation)");
+            }
+            "javascript" | "js" => {
+                self.ui.print_info("Executing JavaScript with Node.js...");
+                let output = std::process::Command::new("node")
+                    .arg("-e")
+                    .arg(&block_ref.code_block.content)
+                    .output()?;
+                
+                if !output.stdout.is_empty() {
+                    println!("Output:\n{}", String::from_utf8_lossy(&output.stdout));
+                }
+                if !output.stderr.is_empty() {
+                    println!("Error:\n{}", String::from_utf8_lossy(&output.stderr));
+                }
+                self.ui.print_info(&format!("Process exited with code: {}", output.status.code().unwrap_or(-1)));
+            }
+            _ => {
+                self.ui.print_error(&format!("Execution not supported for language: {}", language));
+                self.ui.print_info("Supported languages: bash, python, javascript");
+            }
+        }
+        
+        Ok(())
     }
     
     pub async fn run(&mut self) -> Result<()> {
@@ -349,6 +435,11 @@ impl Repl {
                 println!("  /undo [N] - Remove last N responses (default 1)");
                 println!("  /goto N - Jump back to message N");
                 println!("  /history - Show conversation history");
+                println!("  /blocks - List all code blocks in session");
+                println!("  /block N - Display code block N");
+                println!("  /copy N - Copy code block N to clipboard");
+                println!("  /save N FILE - Save code block N to file");
+                println!("  /exec N - Execute code block N (with confirmation)");
                 println!("  /system [PROMPT] - Set system prompt (empty to view, 'clear' to remove)");
                 println!("  /temp TEMPERATURE - Set temperature (0.0-2.0)");
                 println!("  /max-tokens TOKENS - Set maximum output tokens");
@@ -770,6 +861,96 @@ impl Repl {
             Command::Thinking(enable) => {
                 self.session.thinking_enabled = enable;
                 self.ui.print_info(&format!("Thinking {}", if enable { "enabled" } else { "disabled" }));
+            }
+            Command::Blocks => {
+                let all_blocks = self.get_all_code_blocks();
+                if all_blocks.is_empty() {
+                    self.ui.print_info("No code blocks found in current session");
+                } else {
+                    self.ui.print_info(&format!("Code blocks in current session ({} total):", all_blocks.len()));
+                    for block_ref in &all_blocks {
+                        let language_display = block_ref.code_block.language.as_deref().unwrap_or("text");
+                        let preview = if block_ref.code_block.content.len() > 50 {
+                            format!("{}...", &block_ref.code_block.content[..50].replace('\n', " "))
+                        } else {
+                            block_ref.code_block.content.replace('\n', " ")
+                        };
+                        println!("  [{}] Message {} ({}): {}", 
+                            block_ref.global_number, 
+                            block_ref.message_number, 
+                            language_display, 
+                            preview
+                        );
+                    }
+                    println!();
+                    self.ui.print_info("Use /block N to view, /copy N to copy, /save N FILE to save, /exec N to execute");
+                }
+            }
+            Command::Block(block_number) => {
+                let all_blocks = self.get_all_code_blocks();
+                if let Some(block) = all_blocks.get(block_number.saturating_sub(1)) {
+                    self.ui.print_info(&format!("Code block {} from message {}:", block_number, block.message_number));
+                    if let Some(language) = &block.code_block.language {
+                        println!("Language: {}", language);
+                    }
+                    println!("```");
+                    println!("{}", block.code_block.content);
+                    println!("```");
+                } else {
+                    self.ui.print_error(&format!("Code block {} not found. Use /blocks to list all code blocks.", block_number));
+                }
+            }
+            Command::Copy(block_number) => {
+                let all_blocks = self.get_all_code_blocks();
+                if let Some(block) = all_blocks.get(block_number.saturating_sub(1)) {
+                    // For now, just print the code block content
+                    // TODO: Implement actual clipboard copying
+                    self.ui.print_info(&format!("Code block {} content:", block_number));
+                    println!("{}", block.code_block.content);
+                    self.ui.print_info("(Clipboard functionality not yet implemented - content displayed above)");
+                } else {
+                    self.ui.print_error(&format!("Code block {} not found. Use /blocks to list all code blocks.", block_number));
+                }
+            }
+            Command::Save(block_number, filename) => {
+                let all_blocks = self.get_all_code_blocks();
+                if let Some(block) = all_blocks.get(block_number.saturating_sub(1)) {
+                    match std::fs::write(&filename, &block.code_block.content) {
+                        Ok(()) => {
+                            self.ui.print_info(&format!("Code block {} saved to '{}'", block_number, filename));
+                        }
+                        Err(e) => {
+                            self.ui.print_error(&format!("Failed to save code block: {}", e));
+                        }
+                    }
+                } else {
+                    self.ui.print_error(&format!("Code block {} not found. Use /blocks to list all code blocks.", block_number));
+                }
+            }
+            Command::Exec(block_number) => {
+                let all_blocks = self.get_all_code_blocks();
+                if let Some(block) = all_blocks.get(block_number.saturating_sub(1)) {
+                    self.ui.print_info(&format!("Code block {} from message {}:", block_number, block.message_number));
+                    if let Some(language) = &block.code_block.language {
+                        println!("Language: {}", language);
+                    }
+                    println!("```");
+                    println!("{}", block.code_block.content);
+                    println!("```");
+                    println!();
+                    self.ui.print_info("⚠️  Execute this code? This will run the code on your system!");
+                    self.ui.print_info("Type 'yes' to execute, anything else to cancel:");
+                    
+                    if let Some(confirmation) = self.ui.read_input(None)? {
+                        if confirmation.trim().to_lowercase() == "yes" {
+                            self.execute_code_block(block)?;
+                        } else {
+                            self.ui.print_info("Code execution cancelled");
+                        }
+                    }
+                } else {
+                    self.ui.print_error(&format!("Code block {} not found. Use /blocks to list all code blocks.", block_number));
+                }
             }
             _ => {
                 self.ui.print_info(&format!("Command not yet implemented: {:?}", command));
