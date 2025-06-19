@@ -448,7 +448,7 @@ impl UI {
         println!("\x1b[1;33mInfo\x1b[0m: {}", info);
     }
     
-    fn style_code_blocks(&self, text: &str) -> String {
+    pub fn style_code_blocks(&self, text: &str) -> String {
         let mut result = String::new();
         let mut in_code_block = false;
         
@@ -498,7 +498,4 @@ impl UI {
         println!("\x1b[0;36m```\x1b[0m");
     }
     
-    pub fn style_code_blocks(&self, text: &str) -> String {
-        self.style_code_blocks(text)
-    }
 }
