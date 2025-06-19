@@ -798,7 +798,9 @@ impl Repl {
                             }
                         }
                         
-                        println!("{}\x1b[0m: {}", header, numbered_message.message.content);
+                        // Apply code block styling to the message content
+                        let styled_content = self.ui.style_code_blocks(&numbered_message.message.content);
+                        println!("{}\x1b[0m: {}", header, styled_content);
                         println!();
                     }
                 }

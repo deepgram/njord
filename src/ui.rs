@@ -451,7 +451,6 @@ impl UI {
     fn style_code_blocks(&self, text: &str) -> String {
         let mut result = String::new();
         let mut in_code_block = false;
-        let mut current_language = None;
         
         for line in text.lines() {
             if line.starts_with("```") {
@@ -459,32 +458,14 @@ impl UI {
                     // End of code block
                     result.push_str("\x1b[0;36m```\x1b[0m\n"); // Cyan closing fence
                     in_code_block = false;
-                    current_language = None;
                 } else {
                     // Start of code block
-                    let language = if line.len() > 3 {
-                        let lang = line[3..].trim();
-                        if !lang.is_empty() {
-                            Some(lang.to_string())
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    };
-                    
-                    if let Some(ref lang) = language {
-                        result.push_str(&format!("\x1b[0;36m```{}\x1b[0m\n", lang)); // Cyan opening fence with language
-                    } else {
-                        result.push_str("\x1b[0;36m```\x1b[0m\n"); // Cyan opening fence
-                    }
+                    result.push_str(&format!("\x1b[0;36m{}\x1b[0m\n", line)); // Cyan opening fence with language
                     in_code_block = true;
-                    current_language = language;
                 }
             } else if in_code_block {
-                // Inside code block - apply syntax-aware styling
-                let styled_line = self.style_code_line(line, current_language.as_deref());
-                result.push_str(&format!("\x1b[48;5;236m{}\x1b[0m\n", styled_line)); // Dark gray background
+                // Inside code block - apply cyan coloring to entire line
+                result.push_str(&format!("\x1b[0;36m{}\x1b[0m\n", line));
             } else {
                 // Regular text
                 result.push_str(line);
@@ -500,132 +481,24 @@ impl UI {
         result
     }
     
-    fn style_code_line(&self, line: &str, language: Option<&str>) -> String {
-        match language {
-            Some("rust") => self.style_rust_line(line),
-            Some("python") | Some("py") => self.style_python_line(line),
-            Some("javascript") | Some("js") => self.style_javascript_line(line),
-            Some("bash") | Some("sh") => self.style_bash_line(line),
-            Some("json") => self.style_json_line(line),
-            _ => format!("\x1b[0;37m{}\x1b[0m", line), // Default white text
-        }
-    }
-    
-    fn style_rust_line(&self, line: &str) -> String {
-        let mut result = String::new();
-        let trimmed = line.trim_start();
-        let indent = &line[..line.len() - trimmed.len()];
-        
-        result.push_str(indent);
-        
-        if trimmed.starts_with("//") {
-            // Comments in green
-            result.push_str(&format!("\x1b[0;32m{}\x1b[0m", trimmed));
-        } else if trimmed.starts_with("fn ") || trimmed.contains(" fn ") {
-            // Function definitions in yellow
-            result.push_str(&format!("\x1b[0;33m{}\x1b[0m", trimmed));
-        } else if trimmed.starts_with("let ") || trimmed.starts_with("const ") || trimmed.starts_with("static ") {
-            // Variable declarations in cyan
-            result.push_str(&format!("\x1b[0;36m{}\x1b[0m", trimmed));
-        } else {
-            result.push_str(&format!("\x1b[0;37m{}\x1b[0m", trimmed));
-        }
-        
-        result
-    }
-    
-    fn style_python_line(&self, line: &str) -> String {
-        let mut result = String::new();
-        let trimmed = line.trim_start();
-        let indent = &line[..line.len() - trimmed.len()];
-        
-        result.push_str(indent);
-        
-        if trimmed.starts_with("#") {
-            // Comments in green
-            result.push_str(&format!("\x1b[0;32m{}\x1b[0m", trimmed));
-        } else if trimmed.starts_with("def ") || trimmed.starts_with("class ") {
-            // Function/class definitions in yellow
-            result.push_str(&format!("\x1b[0;33m{}\x1b[0m", trimmed));
-        } else if trimmed.starts_with("import ") || trimmed.starts_with("from ") {
-            // Imports in magenta
-            result.push_str(&format!("\x1b[0;35m{}\x1b[0m", trimmed));
-        } else {
-            result.push_str(&format!("\x1b[0;37m{}\x1b[0m", trimmed));
-        }
-        
-        result
-    }
-    
-    fn style_javascript_line(&self, line: &str) -> String {
-        let mut result = String::new();
-        let trimmed = line.trim_start();
-        let indent = &line[..line.len() - trimmed.len()];
-        
-        result.push_str(indent);
-        
-        if trimmed.starts_with("//") || trimmed.starts_with("/*") {
-            // Comments in green
-            result.push_str(&format!("\x1b[0;32m{}\x1b[0m", trimmed));
-        } else if trimmed.starts_with("function ") || trimmed.contains("=> ") {
-            // Function definitions in yellow
-            result.push_str(&format!("\x1b[0;33m{}\x1b[0m", trimmed));
-        } else if trimmed.starts_with("const ") || trimmed.starts_with("let ") || trimmed.starts_with("var ") {
-            // Variable declarations in cyan
-            result.push_str(&format!("\x1b[0;36m{}\x1b[0m", trimmed));
-        } else {
-            result.push_str(&format!("\x1b[0;37m{}\x1b[0m", trimmed));
-        }
-        
-        result
-    }
-    
-    fn style_bash_line(&self, line: &str) -> String {
-        let mut result = String::new();
-        let trimmed = line.trim_start();
-        let indent = &line[..line.len() - trimmed.len()];
-        
-        result.push_str(indent);
-        
-        if trimmed.starts_with("#") {
-            // Comments in green
-            result.push_str(&format!("\x1b[0;32m{}\x1b[0m", trimmed));
-        } else if trimmed.starts_with("export ") || trimmed.starts_with("alias ") {
-            // Exports and aliases in magenta
-            result.push_str(&format!("\x1b[0;35m{}\x1b[0m", trimmed));
-        } else {
-            result.push_str(&format!("\x1b[0;37m{}\x1b[0m", trimmed));
-        }
-        
-        result
-    }
-    
-    fn style_json_line(&self, line: &str) -> String {
-        let trimmed = line.trim();
-        if trimmed.starts_with("\"") && trimmed.contains(":") {
-            // JSON keys in cyan
-            format!("\x1b[0;36m{}\x1b[0m", line)
-        } else {
-            format!("\x1b[0;37m{}\x1b[0m", line)
-        }
-    }
-    
     pub fn print_styled_code_block(&self, content: &str, language: Option<&str>) {
-        // Print opening border
-        println!("\x1b[0;36m┌─────────────────────────────────────────────────────────────────────────────────┐\x1b[0m");
-        
+        // Print opening fence with language
         if let Some(lang) = language {
-            println!("\x1b[0;36m│\x1b[0m \x1b[1;33m{}\x1b[0m", lang);
-            println!("\x1b[0;36m├─────────────────────────────────────────────────────────────────────────────────┤\x1b[0m");
+            println!("\x1b[0;36m```{}\x1b[0m", lang);
+        } else {
+            println!("\x1b[0;36m```\x1b[0m");
         }
         
-        // Print each line with styling and border
+        // Print each line with cyan coloring
         for line in content.lines() {
-            let styled_line = self.style_code_line(line, language);
-            println!("\x1b[0;36m│\x1b[0m \x1b[48;5;236m{:<79}\x1b[0m \x1b[0;36m│\x1b[0m", styled_line);
+            println!("\x1b[0;36m{}\x1b[0m", line);
         }
         
-        // Print closing border
-        println!("\x1b[0;36m└─────────────────────────────────────────────────────────────────────────────────┘\x1b[0m");
+        // Print closing fence
+        println!("\x1b[0;36m```\x1b[0m");
+    }
+    
+    pub fn style_code_blocks(&self, text: &str) -> String {
+        self.style_code_blocks(text)
     }
 }
