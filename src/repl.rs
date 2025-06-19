@@ -120,17 +120,14 @@ impl Repl {
     
     fn build_completion_context(providers: &HashMap<String, Box<dyn LLMProvider>>, history: &History) -> CompletionContext {
         let mut available_models = Vec::new();
-        let mut provider_names = Vec::new();
         
         // Collect all models from all providers
-        for (provider_name, provider) in providers {
-            provider_names.push(provider_name.clone());
+        for (_provider_name, provider) in providers {
             available_models.extend(provider.get_models());
         }
         
         // Sort models for better completion experience
         available_models.sort();
-        provider_names.sort();
         
         // Get session names
         let session_names = history.list_sessions().into_iter().cloned().collect();
@@ -138,7 +135,6 @@ impl Repl {
         CompletionContext {
             available_models,
             session_names,
-            providers: provider_names,
         }
     }
     

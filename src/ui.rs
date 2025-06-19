@@ -16,7 +16,6 @@ pub struct UI {
 pub struct CompletionContext {
     pub available_models: Vec<String>,
     pub session_names: Vec<String>,
-    pub providers: Vec<String>,
 }
 
 impl CompletionContext {
@@ -24,7 +23,6 @@ impl CompletionContext {
         Self {
             available_models: Vec::new(),
             session_names: Vec::new(),
-            providers: Vec::new(),
         }
     }
 }
@@ -38,9 +36,6 @@ impl NjordCompleter {
         Self { context }
     }
     
-    pub fn update_context(&mut self, context: CompletionContext) {
-        self.context = context;
-    }
     
     fn complete_command(&self, line: &str, pos: usize) -> Vec<Pair> {
         let input = &line[..pos];
