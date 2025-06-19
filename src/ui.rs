@@ -1,16 +1,225 @@
 use anyhow::Result;
 use rustyline::error::ReadlineError;
-use rustyline::DefaultEditor;
+use rustyline::{DefaultEditor, Helper, Completer, Hinter, Highlighter, Validator};
+use rustyline::completion::{Completer as RustylineCompleter, Pair};
+use rustyline::hint::Hinter as RustylineHinter;
+use rustyline::highlight::Highlighter as RustylineHighlighter;
+use rustyline::validate::Validator as RustylineValidator;
 use std::io::{self, Write};
+use std::collections::HashMap;
 
 pub struct UI {
     editor: DefaultEditor,
 }
 
+#[derive(Clone)]
+pub struct CompletionContext {
+    pub available_models: Vec<String>,
+    pub session_names: Vec<String>,
+    pub providers: Vec<String>,
+}
+
+impl CompletionContext {
+    pub fn new() -> Self {
+        Self {
+            available_models: Vec::new(),
+            session_names: Vec::new(),
+            providers: Vec::new(),
+        }
+    }
+}
+
+pub struct NjordCompleter {
+    context: CompletionContext,
+}
+
+impl NjordCompleter {
+    pub fn new(context: CompletionContext) -> Self {
+        Self { context }
+    }
+    
+    pub fn update_context(&mut self, context: CompletionContext) {
+        self.context = context;
+    }
+    
+    fn complete_command(&self, line: &str, pos: usize) -> Vec<Pair> {
+        let input = &line[..pos];
+        
+        // Basic commands
+        let commands = vec![
+            "/help", "/models", "/model", "/status", "/quit", "/clear", "/history",
+            "/chat", "/undo", "/goto", "/search", "/system", "/temp", "/max-tokens",
+            "/thinking-budget", "/thinking", "/retry", "/stats", "/tokens", "/export",
+            "/block", "/copy", "/save", "/exec", "/edit"
+        ];
+        
+        if input.starts_with('/') && !input.contains(' ') {
+            // Complete basic command
+            let matches: Vec<_> = commands.iter()
+                .filter(|cmd| cmd.starts_with(input))
+                .map(|cmd| {
+                    if matches!(cmd, &"/chat" | &"/model" | &"/system" | &"/temp" | 
+                                    &"/max-tokens" | &"/thinking-budget" | &"/thinking" |
+                                    &"/undo" | &"/goto" | &"/search" | &"/export" |
+                                    &"/block" | &"/copy" | &"/save" | &"/exec" | &"/edit") {
+                        Pair {
+                            display: cmd.to_string(),
+                            replacement: format!("{} ", cmd),
+                        }
+                    } else {
+                        Pair {
+                            display: cmd.to_string(),
+                            replacement: cmd.to_string(),
+                        }
+                    }
+                })
+                .collect();
+            return matches;
+        }
+        
+        // Handle specific command completions
+        if input.starts_with("/chat ") {
+            return self.complete_chat_command(input);
+        } else if input.starts_with("/model ") {
+            return self.complete_model_command(input);
+        } else if input.starts_with("/thinking ") {
+            return self.complete_thinking_command(input);
+        } else if input.starts_with("/export ") {
+            return self.complete_export_command(input);
+        }
+        
+        Vec::new()
+    }
+    
+    fn complete_chat_command(&self, input: &str) -> Vec<Pair> {
+        let parts: Vec<&str> = input.split_whitespace().collect();
+        
+        if parts.len() == 1 || (parts.len() == 2 && !input.ends_with(' ')) {
+            // Complete chat subcommand
+            let subcommands = vec![
+                "new", "save", "load", "list", "delete", "continue", "recent", "fork", "merge"
+            ];
+            
+            let prefix = if parts.len() == 2 { parts[1] } else { "" };
+            
+            return subcommands.iter()
+                .filter(|cmd| cmd.starts_with(prefix))
+                .map(|cmd| {
+                    if matches!(cmd, &"save" | &"load" | &"delete" | &"continue" | &"fork" | &"merge") {
+                        Pair {
+                            display: cmd.to_string(),
+                            replacement: format!("/chat {} ", cmd),
+                        }
+                    } else {
+                        Pair {
+                            display: cmd.to_string(),
+                            replacement: format!("/chat {}", cmd),
+                        }
+                    }
+                })
+                .collect();
+        } else if parts.len() >= 2 {
+            // Complete session names for commands that need them
+            let subcommand = parts[1];
+            if matches!(subcommand, "load" | "delete" | "continue" | "merge") {
+                let prefix = if parts.len() >= 3 { parts[2] } else { "" };
+                
+                return self.context.session_names.iter()
+                    .filter(|name| name.starts_with(prefix))
+                    .map(|name| Pair {
+                        display: name.clone(),
+                        replacement: format!("/chat {} {}", subcommand, name),
+                    })
+                    .collect();
+            }
+        }
+        
+        Vec::new()
+    }
+    
+    fn complete_model_command(&self, input: &str) -> Vec<Pair> {
+        let parts: Vec<&str> = input.split_whitespace().collect();
+        let prefix = if parts.len() >= 2 { parts[1] } else { "" };
+        
+        self.context.available_models.iter()
+            .filter(|model| model.starts_with(prefix))
+            .map(|model| Pair {
+                display: model.clone(),
+                replacement: format!("/model {}", model),
+            })
+            .collect()
+    }
+    
+    fn complete_thinking_command(&self, input: &str) -> Vec<Pair> {
+        let parts: Vec<&str> = input.split_whitespace().collect();
+        let prefix = if parts.len() >= 2 { parts[1] } else { "" };
+        
+        vec!["on", "off"]
+            .iter()
+            .filter(|option| option.starts_with(prefix))
+            .map(|option| Pair {
+                display: option.to_string(),
+                replacement: format!("/thinking {}", option),
+            })
+            .collect()
+    }
+    
+    fn complete_export_command(&self, input: &str) -> Vec<Pair> {
+        let parts: Vec<&str> = input.split_whitespace().collect();
+        let prefix = if parts.len() >= 2 { parts[1] } else { "" };
+        
+        vec!["markdown", "json", "txt"]
+            .iter()
+            .filter(|format| format.starts_with(prefix))
+            .map(|format| Pair {
+                display: format.to_string(),
+                replacement: format!("/export {}", format),
+            })
+            .collect()
+    }
+}
+
+impl RustylineCompleter for NjordCompleter {
+    type Candidate = Pair;
+    
+    fn complete(
+        &self,
+        line: &str,
+        pos: usize,
+        _ctx: &rustyline::Context<'_>,
+    ) -> rustyline::Result<(usize, Vec<Self::Candidate>)> {
+        let completions = self.complete_command(line, pos);
+        Ok((0, completions))
+    }
+}
+
+impl RustylineHinter for NjordCompleter {
+    type Hint = String;
+    
+    fn hint(&self, _line: &str, _pos: usize, _ctx: &rustyline::Context<'_>) -> Option<Self::Hint> {
+        None
+    }
+}
+
+impl RustylineHighlighter for NjordCompleter {}
+
+impl RustylineValidator for NjordCompleter {}
+
+impl Helper for NjordCompleter {}
+
 impl UI {
     pub fn new() -> Result<Self> {
-        let editor = DefaultEditor::new()?;
+        let mut editor = DefaultEditor::new()?;
+        let completer = NjordCompleter::new(CompletionContext::new());
+        editor.set_helper(Some(completer));
         Ok(Self { editor })
+    }
+    
+    pub fn update_completion_context(&mut self, context: CompletionContext) -> Result<()> {
+        if let Some(helper) = self.editor.helper_mut() {
+            helper.update_context(context);
+        }
+        Ok(())
     }
     
     pub fn draw_welcome(&mut self) -> Result<()> {

@@ -10,7 +10,7 @@ use crate::{
     history::History,
     providers::{create_provider, get_provider_for_model, LLMProvider, Message, ChatRequest},
     session::ChatSession,
-    ui::UI,
+    ui::{UI, CompletionContext},
 };
 
 pub struct Repl {
@@ -81,7 +81,11 @@ impl Repl {
         }
         
         let command_parser = CommandParser::new()?;
-        let ui = UI::new()?;
+        let mut ui = UI::new()?;
+        
+        // Set up initial completion context
+        let completion_context = Self::build_completion_context(&providers, &history);
+        ui.update_completion_context(completion_context)?;
         
         Ok(Self {
             config,
@@ -112,6 +116,35 @@ impl Repl {
     
     fn get_current_provider(&self) -> Option<&str> {
         get_provider_for_model(&self.session.current_model)
+    }
+    
+    fn build_completion_context(providers: &HashMap<String, Box<dyn LLMProvider>>, history: &History) -> CompletionContext {
+        let mut available_models = Vec::new();
+        let mut provider_names = Vec::new();
+        
+        // Collect all models from all providers
+        for (provider_name, provider) in providers {
+            provider_names.push(provider_name.clone());
+            available_models.extend(provider.get_models());
+        }
+        
+        // Sort models for better completion experience
+        available_models.sort();
+        provider_names.sort();
+        
+        // Get session names
+        let session_names = history.list_sessions().into_iter().cloned().collect();
+        
+        CompletionContext {
+            available_models,
+            session_names,
+            providers: provider_names,
+        }
+    }
+    
+    fn update_completion_context(&mut self) -> Result<()> {
+        let context = Self::build_completion_context(&self.providers, &self.history);
+        self.ui.update_completion_context(context)
     }
     
     pub async fn run(&mut self) -> Result<()> {
@@ -519,6 +552,8 @@ impl Repl {
                     match self.history.save_session(name.clone(), self.session.clone()) {
                         Ok(()) => {
                             self.ui.print_info(&format!("Session saved as '{}'", name));
+                            // Update completion context with new session
+                            let _ = self.update_completion_context();
                         }
                         Err(e) => {
                             self.ui.print_error(&format!("Failed to save session: {}", e));
@@ -582,6 +617,8 @@ impl Repl {
                 match self.history.delete_session(&name) {
                     Ok(true) => {
                         self.ui.print_info(&format!("Session '{}' deleted", name));
+                        // Update completion context after deletion
+                        let _ = self.update_completion_context();
                     }
                     Ok(false) => {
                         self.ui.print_error(&format!("Session '{}' not found", name));
