@@ -259,7 +259,10 @@ impl Hinter for NjordCompleter {
     fn hint(&self, line: &str, pos: usize, _ctx: &rustyline::Context<'_>) -> Option<Self::Hint> {
         let completions = self.complete_command(line, pos);
         
-        if completions.len() > 1 {
+        if completions.len() == 1 {
+            // Single completion available - show it as a hint
+            Some(format!(" [{}]", completions[0].display))
+        } else if completions.len() > 1 {
             // Multiple completions available - show them as a hint
             let completion_names: Vec<String> = completions.iter()
                 .map(|pair| pair.display.clone())
