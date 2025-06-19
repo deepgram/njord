@@ -1,6 +1,7 @@
 use anyhow::Result;
 use rustyline::error::ReadlineError;
-use rustyline::{Editor, Helper, DefaultHistory};
+use rustyline::{Editor, Helper};
+use rustyline::history::DefaultHistory;
 use rustyline::completion::{Completer, Pair};
 use rustyline::hint::Hinter;
 use rustyline::highlight::Highlighter;
