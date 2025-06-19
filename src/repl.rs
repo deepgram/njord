@@ -240,7 +240,7 @@ impl Repl {
     fn get_temperature_display(&self) -> String {
         if let Some(provider_name) = self.get_current_provider() {
             if let Some(provider) = self.providers.get(provider_name) {
-                let supports_temp = match provider_name.as_str() {
+                let supports_temp = match provider_name {
                     "openai" => {
                         if let Some(openai_provider) = provider.as_any().downcast_ref::<crate::providers::openai::OpenAIProvider>() {
                             openai_provider.supports_temperature(&self.session.current_model)
@@ -276,7 +276,7 @@ impl Repl {
     fn get_thinking_display(&self) -> String {
         if let Some(provider_name) = self.get_current_provider() {
             if let Some(provider) = self.providers.get(provider_name) {
-                let supports_thinking = match provider_name.as_str() {
+                let supports_thinking = match provider_name {
                     "anthropic" => {
                         if let Some(anthropic_provider) = provider.as_any().downcast_ref::<crate::providers::anthropic::AnthropicProvider>() {
                             anthropic_provider.supports_thinking(&self.session.current_model)
@@ -467,11 +467,11 @@ impl Repl {
                     if let Some(provider) = self.providers.get(required_provider) {
                         let available_models = provider.get_models();
                         if available_models.contains(&model_name) {
-                            let old_provider = self.get_current_provider();
+                            let old_provider = self.get_current_provider().map(|s| s.to_string());
                             self.session.current_model = model_name.clone();
                             self.session.current_provider = Some(required_provider.to_string());
                             
-                            if old_provider != Some(required_provider) {
+                            if old_provider.as_deref() != Some(required_provider) {
                                 self.ui.print_info(&format!("Switched to model: {} (provider: {})", model_name, required_provider));
                             } else {
                                 self.ui.print_info(&format!("Switched to model: {}", model_name));
@@ -952,7 +952,7 @@ impl Repl {
                                 };
                                 self.session.add_message_with_metadata(
                                     assistant_message,
-                                    self.current_provider.clone(),
+                                    self.session.current_provider.clone(),
                                     Some(self.session.current_model.clone())
                                 );
                                 return Ok(()); // Success!
