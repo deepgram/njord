@@ -166,12 +166,21 @@ impl History {
             };
             
             // Find good break points (word boundaries) to avoid cutting words
+            // But don't move too close to the match - preserve reasonable context
             let actual_start = if final_start > 0 {
                 // Look for a space before the match to break cleanly
-                content[final_start..match_start]
-                    .rfind(' ')
-                    .map(|pos| final_start + pos + 1)
-                    .unwrap_or(final_start)
+                // But only if it doesn't reduce our context too much
+                if let Some(space_pos) = content[final_start..match_start].rfind(' ') {
+                    let potential_start = final_start + space_pos + 1;
+                    // Only use the word boundary if we still have at least 20 chars of context
+                    if match_start - potential_start >= 20 {
+                        potential_start
+                    } else {
+                        final_start
+                    }
+                } else {
+                    final_start
+                }
             } else {
                 0
             };
