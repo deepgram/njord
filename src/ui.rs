@@ -1,12 +1,11 @@
 use anyhow::Result;
 use rustyline::error::ReadlineError;
-use rustyline::{DefaultEditor, Helper, Completer, Hinter, Highlighter, Validator};
-use rustyline::completion::{Completer as RustylineCompleter, Pair};
-use rustyline::hint::Hinter as RustylineHinter;
-use rustyline::highlight::Highlighter as RustylineHighlighter;
-use rustyline::validate::Validator as RustylineValidator;
+use rustyline::{DefaultEditor, Helper};
+use rustyline::completion::{Completer, Pair};
+use rustyline::hint::Hinter;
+use rustyline::highlight::Highlighter;
+use rustyline::validate::Validator;
 use std::io::{self, Write};
-use std::collections::HashMap;
 
 pub struct UI {
     editor: DefaultEditor,
@@ -179,7 +178,7 @@ impl NjordCompleter {
     }
 }
 
-impl RustylineCompleter for NjordCompleter {
+impl Completer for NjordCompleter {
     type Candidate = Pair;
     
     fn complete(
@@ -193,7 +192,7 @@ impl RustylineCompleter for NjordCompleter {
     }
 }
 
-impl RustylineHinter for NjordCompleter {
+impl Hinter for NjordCompleter {
     type Hint = String;
     
     fn hint(&self, _line: &str, _pos: usize, _ctx: &rustyline::Context<'_>) -> Option<Self::Hint> {
@@ -201,24 +200,21 @@ impl RustylineHinter for NjordCompleter {
     }
 }
 
-impl RustylineHighlighter for NjordCompleter {}
+impl Highlighter for NjordCompleter {}
 
-impl RustylineValidator for NjordCompleter {}
+impl Validator for NjordCompleter {}
 
 impl Helper for NjordCompleter {}
 
 impl UI {
     pub fn new() -> Result<Self> {
-        let mut editor = DefaultEditor::new()?;
-        let completer = NjordCompleter::new(CompletionContext::new());
-        editor.set_helper(Some(completer));
+        let editor = DefaultEditor::new()?;
         Ok(Self { editor })
     }
     
     pub fn update_completion_context(&mut self, context: CompletionContext) -> Result<()> {
-        if let Some(helper) = self.editor.helper_mut() {
-            helper.update_context(context);
-        }
+        let completer = NjordCompleter::new(context);
+        self.editor.set_helper(Some(completer));
         Ok(())
     }
     
