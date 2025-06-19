@@ -8,7 +8,7 @@ use crate::{
     commands::{Command, CommandParser},
     config::Config,
     history::History,
-    providers::{create_provider, LLMProvider, Message, ChatRequest},
+    providers::{create_provider, get_provider_for_model, LLMProvider, Message, ChatRequest},
     session::ChatSession,
     ui::UI,
 };
@@ -16,7 +16,6 @@ use crate::{
 pub struct Repl {
     config: Config,
     providers: HashMap<String, Box<dyn LLMProvider>>,
-    current_provider: Option<String>,
     session: ChatSession,
     history: History,
     command_parser: CommandParser,
@@ -30,7 +29,6 @@ pub struct Repl {
 impl Repl {
     pub async fn new(config: Config, ctrl_c_rx: mpsc::UnboundedReceiver<()>) -> Result<Self> {
         let mut providers = HashMap::new();
-        let mut current_provider = None;
         
         // Initialize providers based on available API keys
         for (provider_name, api_key) in &config.api_keys {
@@ -43,7 +41,6 @@ impl Repl {
                 }
             }
         }
-        
         
         if providers.is_empty() {
             return Err(anyhow::anyhow!("No valid API keys provided. Please set at least one API key."));
@@ -61,30 +58,19 @@ impl Repl {
             ChatSession::new(config.default_model.clone(), config.temperature, config.max_tokens, config.thinking_budget)
         };
         
-        // Restore provider from session if available and valid
-        if let Some(session_provider) = &session.current_provider {
-            if providers.contains_key(session_provider) {
-                current_provider = Some(session_provider.clone());
+        // Ensure we have a valid model and that its provider is available
+        if let Some(required_provider) = get_provider_for_model(&session.current_model) {
+            if !providers.contains_key(required_provider) {
+                // Current model's provider is not available, find a default model
+                session.current_model = Self::find_default_model(&providers);
             }
+        } else {
+            // Unknown model, find a default
+            session.current_model = Self::find_default_model(&providers);
         }
         
-        // If no provider is set, choose the first available one as default
-        if current_provider.is_none() && !providers.is_empty() {
-            current_provider = providers.keys().next().cloned();
-        }
-        
-        // Update session with current provider
-        session.current_provider = current_provider.clone();
-        
-        // Ensure we have a valid model for the current provider
-        if let Some(provider_name) = &current_provider {
-            if let Some(provider) = providers.get(provider_name) {
-                let available_models = provider.get_models();
-                if !available_models.contains(&session.current_model) && !available_models.is_empty() {
-                    session.current_model = available_models[0].clone();
-                }
-            }
-        }
+        // Update session provider based on current model
+        session.current_provider = get_provider_for_model(&session.current_model).map(|s| s.to_string());
         
         // For fresh sessions, use config values
         // For loaded sessions, keep their stored values
@@ -100,7 +86,6 @@ impl Repl {
         Ok(Self {
             config,
             providers,
-            current_provider,
             session,
             history,
             command_parser,
@@ -110,6 +95,23 @@ impl Repl {
             interrupted_message: None,
             ctrl_c_rx,
         })
+    }
+    
+    fn find_default_model(providers: &HashMap<String, Box<dyn LLMProvider>>) -> String {
+        // Prefer Anthropic, then OpenAI, then Gemini
+        if providers.contains_key("anthropic") {
+            "claude-sonnet-4-20250514".to_string()
+        } else if providers.contains_key("openai") {
+            "o3-pro".to_string()
+        } else if providers.contains_key("gemini") {
+            "gemini-2.5-pro".to_string()
+        } else {
+            "claude-sonnet-4-20250514".to_string() // Fallback
+        }
+    }
+    
+    fn get_current_provider(&self) -> Option<&str> {
+        get_provider_for_model(&self.session.current_model)
     }
     
     pub async fn run(&mut self) -> Result<()> {
@@ -182,7 +184,7 @@ impl Repl {
     }
     
     fn display_startup_status(&self) {
-        if let Some(provider_name) = &self.current_provider {
+        if let Some(provider_name) = self.get_current_provider() {
             println!("\x1b[1;36mCurrent Configuration:\x1b[0m");
             println!("  Provider: {}", provider_name);
             println!("  Model: {}", self.session.current_model);
@@ -236,7 +238,7 @@ impl Repl {
     }
     
     fn get_temperature_display(&self) -> String {
-        if let Some(provider_name) = &self.current_provider {
+        if let Some(provider_name) = self.get_current_provider() {
             if let Some(provider) = self.providers.get(provider_name) {
                 let supports_temp = match provider_name.as_str() {
                     "openai" => {
@@ -272,7 +274,7 @@ impl Repl {
     }
     
     fn get_thinking_display(&self) -> String {
-        if let Some(provider_name) = &self.current_provider {
+        if let Some(provider_name) = self.get_current_provider() {
             if let Some(provider) = self.providers.get(provider_name) {
                 let supports_thinking = match provider_name.as_str() {
                     "anthropic" => {
@@ -303,9 +305,8 @@ impl Repl {
             Command::Quit => return Ok(false),
             Command::Help => {
                 self.ui.print_info("Available commands:");
-                println!("  /model MODEL - Switch to a different model");
-                println!("  /models - List available models");
-                println!("  /provider PROVIDER - Switch provider (openai, anthropic, gemini)");
+                println!("  /model MODEL - Switch to a different model (auto-detects provider)");
+                println!("  /models - List available models across all providers");
                 println!("  /status - Show current provider and model");
                 println!("  /chat new - Start a new chat session");
                 println!("  /chat save NAME - Save current session with given name");
@@ -332,13 +333,29 @@ impl Repl {
                 println!("  Use this for code, long prompts, or formatted text");
             }
             Command::Models => {
-                if let Some(provider_name) = &self.current_provider {
-                    if let Some(provider) = self.providers.get(provider_name) {
-                        self.ui.print_info(&format!("Available models for {}:", provider_name));
-                        for model in provider.get_models() {
-                            println!("  {}", model);
-                        }
+                self.ui.print_info("Available models:");
+                
+                // Group models by provider
+                let mut all_models = Vec::new();
+                for (provider_name, provider) in &self.providers {
+                    for model in provider.get_models() {
+                        all_models.push((provider_name.clone(), model));
                     }
+                }
+                
+                // Sort by provider name for consistent display
+                all_models.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
+                
+                let mut current_provider = String::new();
+                for (provider_name, model) in all_models {
+                    if provider_name != current_provider {
+                        if !current_provider.is_empty() {
+                            println!();
+                        }
+                        println!("  \x1b[1;36m{}:\x1b[0m", provider_name);
+                        current_provider = provider_name;
+                    }
+                    println!("    {}", model);
                 }
             }
             Command::ChatNew => {
@@ -348,7 +365,7 @@ impl Repl {
                 }
                 
                 self.session = ChatSession::new(self.config.default_model.clone(), self.config.temperature, self.config.max_tokens, self.config.thinking_budget);
-                self.session.current_provider = self.current_provider.clone();
+                self.session.current_provider = get_provider_for_model(&self.session.current_model).map(|s| s.to_string());
                 self.ui.print_info("Started new chat session");
             }
             Command::ChatContinue(session_name) => {
@@ -367,12 +384,8 @@ impl Repl {
                     }
                     
                     self.session = target_session;
-                    // Restore provider from session if available and valid
-                    if let Some(session_provider) = &self.session.current_provider {
-                        if self.providers.contains_key(session_provider) {
-                            self.current_provider = Some(session_provider.clone());
-                        }
-                    }
+                    // Update current provider based on session's model
+                    self.session.current_provider = get_provider_for_model(&self.session.current_model).map(|s| s.to_string());
                     let auto_name = self.session.generate_auto_name();
                     let session_name = self.session.name.as_ref().unwrap_or(&auto_name);
                     self.ui.print_info(&format!("Continuing session: {} ({} messages)", 
@@ -409,7 +422,7 @@ impl Repl {
                             self.ui.print_info(&format!("Session forked as '{}' ({} messages)", name, self.session.messages.len()));
                             // Start fresh session
                             self.session = ChatSession::new(self.config.default_model.clone(), self.config.temperature, self.config.max_tokens, self.config.thinking_budget);
-                            self.session.current_provider = self.current_provider.clone();
+                            self.session.current_provider = get_provider_for_model(&self.session.current_model).map(|s| s.to_string());
                             self.ui.print_info("Started new session");
                         }
                         Err(e) => {
@@ -448,26 +461,35 @@ impl Repl {
                 self.ui.print_info(&format!("Removed last {} message(s)", count));
             }
             Command::Model(model_name) => {
-                // Validate model exists for current provider
-                if let Some(provider_name) = &self.current_provider {
-                    if let Some(provider) = self.providers.get(provider_name) {
+                // Determine which provider this model belongs to
+                if let Some(required_provider) = get_provider_for_model(&model_name) {
+                    // Check if we have this provider available
+                    if let Some(provider) = self.providers.get(required_provider) {
                         let available_models = provider.get_models();
                         if available_models.contains(&model_name) {
+                            let old_provider = self.get_current_provider();
                             self.session.current_model = model_name.clone();
-                            self.ui.print_info(&format!("Switched to model: {}", model_name));
+                            self.session.current_provider = Some(required_provider.to_string());
+                            
+                            if old_provider != Some(required_provider) {
+                                self.ui.print_info(&format!("Switched to model: {} (provider: {})", model_name, required_provider));
+                            } else {
+                                self.ui.print_info(&format!("Switched to model: {}", model_name));
+                            }
                         } else {
-                            self.ui.print_error(&format!("Model '{}' not available for provider '{}'. Available models: {}", 
-                                model_name, provider_name, available_models.join(", ")));
+                            self.ui.print_error(&format!("Model '{}' not available. Available {} models: {}", 
+                                model_name, required_provider, available_models.join(", ")));
                         }
                     } else {
-                        self.ui.print_error("No provider available");
+                        self.ui.print_error(&format!("Provider '{}' not available (required for model '{}'). Check your API key.", 
+                            required_provider, model_name));
                     }
                 } else {
-                    self.ui.print_error("No provider selected");
+                    self.ui.print_error(&format!("Unknown model: '{}'. Use /models to see available models.", model_name));
                 }
             }
             Command::Status => {
-                if let Some(provider_name) = &self.current_provider {
+                if let Some(provider_name) = self.get_current_provider() {
                     self.ui.print_info(&format!("Current provider: {}", provider_name));
                     self.ui.print_info(&format!("Current model: {}", self.session.current_model));
                     
@@ -487,32 +509,6 @@ impl Repl {
                     self.ui.print_info(&format!("Thinking budget: {}", self.session.thinking_budget));
                 } else {
                     self.ui.print_error("No provider selected");
-                }
-            }
-            Command::Provider(provider_name) => {
-                if self.providers.contains_key(&provider_name) {
-                    self.current_provider = Some(provider_name.clone());
-                    self.session.current_provider = Some(provider_name.clone());
-                    
-                    // Switch to a default model for this provider if current model isn't available
-                    if let Some(provider) = self.providers.get(&provider_name) {
-                        let available_models = provider.get_models();
-                        if !available_models.contains(&self.session.current_model) && !available_models.is_empty() {
-                            let old_model = self.session.current_model.clone();
-                            self.session.current_model = available_models[0].clone();
-                            self.ui.print_info(&format!("Switched to provider: {} (model changed from {} to {})", 
-                                provider_name, old_model, self.session.current_model));
-                        } else {
-                            self.ui.print_info(&format!("Switched to provider: {}", provider_name));
-                        }
-                    } else {
-                        self.ui.print_info(&format!("Switched to provider: {}", provider_name));
-                    }
-                } else {
-                    let available_providers: Vec<String> = self.providers.keys().cloned().collect();
-                    self.ui.print_error(&format!("Provider '{}' not available. Available providers: {}", 
-                        provider_name, 
-                        available_providers.join(", ")));
                 }
             }
             Command::ChatSave(name) => {
@@ -544,10 +540,11 @@ impl Repl {
                     // Create a copy of the session (new ID, no name, fresh timestamps)
                     self.session = session.create_copy();
                     
-                    // Restore provider from session if available and valid
+                    // Update current provider based on session's model
+                    self.session.current_provider = get_provider_for_model(&self.session.current_model).map(|s| s.to_string());
+                    
                     if let Some(session_provider) = &self.session.current_provider {
                         if self.providers.contains_key(session_provider) {
-                            self.current_provider = Some(session_provider.clone());
                             self.ui.print_info(&format!("Loaded copy of session '{}' (provider: {})", name, session_provider));
                         } else {
                             self.ui.print_info(&format!("Loaded copy of session '{}' (provider '{}' not available)", name, session_provider));
@@ -834,7 +831,7 @@ impl Repl {
             }
             
             // Send to LLM provider and handle streaming response
-            if let Some(provider_name) = &self.current_provider {
+            if let Some(provider_name) = self.get_current_provider() {
                 if let Some(provider) = self.providers.get(provider_name) {
                     // Create request with user message included but not yet in session history
                     let mut request_messages: Vec<Message> = Vec::new();

@@ -34,7 +34,6 @@ pub enum Command {
     Clear,
     Stats,
     Status,
-    Provider(String),
     Retry,
     Edit(usize),
     Quit,
@@ -62,7 +61,6 @@ pub struct CommandParser {
     chat_continue_regex: Regex,
     chat_fork_regex: Regex,
     chat_merge_regex: Regex,
-    provider_regex: Regex,
 }
 
 impl CommandParser {
@@ -89,7 +87,6 @@ impl CommandParser {
             chat_continue_regex: Regex::new(r"^/chat\s+continue(?:\s+(.+))?$")?,
             chat_fork_regex: Regex::new(r"^/chat\s+fork\s+(.+)$")?,
             chat_merge_regex: Regex::new(r"^/chat\s+merge\s+(.+)$")?,
-            provider_regex: Regex::new(r"^/provider\s+(\w+)$")?,
         })
     }
     
@@ -161,8 +158,6 @@ impl CommandParser {
                     Some(Command::ChatFork(caps[1].to_string()))
                 } else if let Some(caps) = self.chat_merge_regex.captures(input) {
                     Some(Command::ChatMerge(caps[1].to_string()))
-                } else if let Some(caps) = self.provider_regex.captures(input) {
-                    Some(Command::Provider(caps[1].to_string()))
                 } else {
                     None
                 }

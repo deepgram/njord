@@ -35,6 +35,18 @@ pub trait LLMProvider: Send + Sync {
     fn as_any(&self) -> &dyn std::any::Any;
 }
 
+pub fn get_provider_for_model(model: &str) -> Option<&'static str> {
+    if model.starts_with("claude-") {
+        Some("anthropic")
+    } else if model.starts_with("gpt-") || model.starts_with("o1") || model.starts_with("o3") || model.starts_with("o4") {
+        Some("openai")
+    } else if model.starts_with("gemini-") {
+        Some("gemini")
+    } else {
+        None
+    }
+}
+
 pub fn create_provider(name: &str, api_key: &str) -> Result<Box<dyn LLMProvider>> {
     match name {
         "openai" => Ok(Box::new(openai::OpenAIProvider::new(api_key)?)),
