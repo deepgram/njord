@@ -214,7 +214,7 @@ impl UI {
     
     pub fn update_completion_context(&mut self, context: CompletionContext) -> Result<()> {
         let completer = NjordCompleter::new(context);
-        self.editor.set_helper(Some(Box::new(completer)));
+        self.editor.set_helper(Some(completer));
         Ok(())
     }
     
