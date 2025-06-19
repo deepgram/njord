@@ -38,7 +38,8 @@ impl NjordCompleter {
     
     
     fn complete_command(&self, line: &str, pos: usize) -> Vec<Pair> {
-        let input = &line[..pos];
+        let start_pos = self.find_completion_start(line, pos);
+        let current_word = &line[start_pos..pos];
         
         // Basic commands
         let commands = vec![
@@ -48,10 +49,10 @@ impl NjordCompleter {
             "/block", "/copy", "/save", "/exec", "/edit"
         ];
         
-        if input.starts_with('/') && !input.contains(' ') {
+        if line[..pos].starts_with('/') && !line[..pos].contains(' ') {
             // Complete basic command
             let matches: Vec<_> = commands.iter()
-                .filter(|cmd| cmd.starts_with(input))
+                .filter(|cmd| cmd.starts_with(current_word))
                 .map(|cmd| {
                     Pair {
                         display: cmd.to_string(),
@@ -63,13 +64,13 @@ impl NjordCompleter {
         }
         
         // Handle specific command completions
-        if input.starts_with("/chat ") {
+        if line[..pos].starts_with("/chat ") {
             return self.complete_chat_command(line, pos);
-        } else if input.starts_with("/model ") {
+        } else if line[..pos].starts_with("/model ") {
             return self.complete_model_command(line, pos);
-        } else if input.starts_with("/thinking ") {
+        } else if line[..pos].starts_with("/thinking ") {
             return self.complete_thinking_command(line, pos);
-        } else if input.starts_with("/export ") {
+        } else if line[..pos].starts_with("/export ") {
             return self.complete_export_command(line, pos);
         }
         
@@ -77,6 +78,8 @@ impl NjordCompleter {
     }
     
     fn complete_chat_command(&self, line: &str, pos: usize) -> Vec<Pair> {
+        let start_pos = self.find_completion_start(line, pos);
+        let current_word = &line[start_pos..pos];
         let input = &line[..pos];
         let parts: Vec<&str> = input.split_whitespace().collect();
         
@@ -86,10 +89,8 @@ impl NjordCompleter {
                 "new", "save", "load", "list", "delete", "continue", "recent", "fork", "merge"
             ];
             
-            let prefix = if parts.len() == 2 { parts[1] } else { "" };
-            
             return subcommands.iter()
-                .filter(|cmd| cmd.starts_with(prefix))
+                .filter(|cmd| cmd.starts_with(current_word))
                 .map(|cmd| Pair {
                     display: cmd.to_string(),
                     replacement: cmd.to_string(),
@@ -99,10 +100,8 @@ impl NjordCompleter {
             // Complete session names for commands that need them
             let subcommand = parts[1];
             if matches!(subcommand, "load" | "delete" | "continue" | "merge") {
-                let prefix = if parts.len() >= 3 { parts[2] } else { "" };
-                
                 return self.context.session_names.iter()
-                    .filter(|name| name.starts_with(prefix))
+                    .filter(|name| name.starts_with(current_word))
                     .map(|name| Pair {
                         display: name.clone(),
                         replacement: name.clone(),
@@ -115,12 +114,12 @@ impl NjordCompleter {
     }
     
     fn complete_model_command(&self, line: &str, pos: usize) -> Vec<Pair> {
-        let input = &line[..pos];
-        let parts: Vec<&str> = input.split_whitespace().collect();
-        let prefix = if parts.len() >= 2 { parts[1] } else { "" };
+        let start_pos = self.find_completion_start(line, pos);
+        let current_word = &line[start_pos..pos];
         
+        // For /model command, we want to complete the model name after "/model "
         self.context.available_models.iter()
-            .filter(|model| model.starts_with(prefix))
+            .filter(|model| model.starts_with(current_word))
             .map(|model| Pair {
                 display: model.clone(),
                 replacement: model.clone(),
@@ -129,13 +128,12 @@ impl NjordCompleter {
     }
     
     fn complete_thinking_command(&self, line: &str, pos: usize) -> Vec<Pair> {
-        let input = &line[..pos];
-        let parts: Vec<&str> = input.split_whitespace().collect();
-        let prefix = if parts.len() >= 2 { parts[1] } else { "" };
+        let start_pos = self.find_completion_start(line, pos);
+        let current_word = &line[start_pos..pos];
         
         vec!["on", "off"]
             .iter()
-            .filter(|option| option.starts_with(prefix))
+            .filter(|option| option.starts_with(current_word))
             .map(|option| Pair {
                 display: option.to_string(),
                 replacement: option.to_string(),
@@ -144,13 +142,12 @@ impl NjordCompleter {
     }
     
     fn complete_export_command(&self, line: &str, pos: usize) -> Vec<Pair> {
-        let input = &line[..pos];
-        let parts: Vec<&str> = input.split_whitespace().collect();
-        let prefix = if parts.len() >= 2 { parts[1] } else { "" };
+        let start_pos = self.find_completion_start(line, pos);
+        let current_word = &line[start_pos..pos];
         
         vec!["markdown", "json", "txt"]
             .iter()
-            .filter(|format| format.starts_with(prefix))
+            .filter(|format| format.starts_with(current_word))
             .map(|format| Pair {
                 display: format.to_string(),
                 replacement: format.to_string(),
@@ -168,6 +165,46 @@ impl NjordCompleter {
             0
         } else {
             pos
+        }
+    }
+    
+    fn find_longest_common_prefix(&self, completions: &[Pair], current_word: &str) -> String {
+        if completions.is_empty() {
+            return current_word.to_string();
+        }
+        
+        // Extract the actual completion text from each candidate
+        let completion_texts: Vec<&str> = completions.iter()
+            .map(|pair| pair.replacement.as_str())
+            .collect();
+        
+        // Start with the first completion
+        let mut prefix = completion_texts[0].to_string();
+        
+        // Find common prefix with all other completions
+        for &completion in &completion_texts[1..] {
+            let mut common_len = 0;
+            let prefix_chars: Vec<char> = prefix.chars().collect();
+            let completion_chars: Vec<char> = completion.chars().collect();
+            
+            for (i, (&p_char, &c_char)) in prefix_chars.iter().zip(completion_chars.iter()).enumerate() {
+                if p_char == c_char {
+                    common_len = i + 1;
+                } else {
+                    break;
+                }
+            }
+            
+            if common_len < prefix_chars.len() {
+                prefix = prefix_chars[..common_len].iter().collect();
+            }
+        }
+        
+        // Ensure the prefix at least includes the current word
+        if prefix.len() < current_word.len() || !prefix.starts_with(current_word) {
+            current_word.to_string()
+        } else {
+            prefix
         }
     }
 }
@@ -189,23 +226,30 @@ impl Completer for NjordCompleter {
         
         // Find the start position of the word being completed
         let start_pos = self.find_completion_start(line, pos);
+        let current_word = &line[start_pos..pos];
         
-        // Convert to the format rustyline expects for prefix-based completion
-        let candidates: Vec<Pair> = completions.into_iter().map(|pair| {
-            // Extract just the completion part (after the start position)
-            let completion_text = if pair.replacement.len() > start_pos {
-                &pair.replacement[start_pos..]
-            } else {
-                &pair.replacement
-            };
+        // Find the longest common prefix among all completions
+        let longest_prefix = self.find_longest_common_prefix(&completions, current_word);
+        
+        // If there's a unique extension beyond current input, return it
+        if longest_prefix.len() > current_word.len() {
+            // Return the extension as a single completion
+            let extension = &longest_prefix[current_word.len()..];
+            Ok((pos, vec![Pair {
+                display: longest_prefix.clone(),
+                replacement: extension.to_string(),
+            }]))
+        } else {
+            // Multiple possibilities - return all for display but no replacement
+            let candidates: Vec<Pair> = completions.into_iter().map(|pair| {
+                Pair {
+                    display: pair.display,
+                    replacement: String::new(), // No replacement - just show options
+                }
+            }).collect();
             
-            Pair {
-                display: pair.display,
-                replacement: completion_text.to_string(),
-            }
-        }).collect();
-        
-        Ok((start_pos, candidates))
+            Ok((pos, candidates))
+        }
     }
 }
 
