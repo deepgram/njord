@@ -231,24 +231,24 @@ impl Completer for NjordCompleter {
         // Find the longest common prefix among all completions
         let longest_prefix = self.find_longest_common_prefix(&completions, current_word);
         
-        // If there's a unique extension beyond current input, return it
-        if longest_prefix.len() > current_word.len() {
-            // Return the extension as a single completion
+        // Only auto-complete if there's a unique match or a clear common prefix extension
+        if completions.len() == 1 && longest_prefix.len() > current_word.len() {
+            // Single match - auto-complete it
+            let extension = &longest_prefix[current_word.len()..];
+            Ok((pos, vec![Pair {
+                display: longest_prefix.clone(),
+                replacement: extension.to_string(),
+            }]))
+        } else if completions.len() > 1 && longest_prefix.len() > current_word.len() {
+            // Multiple matches with common prefix - extend to common prefix only
             let extension = &longest_prefix[current_word.len()..];
             Ok((pos, vec![Pair {
                 display: longest_prefix.clone(),
                 replacement: extension.to_string(),
             }]))
         } else {
-            // Multiple possibilities - return all with their display names for rustyline to show
-            let candidates: Vec<Pair> = completions.into_iter().map(|pair| {
-                Pair {
-                    display: pair.display.clone(),
-                    replacement: pair.display, // Use full display name as replacement for rustyline to show options
-                }
-            }).collect();
-            
-            Ok((start_pos, candidates))
+            // No auto-completion - return empty to prevent cycling
+            Ok((pos, vec![]))
         }
     }
 }
@@ -256,8 +256,28 @@ impl Completer for NjordCompleter {
 impl Hinter for NjordCompleter {
     type Hint = String;
     
-    fn hint(&self, _line: &str, _pos: usize, _ctx: &rustyline::Context<'_>) -> Option<Self::Hint> {
-        None
+    fn hint(&self, line: &str, pos: usize, _ctx: &rustyline::Context<'_>) -> Option<Self::Hint> {
+        let completions = self.complete_command(line, pos);
+        
+        if completions.len() > 1 {
+            // Multiple completions available - show them as a hint
+            let completion_names: Vec<String> = completions.iter()
+                .map(|pair| pair.display.clone())
+                .collect();
+            
+            // Limit to first 5 completions to avoid overwhelming the display
+            let display_completions = if completion_names.len() > 5 {
+                let mut limited = completion_names[..5].to_vec();
+                limited.push(format!("... ({} more)", completion_names.len() - 5));
+                limited
+            } else {
+                completion_names
+            };
+            
+            Some(format!(" [{}]", display_completions.join(" ")))
+        } else {
+            None
+        }
     }
 }
 
