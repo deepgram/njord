@@ -6,12 +6,39 @@ Named after the Norse god of the sea and sailors, Njord guides you through the v
 
 ## Features
 
-- **Multi-Provider Support**: Chat with OpenAI GPT models, Anthropic Claude, and Google Gemini
-- **Interactive REPL**: Rich terminal interface with input history, multi-line support, and real-time streaming
-- **Session Management**: Save, load, and manage conversation sessions
-- **Message Navigation**: Undo messages, jump to specific points, and view conversation history
-- **Flexible Configuration**: Support for multiple API keys and model switching
-- **Zero Dependencies**: Builds as a single, statically-linked executable
+### 🤖 Multi-Provider AI Support
+- **OpenAI**: Latest models including o3-pro, o3, o4-mini, gpt-4.1 series with reasoning model support
+- **Anthropic**: Claude 4 and 3.x models (Sonnet, Opus, Haiku) with thinking mode support
+- **Google Gemini**: Gemini 2.5 Pro, Flash, and Flash Lite models
+- **Smart Model Detection**: Automatic provider switching based on model selection
+
+### 💬 Advanced Chat Experience
+- **Real-time Streaming**: Live response streaming with proper interruption handling
+- **Thinking Mode**: See AI reasoning process for supported Anthropic models
+- **Multi-line Input**: Triple-backtick code blocks for complex prompts
+- **Smart Interruption**: Ctrl-C handling with message queuing and retry logic
+- **Tab Completion**: Intelligent command and parameter completion with hints
+
+### 📁 Powerful Session Management
+- **Auto-saving**: Sessions automatically saved when they contain AI interactions
+- **Session Operations**: Save, load, fork, merge, and continue sessions
+- **Safe Loading**: Load copies of sessions without modifying originals
+- **Recent Sessions**: Quick access to recently used conversations
+- **Session Search**: Full-text search across all saved sessions with highlighted excerpts
+
+### 🔧 Code Block Management
+- **Automatic Extraction**: Code blocks automatically detected and numbered
+- **Universal Clipboard**: Copy to system clipboard + OSC52 for SSH/terminal compatibility
+- **File Operations**: Save code blocks directly to files
+- **Safe Execution**: Execute bash, Python, and JavaScript with confirmation prompts
+- **Language Support**: Syntax detection for multiple programming languages
+
+### 🎨 Professional Terminal UI
+- **Colored Output**: Syntax highlighting for code blocks and role-based message coloring
+- **Message History**: Navigate conversation history with timestamps and metadata
+- **Command System**: Comprehensive slash commands for all operations
+- **Input History**: Arrow key navigation through previous inputs
+- **Status Display**: Current model, provider, and configuration at startup
 
 ## Quick Start
 
@@ -77,33 +104,55 @@ Or with command-line options:
 ./njord --new-session
 ```
 
-## Basic Commands
+## Command Reference
 
-### Chat Commands
-- `/help` - Show all available commands
-- `/models` - List available models for current provider
-- `/model MODEL` - Switch to a different model
-- `/provider PROVIDER` - Switch provider (openai, anthropic, gemini)
-- `/status` - Show current provider and model
+### 🤖 Model & Provider Management
+- `/models` - List all available models across providers
+- `/model MODEL` - Switch to any model (auto-detects provider)
+- `/status` - Show current provider, model, and configuration
 
-### Session Management
-- `/chat new` - Start a new chat session
-- `/chat save NAME` - Save current session with given name
-- `/chat load NAME` - Load a previously saved session
-- `/chat list` - List all saved sessions
-- `/chat delete NAME` - Delete a saved session
+### 💬 Session Management
+- `/chat new` - Start fresh session
+- `/chat save NAME` - Save current session
+- `/chat load NAME` - Load safe copy of session
+- `/chat continue [NAME]` - Resume most recent or named session
+- `/chat fork NAME` - Save current session and start fresh
+- `/chat merge NAME` - Merge another session into current
+- `/chat list` - List all saved sessions with metadata
+- `/chat recent` - Show recently used sessions
+- `/chat delete NAME` - Delete saved session
 
-### Message Navigation
-- `/undo [N]` - Remove last N responses (default 1)
-- `/goto N` - Jump back to message N
-- `/history` - Show conversation history
-- `/system [PROMPT]` - Set system prompt (empty to view, 'clear' to remove)
+### 📝 Message & History
+- `/history` - Show full conversation with timestamps
+- `/undo [N]` - Remove last N messages (default 1)
+- `/goto N` - Jump to message N, removing later messages
+- `/search TERM` - Search across all sessions with highlighted results
 
-### Input Tips
-- Start with ``` for multi-line input (end with ``` on its own line)
-- Use Ctrl-C to interrupt ongoing requests
-- Use arrow keys to navigate input history
-- Use `/quit` to exit
+### 🔧 Code Block Operations
+- `/blocks` - List all code blocks in current session
+- `/block N` - Display specific code block with syntax highlighting
+- `/copy N` - Copy code block to clipboard (system + OSC52)
+- `/save N FILENAME` - Save code block to file
+- `/exec N` - Execute code block with safety confirmation
+
+### ⚙️ Configuration
+- `/system [PROMPT]` - Set/view/clear system prompt
+- `/temp VALUE` - Set temperature (0.0-2.0, model-dependent)
+- `/max-tokens N` - Set maximum response tokens
+- `/thinking on|off` - Enable/disable thinking mode (Anthropic models)
+- `/thinking-budget N` - Set thinking token budget
+
+### 🔍 Utilities
+- `/help` - Show all commands
+- `/clear` - Clear terminal screen
+- `/quit` - Exit Njord
+
+### 💡 Pro Tips
+- **Multi-line Input**: Start with ``` and end with ``` on its own line
+- **Smart Interruption**: Use Ctrl-C to cancel requests - messages are queued for retry
+- **Tab Completion**: Press Tab for command completion with helpful hints
+- **Universal Clipboard**: `/copy` works in SSH sessions and all terminal types
+- **Session Safety**: `/chat load` creates copies, originals remain unchanged
 
 ## Development
 
@@ -215,19 +264,30 @@ njord --help
 ## Supported Models
 
 ### OpenAI
-- `gpt-3.5-turbo`
-- `gpt-4`
-- `gpt-4-turbo`
+- `o3-pro` (latest reasoning model)
+- `o3` (reasoning model)
+- `o4-mini` (fast reasoning model)
+- `o3-mini` (compact reasoning model)
+- `o1-pro` (reasoning model)
+- `o1` (reasoning model)
+- `gpt-4.1` (latest chat model)
+- `gpt-4o`
+- `gpt-4.1-mini`
+- `gpt-4o-mini`
+- `gpt-4.1-nano`
 
 ### Anthropic
-- `claude-3-haiku-20240307`
-- `claude-3-sonnet-20240229`
-- `claude-3-opus-20240229`
+- `claude-sonnet-4-20250514` (latest, supports thinking)
+- `claude-opus-4-20250514` (supports thinking)
+- `claude-3-7-sonnet-20250219` (supports thinking)
 - `claude-3-5-sonnet-20241022`
+- `claude-3-5-haiku-20241022`
+- `claude-3-5-sonnet-20240620`
 
 ### Google Gemini
-- `gemini-pro`
-- `gemini-pro-vision`
+- `gemini-2.5-pro`
+- `gemini-2.5-flash`
+- `gemini-2.5-flash-lite`
 
 ## Contributing
 
@@ -249,7 +309,19 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Built with [Rust](https://www.rust-lang.org/) for performance and safety
 - Uses [rustls](https://github.com/rustls/rustls) for pure Rust TLS implementation
 - Terminal interface powered by [rustyline](https://github.com/kkawakam/rustyline)
-- Developed with [Aider](https://aider.chat/) - the entire project was vibe-coded in a few hours using Aider and Claude-3.5-Sonnet
+- Universal clipboard support via [arboard](https://github.com/1Password/arboard) and OSC52 escape sequences
+- Developed with [Aider](https://aider.chat/) - the entire project was collaboratively built using Aider and Claude-3.5-Sonnet
+
+## What's New in v0.2.0
+
+- **Complete Code Management System**: Extract, view, copy, save, and execute code blocks
+- **Universal Clipboard Integration**: Works in SSH sessions and all terminal environments
+- **Advanced Session Operations**: Fork, merge, continue, and safe loading of sessions
+- **Full-Text Search**: Search across all sessions with intelligent excerpt highlighting
+- **Enhanced Tab Completion**: Smart command completion with helpful hints
+- **Thinking Mode Support**: See AI reasoning process for supported Anthropic models
+- **Robust Interruption Handling**: Ctrl-C with message queuing and retry logic
+- **Professional Terminal UI**: Syntax highlighting, colored output, and status displays
 
 ## Roadmap
 
