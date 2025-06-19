@@ -316,7 +316,6 @@ impl Repl {
                 println!("  /chat continue - Continue the most recent session");
                 println!("  /chat recent - Show recent sessions");
                 println!("  /chat fork NAME - Save current session and start fresh");
-                println!("  /chat branch [NAME] - Create checkpoint and continue");
                 println!("  /chat merge NAME - Merge another session into current");
                 println!("  /undo [N] - Remove last N responses (default 1)");
                 println!("  /goto N - Jump back to message N");
