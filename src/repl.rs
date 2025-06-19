@@ -168,6 +168,33 @@ impl Repl {
         all_blocks
     }
     
+    fn copy_to_system_clipboard(&self, content: &str) -> Result<()> {
+        use arboard::Clipboard;
+        
+        let mut clipboard = Clipboard::new()
+            .map_err(|e| anyhow::anyhow!("Failed to access system clipboard: {}", e))?;
+        
+        clipboard.set_text(content)
+            .map_err(|e| anyhow::anyhow!("Failed to set clipboard content: {}", e))?;
+        
+        Ok(())
+    }
+    
+    fn copy_via_osc52(&self, content: &str) -> bool {
+        use base64::Engine;
+        use std::io::Write;
+        
+        // Encode content as base64
+        let encoded = base64::engine::general_purpose::STANDARD.encode(content.as_bytes());
+        
+        // Emit OSC52 escape sequence: \033]52;c;<base64>\033\\
+        // 'c' means clipboard (as opposed to 'p' for primary selection)
+        print!("\x1b]52;c;{}\x1b\\", encoded);
+        std::io::stdout().flush().unwrap_or(());
+        
+        true // OSC52 emission always "succeeds" (we can't know if terminal supports it)
+    }
+    
     fn execute_code_block(&mut self, block_ref: &CodeBlockReference) -> Result<()> {
         let language = block_ref.code_block.language.as_deref().unwrap_or("unknown");
         
@@ -901,12 +928,32 @@ impl Repl {
             Command::Copy(block_number) => {
                 let all_blocks = self.get_all_code_blocks();
                 if let Some(block) = all_blocks.get(block_number.saturating_sub(1)) {
-                    // For now, just print the code block content
-                    // TODO: Implement actual clipboard copying
-                    self.ui.print_info(&format!("Code block {} content:", block_number));
-                    println!();
-                    self.ui.print_styled_code_block(&block.code_block.content, block.code_block.language.as_deref());
-                    self.ui.print_info("(Clipboard functionality not yet implemented - content displayed above)");
+                    let content = &block.code_block.content;
+                    let mut success_methods = Vec::new();
+                    
+                    // Try system clipboard first
+                    match self.copy_to_system_clipboard(content) {
+                        Ok(()) => success_methods.push("system clipboard"),
+                        Err(e) => {
+                            // Don't show error yet, we'll try OSC52
+                            eprintln!("System clipboard failed: {}", e);
+                        }
+                    }
+                    
+                    // Always emit OSC52 for terminal/SSH compatibility
+                    if self.copy_via_osc52(content) {
+                        success_methods.push("OSC52 (terminal)");
+                    }
+                    
+                    if !success_methods.is_empty() {
+                        self.ui.print_info(&format!("Code block {} copied via: {}", 
+                            block_number, success_methods.join(", ")));
+                    } else {
+                        self.ui.print_error("Failed to copy to clipboard");
+                        self.ui.print_info("Content displayed below:");
+                        println!();
+                        self.ui.print_styled_code_block(content, block.code_block.language.as_deref());
+                    }
                 } else {
                     self.ui.print_error(&format!("Code block {} not found. Use /blocks to list all code blocks.", block_number));
                 }
