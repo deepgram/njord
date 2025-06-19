@@ -890,12 +890,8 @@ impl Repl {
                 let all_blocks = self.get_all_code_blocks();
                 if let Some(block) = all_blocks.get(block_number.saturating_sub(1)) {
                     self.ui.print_info(&format!("Code block {} from message {}:", block_number, block.message_number));
-                    if let Some(language) = &block.code_block.language {
-                        println!("Language: {}", language);
-                    }
-                    println!("```");
-                    println!("{}", block.code_block.content);
-                    println!("```");
+                    println!();
+                    self.ui.print_styled_code_block(&block.code_block.content, block.code_block.language.as_deref());
                 } else {
                     self.ui.print_error(&format!("Code block {} not found. Use /blocks to list all code blocks.", block_number));
                 }
@@ -906,7 +902,8 @@ impl Repl {
                     // For now, just print the code block content
                     // TODO: Implement actual clipboard copying
                     self.ui.print_info(&format!("Code block {} content:", block_number));
-                    println!("{}", block.code_block.content);
+                    println!();
+                    self.ui.print_styled_code_block(&block.code_block.content, block.code_block.language.as_deref());
                     self.ui.print_info("(Clipboard functionality not yet implemented - content displayed above)");
                 } else {
                     self.ui.print_error(&format!("Code block {} not found. Use /blocks to list all code blocks.", block_number));
@@ -931,12 +928,8 @@ impl Repl {
                 let all_blocks = self.get_all_code_blocks();
                 if let Some(block) = all_blocks.get(block_number.saturating_sub(1)) {
                     self.ui.print_info(&format!("Code block {} from message {}:", block_number, block.message_number));
-                    if let Some(language) = &block.code_block.language {
-                        println!("Language: {}", language);
-                    }
-                    println!("```");
-                    println!("{}", block.code_block.content);
-                    println!("```");
+                    println!();
+                    self.ui.print_styled_code_block(&block.code_block.content, block.code_block.language.as_deref());
                     println!();
                     self.ui.print_info("⚠️  Execute this code? This will run the code on your system!");
                     self.ui.print_info("Type 'yes' to execute, anything else to cancel:");
