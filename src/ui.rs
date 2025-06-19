@@ -1,6 +1,6 @@
 use anyhow::Result;
 use rustyline::error::ReadlineError;
-use rustyline::{Editor, Helper};
+use rustyline::{Editor, Helper, DefaultHistory};
 use rustyline::completion::{Completer, Pair};
 use rustyline::hint::Hinter;
 use rustyline::highlight::Highlighter;
@@ -8,7 +8,7 @@ use rustyline::validate::Validator;
 use std::io::{self, Write};
 
 pub struct UI {
-    editor: Editor<NjordCompleter>,
+    editor: Editor<NjordCompleter, DefaultHistory>,
 }
 
 #[derive(Clone)]
