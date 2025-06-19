@@ -310,7 +310,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Uses [rustls](https://github.com/rustls/rustls) for pure Rust TLS implementation
 - Terminal interface powered by [rustyline](https://github.com/kkawakam/rustyline)
 - Universal clipboard support via [arboard](https://github.com/1Password/arboard) and OSC52 escape sequences
-- Developed with [Aider](https://aider.chat/) - the entire project was collaboratively built using Aider and Claude-3.5-Sonnet
+- Developed with [Aider](https://aider.chat/) - the entire project was collaboratively built using Aider and Claude-4-Sonnet
 
 ## What's New in v0.2.0
 
