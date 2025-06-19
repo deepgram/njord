@@ -51,34 +51,27 @@ Njord is an interactive LLM REPL that aims to provide a powerful terminal-based 
 
 ## Next Priority 🎯
 
-**🎉 Phase 1 & 2 Core Features are COMPLETE! 🎉**
+**🎉 Phase 1, 2, & Code Management Features are COMPLETE! 🎉**
 
 Based on current progress, the next most valuable features to implement are:
 
-1. **Code Block Extraction and Management** - Parse and manage code from responses
-   - Extract code blocks from markdown responses
-   - Number and catalog code blocks for easy reference
-   - `/block N` - Display specific code block
-   - `/copy N` - Copy code block to clipboard
-   - `/save N FILENAME` - Save code block to file
-   - `/exec N` - Execute code block (with safety prompts)
-
-2. **Enhanced Response Display** - Better formatting and UX
-   - Markdown rendering in terminal
-   - Code syntax highlighting
-   - Better text formatting and coloring
+1. **Enhanced Response Display** - Better formatting and UX
+   - Markdown rendering in terminal (headers, lists, blockquotes, etc.)
+   - Code syntax highlighting with language-specific colors
+   - Better text formatting (bold, italic, strikethrough)
    - Progress indicators for long responses
 
-3. **Advanced Search and Navigation**
-   - `/search TERM` - Search conversation history
-   - Better history navigation and filtering
-   - Session tagging and metadata
-
-4. **Export and Analysis Features**
+2. **Export and Analysis Features**
    - `/export FORMAT` - Export conversations (markdown, JSON, PDF)
    - `/stats` - Show conversation statistics
    - `/tokens` - Show token usage and costs
    - Cost tracking per provider
+
+3. **Advanced Features**
+   - Session tagging and metadata
+   - `/edit N` - Edit previous messages
+   - `/retry` - Retry last request with same or different provider
+   - Multi-provider comparison features
 
 ## Phase 1: Core Functionality ✅ COMPLETE!
 
@@ -149,22 +142,29 @@ Based on current progress, the next most valuable features to implement are:
 
 **Current Focus: Code Management and Enhanced UX**
 
-### Code Block Management 🎯 NEXT PRIORITY
-- [ ] **Code Extraction and Management**
-  - [ ] Extract code blocks from markdown responses
-  - [ ] Number and catalog code blocks per message
-  - [ ] `/block N` - Display specific code block
-  - [ ] `/copy N` - Copy code block to clipboard
-  - [ ] `/save N FILENAME` - Save code block to file
-  - [ ] `/exec N` - Execute code block (with safety prompts)
+### Code Block Management ✅ COMPLETE!
+- [x] **Code Extraction and Management** - COMPLETE!
+  - [x] Extract code blocks from markdown responses
+  - [x] Number and catalog code blocks per message
+  - [x] `/blocks` - List all code blocks in session
+  - [x] `/block N` - Display specific code block
+  - [x] `/copy N` - Copy code block to clipboard with system + OSC52 support
+  - [x] `/save N FILENAME` - Save code block to file
+  - [x] `/exec N` - Execute code block (with safety prompts)
+  - [x] Support for bash, python, javascript execution
 
-### Enhanced UI/UX
+### Enhanced UI/UX 🎯 NEXT PRIORITY
 - [x] **Enhanced REPL Interface** - PARTIALLY COMPLETE!
-  - [ ] Markdown rendering in terminal
-  - [ ] Code syntax highlighting
+  - [x] Professional REPL with colored prompts and real-time streaming
+  - [x] Code block styling with cyan coloring
+  - [x] Tab completion for commands with single/multiple completion hints
+  - [x] Multi-line input support with triple-backtick blocks
+  - [x] Robust Ctrl-C handling and request interruption
+  - [x] Clipboard integration (system + OSC52) for universal compatibility
+  - [ ] Markdown rendering in terminal (headers, lists, blockquotes, links)
+  - [ ] Code syntax highlighting with language-specific colors
   - [ ] Progress indicators for long responses
   - [ ] Optional pager for long responses
-  - [x] Tab completion for commands - COMPLETE!
 
 - [ ] **Customization**
   - [ ] Theme support
@@ -181,11 +181,12 @@ Based on current progress, the next most valuable features to implement are:
   - [ ] Session templates
   - [ ] Session tagging and descriptions
 
-### Search and Navigation
-- [ ] **Advanced Search**
-  - [ ] `/search TERM` - Search conversation history
-  - [ ] Search across all saved sessions
-  - [ ] Filter by provider, model, or date range
+### Search and Navigation ✅ COMPLETE!
+- [x] **Advanced Search** - COMPLETE!
+  - [x] `/search TERM` - Search conversation history with highlighted excerpts
+  - [x] Search across all saved sessions with session grouping
+  - [x] Smart excerpt generation with context preservation
+  - [x] Color-coded results by role (user/assistant)
 
 ## Phase 3: Power User Features 🚀
 
@@ -200,16 +201,16 @@ Based on current progress, the next most valuable features to implement are:
   - [ ] Provider-specific optimizations
   - [ ] Cost tracking per provider
 
-### Advanced Commands
+### Advanced Commands 🎯 NEXT PRIORITY
 - [ ] **Analysis and Export**
   - [ ] `/stats` - Show conversation statistics
   - [ ] `/tokens` - Show token usage and costs
   - [ ] `/export FORMAT` - Export conversation (markdown, JSON, PDF)
-  - [ ] `/retry` - Retry last request with same or different provider
+  - [x] `/retry` - Retry functionality built into interruption system
 
 - [ ] **Editing and Refinement**
   - [ ] `/edit N` - Edit previous message
-  - [ ] `/temperature VALUE` - Adjust response creativity
+  - [x] `/temp VALUE` - Adjust response creativity (COMPLETE!)
   - [ ] Message templates and snippets
 
 ### Integration Features
@@ -315,16 +316,24 @@ export NJORD_EDITOR="vim"
 **🎉 Phase 1 is COMPLETE! 🎉**
 **🎉 Phase 2 Session Management is COMPLETE! 🎉**
 
-**🚀 Phase 2 Code Management is now IN PROGRESS! 🚀**
+**🚀 Phase 2 Code Management is COMPLETE! 🚀**
+**🎯 Phase 3 Enhanced UX is now IN PROGRESS! 🎯**
 
-**Current Status**: All three major providers (OpenAI, Anthropic, and Gemini) are fully implemented with streaming support. The session management system is sophisticated with auto-saving, safe loading, forking, merging, and continuation features. The REPL has professional UX with robust error handling, retry logic, thinking mode support, and comprehensive tab completion. Next focus is code block extraction and management features.
+**Current Status**: All three major providers (OpenAI, Anthropic, and Gemini) are fully implemented with streaming support. The session management system is sophisticated with auto-saving, safe loading, forking, merging, and continuation features. The REPL has professional UX with robust error handling, retry logic, thinking mode support, and comprehensive tab completion. Code block extraction, management, copying (system + OSC52), saving, and execution are all complete. Advanced search across all sessions with highlighted excerpts is implemented. Next focus is enhanced markdown rendering and export features.
 
-### Phase 2 Success Criteria
-- [ ] Code block extraction and management works
+### Phase 2 Success Criteria ✅ ALL COMPLETE!
+- [x] Code block extraction and management works (COMPLETE!)
 - [x] Session management is robust and reliable (COMPLETE!)
 - [x] Multi-provider workflows are seamless (COMPLETE!)
 - [x] Tab completion for commands and parameters (COMPLETE!)
+- [x] Advanced search functionality across sessions (COMPLETE!)
+- [x] Clipboard integration with universal compatibility (COMPLETE!)
+
+### Phase 3 Success Criteria 🎯 IN PROGRESS
 - [ ] Enhanced response display with markdown rendering
+- [ ] Export and analysis features provide value
+- [ ] Code syntax highlighting improves readability
+- [ ] Professional terminal UI experience
 
 ### Phase 3 Success Criteria
 - [ ] Multi-provider workflows are seamless
