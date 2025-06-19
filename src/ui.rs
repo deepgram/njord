@@ -240,15 +240,15 @@ impl Completer for NjordCompleter {
                 replacement: extension.to_string(),
             }]))
         } else {
-            // Multiple possibilities - return all for display but no replacement
+            // Multiple possibilities - return all with their display names for rustyline to show
             let candidates: Vec<Pair> = completions.into_iter().map(|pair| {
                 Pair {
-                    display: pair.display,
-                    replacement: String::new(), // No replacement - just show options
+                    display: pair.display.clone(),
+                    replacement: pair.display, // Use full display name as replacement for rustyline to show options
                 }
             }).collect();
             
-            Ok((pos, candidates))
+            Ok((start_pos, candidates))
         }
     }
 }
