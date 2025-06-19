@@ -1,6 +1,6 @@
 use anyhow::Result;
 use rustyline::error::ReadlineError;
-use rustyline::{DefaultEditor, Helper};
+use rustyline::{Editor, Helper};
 use rustyline::completion::{Completer, Pair};
 use rustyline::hint::Hinter;
 use rustyline::highlight::Highlighter;
@@ -8,7 +8,7 @@ use rustyline::validate::Validator;
 use std::io::{self, Write};
 
 pub struct UI {
-    editor: DefaultEditor,
+    editor: Editor<NjordCompleter>,
 }
 
 #[derive(Clone)]
@@ -208,7 +208,9 @@ impl Helper for NjordCompleter {}
 
 impl UI {
     pub fn new() -> Result<Self> {
-        let editor = DefaultEditor::new()?;
+        let mut editor = Editor::new()?;
+        let completer = NjordCompleter::new(CompletionContext::new());
+        editor.set_helper(Some(completer));
         Ok(Self { editor })
     }
     
