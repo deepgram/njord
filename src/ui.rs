@@ -53,19 +53,9 @@ impl NjordCompleter {
             let matches: Vec<_> = commands.iter()
                 .filter(|cmd| cmd.starts_with(input))
                 .map(|cmd| {
-                    if matches!(cmd, &"/chat" | &"/model" | &"/system" | &"/temp" | 
-                                    &"/max-tokens" | &"/thinking-budget" | &"/thinking" |
-                                    &"/undo" | &"/goto" | &"/search" | &"/export" |
-                                    &"/block" | &"/copy" | &"/save" | &"/exec" | &"/edit") {
-                        Pair {
-                            display: cmd.to_string(),
-                            replacement: format!("{} ", cmd),
-                        }
-                    } else {
-                        Pair {
-                            display: cmd.to_string(),
-                            replacement: cmd.to_string(),
-                        }
+                    Pair {
+                        display: cmd.to_string(),
+                        replacement: cmd.to_string(),
                     }
                 })
                 .collect();
@@ -74,19 +64,20 @@ impl NjordCompleter {
         
         // Handle specific command completions
         if input.starts_with("/chat ") {
-            return self.complete_chat_command(input);
+            return self.complete_chat_command(line, pos);
         } else if input.starts_with("/model ") {
-            return self.complete_model_command(input);
+            return self.complete_model_command(line, pos);
         } else if input.starts_with("/thinking ") {
-            return self.complete_thinking_command(input);
+            return self.complete_thinking_command(line, pos);
         } else if input.starts_with("/export ") {
-            return self.complete_export_command(input);
+            return self.complete_export_command(line, pos);
         }
         
         Vec::new()
     }
     
-    fn complete_chat_command(&self, input: &str) -> Vec<Pair> {
+    fn complete_chat_command(&self, line: &str, pos: usize) -> Vec<Pair> {
+        let input = &line[..pos];
         let parts: Vec<&str> = input.split_whitespace().collect();
         
         if parts.len() == 1 || (parts.len() == 2 && !input.ends_with(' ')) {
@@ -99,18 +90,9 @@ impl NjordCompleter {
             
             return subcommands.iter()
                 .filter(|cmd| cmd.starts_with(prefix))
-                .map(|cmd| {
-                    if matches!(cmd, &"save" | &"load" | &"delete" | &"continue" | &"fork" | &"merge") {
-                        Pair {
-                            display: cmd.to_string(),
-                            replacement: format!("/chat {} ", cmd),
-                        }
-                    } else {
-                        Pair {
-                            display: cmd.to_string(),
-                            replacement: format!("/chat {}", cmd),
-                        }
-                    }
+                .map(|cmd| Pair {
+                    display: cmd.to_string(),
+                    replacement: cmd.to_string(),
                 })
                 .collect();
         } else if parts.len() >= 2 {
@@ -123,7 +105,7 @@ impl NjordCompleter {
                     .filter(|name| name.starts_with(prefix))
                     .map(|name| Pair {
                         display: name.clone(),
-                        replacement: format!("/chat {} {}", subcommand, name),
+                        replacement: name.clone(),
                     })
                     .collect();
             }
@@ -132,7 +114,8 @@ impl NjordCompleter {
         Vec::new()
     }
     
-    fn complete_model_command(&self, input: &str) -> Vec<Pair> {
+    fn complete_model_command(&self, line: &str, pos: usize) -> Vec<Pair> {
+        let input = &line[..pos];
         let parts: Vec<&str> = input.split_whitespace().collect();
         let prefix = if parts.len() >= 2 { parts[1] } else { "" };
         
@@ -140,12 +123,13 @@ impl NjordCompleter {
             .filter(|model| model.starts_with(prefix))
             .map(|model| Pair {
                 display: model.clone(),
-                replacement: format!("/model {}", model),
+                replacement: model.clone(),
             })
             .collect()
     }
     
-    fn complete_thinking_command(&self, input: &str) -> Vec<Pair> {
+    fn complete_thinking_command(&self, line: &str, pos: usize) -> Vec<Pair> {
+        let input = &line[..pos];
         let parts: Vec<&str> = input.split_whitespace().collect();
         let prefix = if parts.len() >= 2 { parts[1] } else { "" };
         
@@ -154,12 +138,13 @@ impl NjordCompleter {
             .filter(|option| option.starts_with(prefix))
             .map(|option| Pair {
                 display: option.to_string(),
-                replacement: format!("/thinking {}", option),
+                replacement: option.to_string(),
             })
             .collect()
     }
     
-    fn complete_export_command(&self, input: &str) -> Vec<Pair> {
+    fn complete_export_command(&self, line: &str, pos: usize) -> Vec<Pair> {
+        let input = &line[..pos];
         let parts: Vec<&str> = input.split_whitespace().collect();
         let prefix = if parts.len() >= 2 { parts[1] } else { "" };
         
@@ -168,9 +153,22 @@ impl NjordCompleter {
             .filter(|format| format.starts_with(prefix))
             .map(|format| Pair {
                 display: format.to_string(),
-                replacement: format!("/export {}", format),
+                replacement: format.to_string(),
             })
             .collect()
+    }
+    
+    fn find_completion_start(&self, line: &str, pos: usize) -> usize {
+        let line_up_to_pos = &line[..pos];
+        
+        // For commands, find the start of the current word
+        if let Some(last_space) = line_up_to_pos.rfind(' ') {
+            last_space + 1
+        } else if line_up_to_pos.starts_with('/') {
+            0
+        } else {
+            pos
+        }
     }
 }
 
@@ -184,7 +182,30 @@ impl Completer for NjordCompleter {
         _ctx: &rustyline::Context<'_>,
     ) -> rustyline::Result<(usize, Vec<Self::Candidate>)> {
         let completions = self.complete_command(line, pos);
-        Ok((0, completions))
+        
+        if completions.is_empty() {
+            return Ok((pos, vec![]));
+        }
+        
+        // Find the start position of the word being completed
+        let start_pos = self.find_completion_start(line, pos);
+        
+        // Convert to the format rustyline expects for prefix-based completion
+        let candidates: Vec<Pair> = completions.into_iter().map(|pair| {
+            // Extract just the completion part (after the start position)
+            let completion_text = if pair.replacement.len() > start_pos {
+                &pair.replacement[start_pos..]
+            } else {
+                &pair.replacement
+            };
+            
+            Pair {
+                display: pair.display,
+                replacement: completion_text.to_string(),
+            }
+        }).collect();
+        
+        Ok((start_pos, candidates))
     }
 }
 
