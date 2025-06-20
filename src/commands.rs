@@ -10,7 +10,7 @@ pub enum Command {
     ChatSave(String),
     ChatLoad(String),
     ChatList,
-    ChatDelete(String),
+    ChatDelete(Option<String>),
     ChatContinue(Option<String>),
     ChatRecent,
     ChatFork(String),
@@ -101,7 +101,7 @@ impl CommandParser {
             edit_regex: Regex::new(r"^/edit\s+(\d+)$")?,
             chat_save_regex: Regex::new(r"^/chat\s+save\s+(.+)$")?,
             chat_load_regex: Regex::new(r"^/chat\s+load\s+(.+)$")?,
-            chat_delete_regex: Regex::new(r"^/chat\s+delete\s+(.+)$")?,
+            chat_delete_regex: Regex::new(r"^/chat\s+delete(?:\s+(.+))?$")?,
             chat_continue_regex: Regex::new(r"^/chat\s+continue(?:\s+(.+))?$")?,
             chat_fork_regex: Regex::new(r"^/chat\s+fork\s+(.+)$")?,
             chat_merge_regex: Regex::new(r"^/chat\s+merge\s+(.+)$")?,
@@ -172,7 +172,8 @@ impl CommandParser {
                 } else if let Some(caps) = self.chat_load_regex.captures(input) {
                     Some(Command::ChatLoad(Self::unquote_session_name(&caps[1])))
                 } else if let Some(caps) = self.chat_delete_regex.captures(input) {
-                    Some(Command::ChatDelete(Self::unquote_session_name(&caps[1])))
+                    let name = caps.get(1).map(|m| Self::unquote_session_name(m.as_str()));
+                    Some(Command::ChatDelete(name))
                 } else if let Some(caps) = self.chat_continue_regex.captures(input) {
                     let name = caps.get(1).map(|m| Self::unquote_session_name(m.as_str()));
                     Some(Command::ChatContinue(name))

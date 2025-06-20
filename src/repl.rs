@@ -473,7 +473,7 @@ impl Repl {
                 println!("  /chat save NAME - Save current session with given name");
                 println!("  /chat load NAME - Load a previously saved session");
                 println!("  /chat list - List all saved sessions");
-                println!("  /chat delete NAME - Delete a saved session");
+                println!("  /chat delete [NAME] - Delete a saved session (defaults to current)");
                 println!("  /chat continue - Continue the most recent session");
                 println!("  /chat recent - Show recent sessions");
                 println!("  /chat fork NAME - Save current session and start fresh");
@@ -835,13 +835,26 @@ impl Repl {
                     }
                 }
             }
-            Command::ChatDelete(name) => {
-                match self.history.delete_session(&name) {
+            Command::ChatDelete(name_opt) => {
+                let target_name = if let Some(name) = name_opt {
+                    // Delete specific named session
+                    name
+                } else {
+                    // Delete current session - it must be saved first
+                    if let Some(ref current_name) = self.session.name {
+                        current_name.clone()
+                    } else {
+                        self.ui.print_error("Current session has no name. Save it first with /chat save NAME, or specify a session name to delete");
+                        return Ok(true);
+                    }
+                };
+                
+                match self.history.delete_session(&target_name) {
                     Ok(true) => {
-                        self.ui.print_info(&format!("Session '{}' deleted", name));
+                        self.ui.print_info(&format!("Session '{}' deleted", target_name));
                         
                         // Check if we deleted the current session
-                        if self.session.name.as_ref() == Some(&name) {
+                        if self.session.name.as_ref() == Some(&target_name) {
                             // Reset to a new anonymous session
                             self.session = ChatSession::new(
                                 self.config.default_model.clone(), 
@@ -857,7 +870,7 @@ impl Repl {
                         let _ = self.update_completion_context();
                     }
                     Ok(false) => {
-                        self.ui.print_error(&format!("Session '{}' not found", name));
+                        self.ui.print_error(&format!("Session '{}' not found", target_name));
                     }
                     Err(e) => {
                         self.ui.print_error(&format!("Failed to delete session: {}", e));
