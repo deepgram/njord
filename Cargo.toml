@@ -10,24 +10,24 @@ keywords = ["llm", "repl", "ai", "chat", "terminal"]
 categories = ["command-line-utilities"]
 
 [dependencies]
-tokio = { version = "1.0", features = ["full"] }
+tokio = { version = "1.45", features = ["full"] }
 tokio-util = "0.7"
 tokio-stream = { version = "0.1", features = ["io-util"] }
-clap = { version = "4.0", features = ["derive"] }
+clap = { version = "4.5", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-reqwest = { version = "0.11", default-features = false, features = ["json", "stream", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
 futures = "0.3"
 anyhow = "1.0"
-thiserror = "1.0"
-dirs = "5.0"
-regex = "1.10"
+thiserror = "2.0"
+dirs = "6.0"
+regex = "1.11"
 chrono = { version = "0.4", features = ["serde"] }
-uuid = { version = "1.0", features = ["v4", "serde"] }
+uuid = { version = "1.17", features = ["v4", "serde"] }
 async-trait = "0.1"
-rustyline = { version = "13.0", features = ["with-file-history"] }
-arboard = "3.0"
+rustyline = { version = "16.0", features = ["with-file-history"] }
+arboard = "3.5"
 base64 = "0.22"
 
 [dev-dependencies]
-tempfile = "3.0"
+tempfile = "3.20"
