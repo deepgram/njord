@@ -121,15 +121,21 @@ impl NjordCompleter {
     fn complete_session_names(&self, current_word: &str) -> Vec<Pair> {
         // Remove quotes from current_word for matching
         let unquoted_current = self.unquote_for_matching(current_word);
+        let is_quoted_input = current_word.trim().starts_with('"') || current_word.trim().starts_with('\'');
         
         self.context.session_names.iter()
             .filter(|name| name.to_lowercase().starts_with(&unquoted_current.to_lowercase()))
             .map(|name| {
-                let (display, replacement) = if name.contains(' ') {
-                    // Auto-quote session names with spaces
+                let (display, replacement) = if is_quoted_input {
+                    // User started with quotes, so complete with quotes
+                    let quoted = format!("\"{}\"", name);
+                    (quoted.clone(), quoted)
+                } else if name.contains(' ') {
+                    // Auto-quote session names with spaces only if user didn't start with quotes
                     let quoted = format!("\"{}\"", name);
                     (quoted.clone(), quoted)
                 } else {
+                    // No quotes needed
                     (name.clone(), name.clone())
                 };
                 
@@ -143,18 +149,32 @@ impl NjordCompleter {
     
     fn unquote_for_matching(&self, word: &str) -> String {
         let trimmed = word.trim();
-        if trimmed.len() <= 1 {
-            // Single character or empty - return as-is
+        if trimmed.is_empty() {
             return trimmed.to_string();
         }
         
-        if trimmed.starts_with('"') && !trimmed.ends_with('"') {
-            // Partial quote - remove opening quote for matching
-            trimmed[1..].to_string()
-        } else if (trimmed.starts_with('"') && trimmed.ends_with('"')) ||
-                  (trimmed.starts_with('\'') && trimmed.ends_with('\'')) {
-            // Fully quoted - remove quotes for matching
-            trimmed[1..trimmed.len()-1].to_string()
+        if trimmed.starts_with('"') {
+            if trimmed.len() == 1 {
+                // Just a quote - return empty string for matching
+                String::new()
+            } else if trimmed.ends_with('"') && trimmed.len() > 1 {
+                // Fully quoted - remove quotes for matching
+                trimmed[1..trimmed.len()-1].to_string()
+            } else {
+                // Partial quote - remove opening quote for matching
+                trimmed[1..].to_string()
+            }
+        } else if trimmed.starts_with('\'') {
+            if trimmed.len() == 1 {
+                // Just a quote - return empty string for matching
+                String::new()
+            } else if trimmed.ends_with('\'') && trimmed.len() > 1 {
+                // Fully quoted - remove quotes for matching
+                trimmed[1..trimmed.len()-1].to_string()
+            } else {
+                // Partial quote - remove opening quote for matching
+                trimmed[1..].to_string()
+            }
         } else {
             trimmed.to_string()
         }
