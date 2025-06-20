@@ -839,6 +839,20 @@ impl Repl {
                 match self.history.delete_session(&name) {
                     Ok(true) => {
                         self.ui.print_info(&format!("Session '{}' deleted", name));
+                        
+                        // Check if we deleted the current session
+                        if self.session.name.as_ref() == Some(&name) {
+                            // Reset to a new anonymous session
+                            self.session = ChatSession::new(
+                                self.config.default_model.clone(), 
+                                self.config.temperature, 
+                                self.config.max_tokens, 
+                                self.config.thinking_budget
+                            );
+                            self.session.current_provider = get_provider_for_model(&self.session.current_model).map(|s| s.to_string());
+                            self.ui.print_info("Current session was deleted - started new anonymous session");
+                        }
+                        
                         // Update completion context after deletion
                         let _ = self.update_completion_context();
                     }
