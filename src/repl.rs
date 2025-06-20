@@ -481,7 +481,7 @@ impl Repl {
                 println!("  /chat rename NEW_NAME [OLD_NAME] - Rename a session (defaults to current)");
                 println!("  /chat auto-rename [NAME] - Auto-generate title for session (defaults to current)");
                 println!("  /summarize [NAME] - Generate summary of session (defaults to current)");
-                println!("  /undo [N] - Remove last N responses (default 1)");
+                println!("  /undo [N] - Undo last N agent responses (default 1), restores user message for editing");
                 println!("  /goto N - Jump back to message N");
                 println!("  /history - Show conversation history");
                 println!("  /blocks - List all code blocks in session");
@@ -701,8 +701,20 @@ impl Repl {
             }
             Command::Undo(count) => {
                 let count = count.unwrap_or(1);
-                self.session.undo(count)?;
-                self.ui.print_info(&format!("Removed last {} message(s)", count));
+                match self.session.undo(count) {
+                    Ok(last_user_message) => {
+                        self.ui.print_info(&format!("Undid last {} agent response(s)", count));
+                        
+                        // If we have a user message to restore, queue it for editing
+                        if let Some(user_msg) = last_user_message {
+                            self.queued_message = Some(user_msg);
+                            self.ui.print_info("Last user message available for editing - press Enter to modify and resend");
+                        }
+                    }
+                    Err(e) => {
+                        self.ui.print_error(&e.to_string());
+                    }
+                }
             }
             Command::Model(model_name) => {
                 // Determine which provider this model belongs to

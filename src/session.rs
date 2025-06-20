@@ -118,17 +118,46 @@ impl ChatSession {
         code_blocks
     }
     
-    pub fn undo(&mut self, count: usize) -> Result<()> {
-        if count > self.messages.len() {
-            return Err(anyhow::anyhow!("Cannot undo {} messages, only {} available", count, self.messages.len()));
+    pub fn undo(&mut self, count: usize) -> Result<Option<String>> {
+        if self.messages.is_empty() {
+            return Err(anyhow::anyhow!("No messages to undo"));
         }
         
-        for _ in 0..count {
-            self.messages.pop();
+        let mut agent_responses_removed = 0;
+        let mut last_user_message = None;
+        
+        // Work backwards through messages
+        while agent_responses_removed < count && !self.messages.is_empty() {
+            let last_message = self.messages.last().unwrap();
+            
+            if last_message.message.role == "assistant" {
+                // Remove the assistant message
+                self.messages.pop();
+                agent_responses_removed += 1;
+                
+                // Look for the preceding user message and remove it too
+                if let Some(prev_message) = self.messages.last() {
+                    if prev_message.message.role == "user" {
+                        last_user_message = Some(prev_message.message.content.clone());
+                        self.messages.pop();
+                    }
+                }
+            } else if last_message.message.role == "user" {
+                // If we end on a user message, save it and remove it
+                last_user_message = Some(last_message.message.content.clone());
+                self.messages.pop();
+            } else {
+                // System message or other - just remove
+                self.messages.pop();
+            }
+        }
+        
+        if agent_responses_removed == 0 {
+            return Err(anyhow::anyhow!("No agent responses found to undo"));
         }
         
         self.updated_at = Utc::now();
-        Ok(())
+        Ok(last_user_message)
     }
     
     pub fn goto(&mut self, message_number: usize) -> Result<()> {
