@@ -601,48 +601,48 @@ impl Repl {
                         }
                     }
                 }
-                Command::ChatRename(new_name, old_name) => {
-                    if new_name.trim().is_empty() {
-                        self.ui.print_error("New session name cannot be empty");
+            }
+            Command::ChatRename(new_name, old_name) => {
+                if new_name.trim().is_empty() {
+                    self.ui.print_error("New session name cannot be empty");
+                } else {
+                    let target_name = if let Some(ref old_name) = old_name {
+                        // Rename specific session
+                        old_name.clone()
                     } else {
-                        let target_name = if let Some(ref old_name) = old_name {
-                            // Rename specific session
-                            old_name.clone()
+                        // Rename current session - it must be saved first
+                        if let Some(ref current_name) = self.session.name {
+                            current_name.clone()
                         } else {
-                            // Rename current session - it must be saved first
-                            if let Some(ref current_name) = self.session.name {
-                                current_name.clone()
-                            } else {
-                                self.ui.print_error("Current session has no name. Save it first with /chat save NAME");
-                                return Ok(true);
+                            self.ui.print_error("Current session has no name. Save it first with /chat save NAME");
+                            return Ok(true);
+                        }
+                    };
+                
+                    match self.history.rename_session(&target_name, &new_name) {
+                        Ok(true) => {
+                            self.ui.print_info(&format!("Session '{}' renamed to '{}'", target_name, new_name));
+                        
+                            // If we renamed the current session, update its name
+                            if old_name.is_none() || self.session.name.as_ref() == Some(&target_name) {
+                                self.session.name = Some(new_name.clone());
                             }
-                        };
-                    
-                        match self.history.rename_session(&target_name, &new_name) {
-                            Ok(true) => {
-                                self.ui.print_info(&format!("Session '{}' renamed to '{}'", target_name, new_name));
-                            
-                                // If we renamed the current session, update its name
-                                if old_name.is_none() || self.session.name.as_ref() == Some(&target_name) {
-                                    self.session.name = Some(new_name.clone());
-                                }
-                            
-                                // Update completion context with new session name
-                                let _ = self.update_completion_context();
-                            }
-                            Ok(false) => {
-                                self.ui.print_error(&format!("Session '{}' not found", target_name));
-                                let available_sessions = self.history.list_sessions();
-                                if !available_sessions.is_empty() {
-                                    self.ui.print_info("Available sessions:");
-                                    for session_name in available_sessions.iter().take(5) {
-                                        println!("  {}", session_name);
-                                    }
+                        
+                            // Update completion context with new session name
+                            let _ = self.update_completion_context();
+                        }
+                        Ok(false) => {
+                            self.ui.print_error(&format!("Session '{}' not found", target_name));
+                            let available_sessions = self.history.list_sessions();
+                            if !available_sessions.is_empty() {
+                                self.ui.print_info("Available sessions:");
+                                for session_name in available_sessions.iter().take(5) {
+                                    println!("  {}", session_name);
                                 }
                             }
-                            Err(e) => {
-                                self.ui.print_error(&format!("Failed to rename session: {}", e));
-                            }
+                        }
+                        Err(e) => {
+                            self.ui.print_error(&format!("Failed to rename session: {}", e));
                         }
                     }
                 }
