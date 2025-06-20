@@ -16,6 +16,7 @@ pub enum Command {
     ChatFork(String),
     ChatMerge(String),
     ChatRename(String, Option<String>), // (new_name, old_name)
+    ChatAutoRename(Option<String>), // (session_name)
     Undo(Option<usize>),
     Goto(usize),
     History,
@@ -64,6 +65,7 @@ pub struct CommandParser {
     chat_fork_regex: Regex,
     chat_merge_regex: Regex,
     chat_rename_regex: Regex,
+    chat_auto_rename_regex: Regex,
 }
 
 impl CommandParser {
@@ -102,6 +104,7 @@ impl CommandParser {
             chat_fork_regex: Regex::new(r"^/chat\s+fork\s+(.+)$")?,
             chat_merge_regex: Regex::new(r"^/chat\s+merge\s+(.+)$")?,
             chat_rename_regex: Regex::new(r"^/chat\s+rename\s+(.+?)(?:\s+(.+))?$")?,
+            chat_auto_rename_regex: Regex::new(r"^/chat\s+auto-rename(?:\s+(.+))?$")?,
         })
     }
     
@@ -178,6 +181,9 @@ impl CommandParser {
                     let new_name = Self::unquote_session_name(&caps[1]);
                     let old_name = caps.get(2).map(|m| Self::unquote_session_name(m.as_str()));
                     Some(Command::ChatRename(new_name, old_name))
+                } else if let Some(caps) = self.chat_auto_rename_regex.captures(input) {
+                    let session_name = caps.get(1).map(|m| Self::unquote_session_name(m.as_str()));
+                    Some(Command::ChatAutoRename(session_name))
                 } else {
                     None
                 }

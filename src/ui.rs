@@ -86,7 +86,7 @@ impl NjordCompleter {
         if parts.len() == 1 || (parts.len() == 2 && !input.ends_with(' ')) {
             // Complete chat subcommand
             let subcommands = vec![
-                "new", "save", "load", "list", "delete", "continue", "recent", "fork", "merge", "rename"
+                "new", "save", "load", "list", "delete", "continue", "recent", "fork", "merge", "rename", "auto-rename"
             ];
             
             return subcommands.iter()
@@ -103,6 +103,9 @@ impl NjordCompleter {
                 return self.complete_session_names(current_word);
             } else if subcommand == "rename" && parts.len() >= 3 {
                 // For rename command, complete session names for the second argument (old_name)
+                return self.complete_session_names(current_word);
+            } else if subcommand == "auto-rename" {
+                // For auto-rename command, complete session names for the optional argument
                 return self.complete_session_names(current_word);
             } else if matches!(subcommand, "save" | "fork") {
                 // These commands take new session names, no completion needed

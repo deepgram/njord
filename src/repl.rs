@@ -460,6 +460,7 @@ impl Repl {
                 println!("  /chat fork NAME - Save current session and start fresh");
                 println!("  /chat merge NAME - Merge another session into current");
                 println!("  /chat rename NEW_NAME [OLD_NAME] - Rename a session (defaults to current)");
+                println!("  /chat auto-rename [NAME] - Auto-generate title for session (defaults to current)");
                 println!("  /undo [N] - Remove last N responses (default 1)");
                 println!("  /goto N - Jump back to message N");
                 println!("  /history - Show conversation history");
@@ -644,6 +645,16 @@ impl Repl {
                         Err(e) => {
                             self.ui.print_error(&format!("Failed to rename session: {}", e));
                         }
+                    }
+                }
+            }
+            Command::ChatAutoRename(session_name) => {
+                match self.handle_auto_rename(session_name).await {
+                    Ok(()) => {
+                        // Success message already printed in handle_auto_rename
+                    }
+                    Err(e) => {
+                        self.ui.print_error(&format!("Failed to auto-rename session: {}", e));
                     }
                 }
             }
@@ -1282,5 +1293,207 @@ impl Repl {
         }
         
         Err(anyhow::anyhow!("No provider available"))
+    }
+    
+    async fn handle_auto_rename(&mut self, session_name: Option<String>) -> Result<()> {
+        // Determine which session to rename
+        let (target_session, is_current_session) = if let Some(ref name) = session_name {
+            // Auto-rename specific session
+            if let Some(session) = self.history.load_session(name) {
+                (session.clone(), false)
+            } else {
+                return Err(anyhow::anyhow!("Session '{}' not found", name));
+            }
+        } else {
+            // Auto-rename current session - it must be saved first
+            if let Some(ref current_name) = self.session.name {
+                (self.session.clone(), true)
+            } else {
+                return Err(anyhow::anyhow!("Current session has no name. Save it first with /chat save NAME"));
+            }
+        };
+        
+        // Check if session has messages
+        if target_session.messages.is_empty() {
+            return Err(anyhow::anyhow!("Cannot auto-rename empty session"));
+        }
+        
+        // Find the first user message
+        let first_user_message = target_session.messages.iter()
+            .find(|msg| msg.message.role == "user")
+            .ok_or_else(|| anyhow::anyhow!("No user messages found in session"))?;
+        
+        self.ui.print_info("Generating title...");
+        
+        // Generate title using LLM
+        let generated_title = self.generate_session_title(&first_user_message.message.content).await?;
+        
+        // Sanitize the title
+        let sanitized_title = self.sanitize_session_title(&generated_title);
+        
+        if sanitized_title.is_empty() {
+            return Err(anyhow::anyhow!("Generated title is empty after sanitization"));
+        }
+        
+        // Get the current session name for renaming
+        let current_name = if is_current_session {
+            self.session.name.as_ref().unwrap().clone()
+        } else {
+            session_name.unwrap()
+        };
+        
+        // Rename the session
+        match self.history.rename_session(&current_name, &sanitized_title) {
+            Ok(true) => {
+                self.ui.print_info(&format!("Session '{}' auto-renamed to '{}'", current_name, sanitized_title));
+                
+                // If we renamed the current session, update its name
+                if is_current_session {
+                    self.session.name = Some(sanitized_title.clone());
+                }
+                
+                // Update completion context with new session name
+                let _ = self.update_completion_context();
+                Ok(())
+            }
+            Ok(false) => {
+                Err(anyhow::anyhow!("Session '{}' not found", current_name))
+            }
+            Err(e) => {
+                Err(e)
+            }
+        }
+    }
+    
+    async fn generate_session_title(&self, first_message: &str) -> Result<String> {
+        // Determine which provider to use (prefer current session's provider)
+        let provider_name = self.get_current_provider()
+            .or_else(|| {
+                // Fallback to any available provider, preferring Anthropic
+                if self.providers.contains_key("anthropic") {
+                    Some("anthropic")
+                } else if self.providers.contains_key("openai") {
+                    Some("openai")
+                } else if self.providers.contains_key("gemini") {
+                    Some("gemini")
+                } else {
+                    None
+                }
+            })
+            .ok_or_else(|| anyhow::anyhow!("No provider available for title generation"))?;
+        
+        let provider = self.providers.get(provider_name)
+            .ok_or_else(|| anyhow::anyhow!("Provider '{}' not available", provider_name))?;
+        
+        // Choose a reliable model for title generation
+        let model = match provider_name {
+            "anthropic" => "claude-3-5-sonnet-20241022",
+            "openai" => "gpt-4o",
+            "gemini" => "gemini-2.5-pro",
+            _ => return Err(anyhow::anyhow!("Unknown provider: {}", provider_name)),
+        };
+        
+        // Create system prompt for title generation
+        let system_prompt = "Generate a concise, descriptive title (3-8 words) for a conversation that begins with the following message. Respond with ONLY the title, no quotes, no explanation, no additional text.";
+        
+        // Create messages for the request
+        let messages = vec![
+            Message {
+                role: "system".to_string(),
+                content: system_prompt.to_string(),
+            },
+            Message {
+                role: "user".to_string(),
+                content: first_message.to_string(),
+            },
+        ];
+        
+        // Create chat request (non-streaming for simplicity)
+        let chat_request = ChatRequest {
+            messages,
+            model: model.to_string(),
+            temperature: 0.7,
+            max_tokens: 50, // Short response expected
+            thinking_budget: 0, // No thinking needed for title generation
+            stream: false,
+            thinking: false,
+        };
+        
+        // Send request and collect response
+        let mut stream = provider.chat(chat_request).await?;
+        let mut response = String::new();
+        
+        while let Some(chunk_result) = stream.next().await {
+            match chunk_result {
+                Ok(chunk) => {
+                    // Handle both prefixed and non-prefixed content
+                    if chunk.starts_with("content:") {
+                        response.push_str(&chunk[8..]);
+                    } else {
+                        response.push_str(&chunk);
+                    }
+                }
+                Err(e) => {
+                    return Err(anyhow::anyhow!("Error generating title: {}", e));
+                }
+            }
+        }
+        
+        if response.trim().is_empty() {
+            return Err(anyhow::anyhow!("Empty response from LLM"));
+        }
+        
+        Ok(response.trim().to_string())
+    }
+    
+    fn sanitize_session_title(&self, title: &str) -> String {
+        let mut sanitized = title.trim().to_string();
+        
+        // Remove surrounding quotes if present
+        if (sanitized.starts_with('"') && sanitized.ends_with('"')) ||
+           (sanitized.starts_with('\'') && sanitized.ends_with('\'')) {
+            sanitized = sanitized[1..sanitized.len()-1].to_string();
+        }
+        
+        // Remove common prefixes that LLMs might add
+        let prefixes_to_remove = [
+            "Title: ",
+            "title: ",
+            "Session: ",
+            "session: ",
+            "Chat: ",
+            "chat: ",
+        ];
+        
+        for prefix in &prefixes_to_remove {
+            if sanitized.starts_with(prefix) {
+                sanitized = sanitized[prefix.len()..].to_string();
+                break;
+            }
+        }
+        
+        // Limit length (reasonable session name length)
+        if sanitized.len() > 80 {
+            sanitized = sanitized[..80].to_string();
+            // Try to break at a word boundary
+            if let Some(last_space) = sanitized.rfind(' ') {
+                if last_space > 40 { // Don't make it too short
+                    sanitized = sanitized[..last_space].to_string();
+                }
+            }
+        }
+        
+        // Replace problematic characters for session names
+        sanitized = sanitized
+            .replace('\n', " ")
+            .replace('\r', " ")
+            .replace('\t', " ");
+        
+        // Collapse multiple spaces
+        while sanitized.contains("  ") {
+            sanitized = sanitized.replace("  ", " ");
+        }
+        
+        sanitized.trim().to_string()
     }
 }
