@@ -123,15 +123,16 @@ impl NjordCompleter {
         self.context.session_names.iter()
             .filter(|name| name.to_lowercase().starts_with(&unquoted_current.to_lowercase()))
             .map(|name| {
-                let replacement = if name.contains(' ') {
+                let (display, replacement) = if name.contains(' ') {
                     // Auto-quote session names with spaces
-                    format!("\"{}\"", name)
+                    let quoted = format!("\"{}\"", name);
+                    (quoted.clone(), quoted)
                 } else {
-                    name.clone()
+                    (name.clone(), name.clone())
                 };
                 
                 Pair {
-                    display: replacement.clone(),
+                    display,
                     replacement,
                 }
             })
@@ -279,20 +280,21 @@ impl Completer for NjordCompleter {
         
         // Find the start position of the word being completed
         let start_pos = self.find_completion_start(line, pos);
-        let current_word = &line[start_pos..pos];
         
-        // Find the longest common prefix among all completions
+        // For single completion, return the full replacement
+        if completions.len() == 1 {
+            let completion = &completions[0];
+            return Ok((start_pos, vec![Pair {
+                display: completion.display.clone(),
+                replacement: completion.replacement.clone(),
+            }]));
+        }
+        
+        // For multiple completions, find common prefix
+        let current_word = &line[start_pos..pos];
         let longest_prefix = self.find_longest_common_prefix(&completions, current_word);
         
-        // Only auto-complete if there's a unique match or a clear common prefix extension
-        if completions.len() == 1 && longest_prefix.len() > current_word.len() {
-            // Single match - auto-complete it
-            let extension = &longest_prefix[current_word.len()..];
-            Ok((pos, vec![Pair {
-                display: longest_prefix.clone(),
-                replacement: extension.to_string(),
-            }]))
-        } else if completions.len() > 1 && longest_prefix.len() > current_word.len() {
+        if longest_prefix.len() > current_word.len() {
             // Multiple matches with common prefix - extend to common prefix only
             let extension = &longest_prefix[current_word.len()..];
             Ok((pos, vec![Pair {
