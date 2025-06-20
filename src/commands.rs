@@ -67,6 +67,17 @@ pub struct CommandParser {
 }
 
 impl CommandParser {
+    fn unquote_session_name(name: &str) -> String {
+        let trimmed = name.trim();
+        if (trimmed.starts_with('"') && trimmed.ends_with('"')) ||
+           (trimmed.starts_with('\'') && trimmed.ends_with('\'')) {
+            // Remove surrounding quotes
+            trimmed[1..trimmed.len()-1].to_string()
+        } else {
+            trimmed.to_string()
+        }
+    }
+    
     pub fn new() -> Result<Self> {
         Ok(Self {
             model_regex: Regex::new(r"^/model\s+(.+)$")?,
@@ -90,7 +101,7 @@ impl CommandParser {
             chat_continue_regex: Regex::new(r"^/chat\s+continue(?:\s+(.+))?$")?,
             chat_fork_regex: Regex::new(r"^/chat\s+fork\s+(.+)$")?,
             chat_merge_regex: Regex::new(r"^/chat\s+merge\s+(.+)$")?,
-            chat_rename_regex: Regex::new(r"^/chat\s+rename\s+(\S+)(?:\s+(.+))?$")?,
+            chat_rename_regex: Regex::new(r"^/chat\s+rename\s+(.+?)(?:\s+(.+))?$")?,
         })
     }
     
@@ -151,21 +162,21 @@ impl CommandParser {
                 } else if let Some(caps) = self.edit_regex.captures(input) {
                     Some(Command::Edit(caps[1].parse().unwrap_or(1)))
                 } else if let Some(caps) = self.chat_save_regex.captures(input) {
-                    Some(Command::ChatSave(caps[1].to_string()))
+                    Some(Command::ChatSave(Self::unquote_session_name(&caps[1])))
                 } else if let Some(caps) = self.chat_load_regex.captures(input) {
-                    Some(Command::ChatLoad(caps[1].to_string()))
+                    Some(Command::ChatLoad(Self::unquote_session_name(&caps[1])))
                 } else if let Some(caps) = self.chat_delete_regex.captures(input) {
-                    Some(Command::ChatDelete(caps[1].to_string()))
+                    Some(Command::ChatDelete(Self::unquote_session_name(&caps[1])))
                 } else if let Some(caps) = self.chat_continue_regex.captures(input) {
-                    let name = caps.get(1).map(|m| m.as_str().to_string());
+                    let name = caps.get(1).map(|m| Self::unquote_session_name(m.as_str()));
                     Some(Command::ChatContinue(name))
                 } else if let Some(caps) = self.chat_fork_regex.captures(input) {
-                    Some(Command::ChatFork(caps[1].to_string()))
+                    Some(Command::ChatFork(Self::unquote_session_name(&caps[1])))
                 } else if let Some(caps) = self.chat_merge_regex.captures(input) {
-                    Some(Command::ChatMerge(caps[1].to_string()))
+                    Some(Command::ChatMerge(Self::unquote_session_name(&caps[1])))
                 } else if let Some(caps) = self.chat_rename_regex.captures(input) {
-                    let new_name = caps[1].to_string();
-                    let old_name = caps.get(2).map(|m| m.as_str().to_string());
+                    let new_name = Self::unquote_session_name(&caps[1]);
+                    let old_name = caps.get(2).map(|m| Self::unquote_session_name(m.as_str()));
                     Some(Command::ChatRename(new_name, old_name))
                 } else {
                     None

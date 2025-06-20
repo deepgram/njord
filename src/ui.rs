@@ -100,26 +100,53 @@ impl NjordCompleter {
             // Complete session names for commands that need them
             let subcommand = parts[1];
             if matches!(subcommand, "load" | "delete" | "continue" | "merge") {
-                return self.context.session_names.iter()
-                    .filter(|name| name.starts_with(current_word))
-                    .map(|name| Pair {
-                        display: name.clone(),
-                        replacement: name.clone(),
-                    })
-                    .collect();
+                return self.complete_session_names(current_word);
             } else if subcommand == "rename" && parts.len() >= 3 {
                 // For rename command, complete session names for the second argument (old_name)
-                return self.context.session_names.iter()
-                    .filter(|name| name.starts_with(current_word))
-                    .map(|name| Pair {
-                        display: name.clone(),
-                        replacement: name.clone(),
-                    })
-                    .collect();
+                return self.complete_session_names(current_word);
+            } else if matches!(subcommand, "save" | "fork") {
+                // These commands take new session names, no completion needed
+                return Vec::new();
             }
         }
         
         Vec::new()
+    }
+    
+    fn complete_session_names(&self, current_word: &str) -> Vec<Pair> {
+        // Remove quotes from current_word for matching
+        let unquoted_current = self.unquote_for_matching(current_word);
+        
+        self.context.session_names.iter()
+            .filter(|name| name.to_lowercase().starts_with(&unquoted_current.to_lowercase()))
+            .map(|name| {
+                let replacement = if name.contains(' ') {
+                    // Auto-quote session names with spaces
+                    format!("\"{}\"", name)
+                } else {
+                    name.clone()
+                };
+                
+                Pair {
+                    display: replacement.clone(),
+                    replacement,
+                }
+            })
+            .collect()
+    }
+    
+    fn unquote_for_matching(&self, word: &str) -> String {
+        let trimmed = word.trim();
+        if trimmed.starts_with('"') && !trimmed.ends_with('"') {
+            // Partial quote - remove opening quote for matching
+            trimmed[1..].to_string()
+        } else if (trimmed.starts_with('"') && trimmed.ends_with('"')) ||
+                  (trimmed.starts_with('\'') && trimmed.ends_with('\'')) {
+            // Fully quoted - remove quotes for matching
+            trimmed[1..trimmed.len()-1].to_string()
+        } else {
+            trimmed.to_string()
+        }
     }
     
     fn complete_model_command(&self, line: &str, pos: usize) -> Vec<Pair> {
@@ -166,6 +193,15 @@ impl NjordCompleter {
     
     fn find_completion_start(&self, line: &str, pos: usize) -> usize {
         let line_up_to_pos = &line[..pos];
+        
+        // Handle quoted strings - if we're inside quotes, start from the quote
+        if let Some(quote_pos) = line_up_to_pos.rfind('"') {
+            // Check if this quote is the start of a quoted string (not escaped)
+            let before_quote = &line_up_to_pos[..quote_pos];
+            if before_quote.is_empty() || before_quote.ends_with(' ') {
+                return quote_pos;
+            }
+        }
         
         // For commands, find the start of the current word
         if let Some(last_space) = line_up_to_pos.rfind(' ') {
