@@ -367,42 +367,73 @@ impl UI {
     }
     
     fn read_multiline_input(&mut self, first_line: String) -> Result<Option<String>> {
-        let mut lines = vec![first_line];
+        println!("\x1b[2m(Multi-line mode - end with ``` on its own line, Ctrl+D to finish)\x1b[0m");
         
-        println!("\x1b[2m(Multi-line mode - end with ``` on its own line)\x1b[0m");
+        // Collect all lines including the first one
+        let mut all_lines = vec![first_line];
         
-        loop {
-            match self.editor.readline("\x1b[1;32m... \x1b[0m") {
-                Ok(line) => {
-                    let line = line.trim_end_matches('\n').trim_end_matches('\r');
-                    
-                    // Check for end of code block
-                    if line.trim() == "```" {
-                        lines.push(line.to_string());
-                        break;
-                    }
-                    
-                    lines.push(line.to_string());
+        // Read the complete multi-line input as a single string
+        let full_content = self.read_complete_multiline_content(all_lines)?;
+        
+        if let Some(content) = full_content {
+            // Parse and clean the content
+            let cleaned = self.parse_multiline_content(&content);
+            if cleaned.trim().is_empty() {
+                Ok(None)
+            } else {
+                Ok(Some(cleaned))
+            }
+        } else {
+            Ok(None)
+        }
+    }
+    
+    fn read_complete_multiline_content(&mut self, mut lines: Vec<String>) -> Result<Option<String>> {
+        // Build initial content from existing lines
+        let initial_content = lines.join("\n");
+        
+        // Use readline_with_initial to allow editing the entire multi-line content
+        match self.editor.readline_with_initial(
+            "\x1b[1;32m(edit complete content) \x1b[0m", 
+            (&initial_content, "")
+        ) {
+            Ok(content) => {
+                // Check if content ends properly
+                if content.trim().is_empty() {
+                    Ok(None)
+                } else {
+                    Ok(Some(content))
                 }
-                Err(ReadlineError::Interrupted) | Err(ReadlineError::Eof) => {
-                    break; // Exit multi-line mode on Ctrl-C or Ctrl-D
-                }
-                Err(e) => return Err(anyhow::anyhow!("Failed to read input: {}", e)),
+            }
+            Err(ReadlineError::Interrupted) => Ok(None),
+            Err(ReadlineError::Eof) => Ok(None),
+            Err(e) => Err(anyhow::anyhow!("Failed to read multi-line input: {}", e)),
+        }
+    }
+    
+    fn parse_multiline_content(&self, content: &str) -> String {
+        let lines: Vec<&str> = content.lines().collect();
+        let mut result_lines = Vec::new();
+        let mut in_code_block = false;
+        let mut found_closing = false;
+        
+        for line in lines {
+            if !in_code_block && line.starts_with("```") {
+                in_code_block = true;
+                continue; // Skip the opening ```
+            }
+            
+            if in_code_block && line.trim() == "```" {
+                found_closing = true;
+                break; // Skip the closing ``` and stop processing
+            }
+            
+            if in_code_block {
+                result_lines.push(line);
             }
         }
         
-        // Remove the opening and closing ``` markers
-        if lines.len() >= 2 && lines[0].starts_with("```") && lines.last().unwrap().trim() == "```" {
-            lines.remove(0); // Remove opening ```
-            lines.pop(); // Remove closing ```
-        }
-        
-        let full_input = lines.join("\n");
-        if full_input.trim().is_empty() {
-            Ok(None)
-        } else {
-            Ok(Some(full_input))
-        }
+        result_lines.join("\n")
     }
     
     pub fn print_user_message(&self, number: usize, message: &str) {
