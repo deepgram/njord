@@ -1080,7 +1080,7 @@ impl Repl {
                     self.ui.print_info("⚠️  Execute this code? This will run the code on your system!");
                     self.ui.print_info("Type 'yes' to execute, anything else to cancel:");
                     
-                    if let Some(confirmation) = self.ui.read_input(None)? {
+                    if let Some(confirmation) = self.ui.read_input(None, None)? {
                         if confirmation.trim().to_lowercase() == "yes" {
                             self.execute_code_block(block)?;
                         } else {
