@@ -15,6 +15,7 @@ pub enum Command {
     ChatRecent,
     ChatFork(String),
     ChatMerge(String),
+    ChatRename(String, Option<String>), // (new_name, old_name)
     Undo(Option<usize>),
     Goto(usize),
     History,
@@ -62,6 +63,7 @@ pub struct CommandParser {
     chat_continue_regex: Regex,
     chat_fork_regex: Regex,
     chat_merge_regex: Regex,
+    chat_rename_regex: Regex,
 }
 
 impl CommandParser {
@@ -88,6 +90,7 @@ impl CommandParser {
             chat_continue_regex: Regex::new(r"^/chat\s+continue(?:\s+(.+))?$")?,
             chat_fork_regex: Regex::new(r"^/chat\s+fork\s+(.+)$")?,
             chat_merge_regex: Regex::new(r"^/chat\s+merge\s+(.+)$")?,
+            chat_rename_regex: Regex::new(r"^/chat\s+rename\s+(\S+)(?:\s+(.+))?$")?,
         })
     }
     
@@ -160,6 +163,10 @@ impl CommandParser {
                     Some(Command::ChatFork(caps[1].to_string()))
                 } else if let Some(caps) = self.chat_merge_regex.captures(input) {
                     Some(Command::ChatMerge(caps[1].to_string()))
+                } else if let Some(caps) = self.chat_rename_regex.captures(input) {
+                    let new_name = caps[1].to_string();
+                    let old_name = caps.get(2).map(|m| m.as_str().to_string());
+                    Some(Command::ChatRename(new_name, old_name))
                 } else {
                     None
                 }

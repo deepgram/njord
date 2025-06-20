@@ -64,6 +64,28 @@ impl History {
         Ok(existed)
     }
     
+    pub fn rename_session(&mut self, old_name: &str, new_name: &str) -> Result<bool> {
+        // Check if old session exists
+        if !self.saved_sessions.contains_key(old_name) {
+            return Ok(false);
+        }
+        
+        // Check if new name already exists
+        if self.saved_sessions.contains_key(new_name) {
+            return Err(anyhow::anyhow!("Session '{}' already exists", new_name));
+        }
+        
+        // Remove the old session and re-insert with new name
+        if let Some(mut session) = self.saved_sessions.remove(old_name) {
+            session.name = Some(new_name.to_string());
+            self.saved_sessions.insert(new_name.to_string(), session);
+            self.save()?;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+    
     pub fn auto_save_session(&mut self, session: &ChatSession) -> Result<Option<String>> {
         if !session.should_auto_save() {
             return Ok(None);
