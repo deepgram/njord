@@ -1306,7 +1306,7 @@ impl Repl {
             }
         } else {
             // Auto-rename current session - it must be saved first
-            if let Some(ref current_name) = self.session.name {
+            if self.session.name.is_some() {
                 (self.session.clone(), true)
             } else {
                 return Err(anyhow::anyhow!("Current session has no name. Save it first with /chat save NAME"));
