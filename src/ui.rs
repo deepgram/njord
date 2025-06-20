@@ -140,6 +140,11 @@ impl NjordCompleter {
     
     fn unquote_for_matching(&self, word: &str) -> String {
         let trimmed = word.trim();
+        if trimmed.len() <= 1 {
+            // Single character or empty - return as-is
+            return trimmed.to_string();
+        }
+        
         if trimmed.starts_with('"') && !trimmed.ends_with('"') {
             // Partial quote - remove opening quote for matching
             trimmed[1..].to_string()
