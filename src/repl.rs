@@ -273,7 +273,14 @@ impl Repl {
                 None
             };
             
-            if let Some(input) = self.ui.read_input(prompt_message)? {
+            // Determine session name for prompt
+            let session_name = if self.session.messages.is_empty() {
+                None // Don't show session name for empty sessions
+            } else {
+                self.session.name.as_deref()
+            };
+            
+            if let Some(input) = self.ui.read_input(prompt_message, session_name)? {
                 // Handle Ctrl-C signal
                 if input == "__CTRL_C__" {
                     // Cancel any active request
@@ -442,6 +449,18 @@ impl Repl {
         }
     }
     
+    fn get_session_display(&self) -> String {
+        let message_count = self.session.messages.len();
+        
+        if message_count == 0 {
+            "new (0 messages)".to_string()
+        } else if let Some(name) = &self.session.name {
+            format!("\"{}\" ({} messages)", name, message_count)
+        } else {
+            format!("untitled ({} messages)", message_count)
+        }
+    }
+    
     async fn handle_command(&mut self, command: Command) -> Result<bool> {
         match command {
             Command::Quit => return Ok(false),
@@ -534,10 +553,19 @@ impl Repl {
                     self.session = target_session;
                     // Update current provider based on session's model
                     self.session.current_provider = get_provider_for_model(&self.session.current_model).map(|s| s.to_string());
+                    
+                    // Enhanced feedback with full context
                     let auto_name = self.session.generate_auto_name();
                     let session_name = self.session.name.as_ref().unwrap_or(&auto_name);
-                    self.ui.print_info(&format!("Continuing session: {} ({} messages)", 
-                        session_name, self.session.messages.len()));
+                    let updated = self.session.updated_at.format("%Y-%m-%d %H:%M");
+                    self.ui.print_info(&format!("Continuing session: \"{}\" ({} messages, last updated {})", 
+                        session_name, self.session.messages.len(), updated));
+                    
+                    if let Some(provider_name) = &self.session.current_provider {
+                        self.ui.print_info(&format!("Session model: {} ({})", self.session.current_model, provider_name));
+                    } else {
+                        self.ui.print_info(&format!("Session model: {}", self.session.current_model));
+                    }
                 } else {
                     if let Some(name) = session_name {
                         self.ui.print_error(&format!("Session '{}' not found", name));
@@ -622,11 +650,13 @@ impl Repl {
                 
                     match self.history.rename_session(&target_name, &new_name) {
                         Ok(true) => {
-                            self.ui.print_info(&format!("Session '{}' renamed to '{}'", target_name, new_name));
+                            self.ui.print_info(&format!("Session \"{}\" renamed to \"{}\"", target_name, new_name));
                         
-                            // If we renamed the current session, update its name
+                            // If we renamed the current session, update its name and show context
                             if old_name.is_none() || self.session.name.as_ref() == Some(&target_name) {
                                 self.session.name = Some(new_name.clone());
+                                self.ui.print_info(&format!("Current session: \"{}\" ({} messages)", 
+                                    new_name, self.session.messages.len()));
                             }
                         
                             // Update completion context with new session name
@@ -710,6 +740,10 @@ impl Repl {
                     
                     self.ui.print_info(&format!("Max tokens: {}", self.session.max_tokens));
                     self.ui.print_info(&format!("Thinking budget: {}", self.session.thinking_budget));
+                    
+                    // Show session information
+                    let session_info = self.get_session_display();
+                    self.ui.print_info(&format!("Session: {}", session_info));
                 } else {
                     self.ui.print_error("No provider selected");
                 }
@@ -748,16 +782,22 @@ impl Repl {
                     // Update current provider based on session's model
                     self.session.current_provider = get_provider_for_model(&self.session.current_model).map(|s| s.to_string());
                     
+                    // Enhanced feedback with full context
+                    let created = self.session.created_at.format("%Y-%m-%d %H:%M");
+                    self.ui.print_info(&format!("Loaded copy of session \"{}\" ({} messages, created {})", 
+                        name, self.session.messages.len(), created));
+                    
                     if let Some(session_provider) = &self.session.current_provider {
                         if self.providers.contains_key(session_provider) {
-                            self.ui.print_info(&format!("Loaded copy of session '{}' (provider: {})", name, session_provider));
+                            self.ui.print_info(&format!("Session model: {} ({})", self.session.current_model, session_provider));
                         } else {
-                            self.ui.print_info(&format!("Loaded copy of session '{}' (provider '{}' not available)", name, session_provider));
+                            self.ui.print_info(&format!("Session model: {} (provider '{}' not available)", self.session.current_model, session_provider));
                         }
                     } else {
-                        self.ui.print_info(&format!("Loaded copy of session '{}'", name));
+                        self.ui.print_info(&format!("Session model: {}", self.session.current_model));
                     }
-                    self.ui.print_info(&format!("Session has {} messages (original '{}' unchanged)", self.session.messages.len(), name));
+                    
+                    self.ui.print_info(&format!("Original session \"{}\" unchanged", name));
                 } else {
                     self.ui.print_error(&format!("Session '{}' not found", name));
                     let available_sessions = self.history.list_sessions();
@@ -1349,11 +1389,13 @@ impl Repl {
         // Rename the session
         match self.history.rename_session(&current_name, &sanitized_title) {
             Ok(true) => {
-                self.ui.print_info(&format!("Session '{}' auto-renamed to '{}'", current_name, sanitized_title));
+                self.ui.print_info(&format!("Session \"{}\" auto-renamed to \"{}\"", current_name, sanitized_title));
                 
-                // If we renamed the current session, update its name
+                // If we renamed the current session, update its name and show context
                 if is_current_session {
                     self.session.name = Some(sanitized_title.clone());
+                    self.ui.print_info(&format!("Current session: \"{}\" ({} messages)", 
+                        sanitized_title, self.session.messages.len()));
                 }
                 
                 // Update completion context with new session name

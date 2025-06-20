@@ -369,16 +369,26 @@ impl UI {
         Ok(())
     }
     
-    pub fn read_input(&mut self, prompt_info: Option<(&str, &str)>) -> Result<Option<String>> {
+    pub fn read_input(&mut self, prompt_info: Option<(&str, &str)>, session_name: Option<&str>) -> Result<Option<String>> {
         let (prompt, initial_input) = if let Some((message, status)) = prompt_info {
             let color = match status {
                 "retry" => "\x1b[1;33m", // Yellow for retry
                 "interrupted" => "\x1b[1;31m", // Red for interrupted
                 _ => "\x1b[1;32m", // Green default
             };
-            (format!("{}>>> ({}) \x1b[0m", color, status), message)
+            let session_prefix = if let Some(name) = session_name {
+                format!("[{}] ", name)
+            } else {
+                String::new()
+            };
+            (format!("{}{}>>> ({}) \x1b[0m", color, session_prefix, status), message)
         } else {
-            ("\x1b[1;32m>>> \x1b[0m".to_string(), "")
+            let session_prefix = if let Some(name) = session_name {
+                format!("[{}] ", name)
+            } else {
+                String::new()
+            };
+            (format!("\x1b[1;32m{}>>> \x1b[0m", session_prefix), "")
         };
         
         match self.editor.readline_with_initial(&prompt, (initial_input, "")) {
@@ -396,7 +406,7 @@ impl UI {
                     
                     if input.starts_with("```") {
                         // Multi-line input mode
-                        self.read_multiline_input(input.to_string())
+                        self.read_multiline_input(input.to_string(), session_name)
                     } else {
                         Ok(Some(input.to_string()))
                     }
@@ -414,13 +424,19 @@ impl UI {
         }
     }
     
-    fn read_multiline_input(&mut self, first_line: String) -> Result<Option<String>> {
+    fn read_multiline_input(&mut self, first_line: String, session_name: Option<&str>) -> Result<Option<String>> {
         let mut lines = vec![first_line];
         
         println!("\x1b[2m(Multi-line mode - end with ``` on its own line)\x1b[0m");
         
+        let session_prefix = if let Some(name) = session_name {
+            format!("[{}] ", name)
+        } else {
+            String::new()
+        };
+        
         loop {
-            match self.editor.readline("\x1b[1;32m... \x1b[0m") {
+            match self.editor.readline(&format!("\x1b[1;32m{}... \x1b[0m", session_prefix)) {
                 Ok(line) => {
                     let line = line.trim_end_matches('\n').trim_end_matches('\r');
                     
