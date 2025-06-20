@@ -1337,7 +1337,11 @@ impl Repl {
         
         // Get the current session name for renaming
         let current_name = if is_current_session {
-            self.session.name.as_ref().unwrap().clone()
+            if let Some(ref current_name) = self.session.name {
+                current_name.clone()
+            } else {
+                return Err(anyhow::anyhow!("Current session has no name"));
+            }
         } else {
             session_name.unwrap()
         };
