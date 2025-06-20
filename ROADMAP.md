@@ -171,13 +171,14 @@ Based on current progress, the next most valuable features to implement are:
   - [ ] Configurable key bindings
   - [ ] Custom prompt templates
 
-### Advanced Session Features ✅ MOSTLY COMPLETE!
+### Advanced Session Features ✅ COMPLETE!
 - [x] **Session Management** - COMPLETE!
   - [x] Session forking (save and start fresh)
   - [x] Session merging
   - [x] Auto-save functionality with LLM interaction detection
   - [x] Session metadata (timestamps, provider/model tracking)
   - [x] Safe session loading (non-destructive copies)
+  - [x] Session summarization with LLM-generated summaries
   - [ ] Session templates
   - [ ] Session tagging and descriptions
 
@@ -207,6 +208,7 @@ Based on current progress, the next most valuable features to implement are:
   - [ ] `/tokens` - Show token usage and costs
   - [ ] `/export FORMAT` - Export conversation (markdown, JSON, PDF)
   - [x] `/retry` - Retry functionality built into interruption system
+  - [x] `/summarize [NAME]` - Generate session summaries (COMPLETE!)
 
 - [ ] **Editing and Refinement**
   - [ ] `/edit N` - Edit previous message
@@ -319,7 +321,7 @@ export NJORD_EDITOR="vim"
 **🚀 Phase 2 Code Management is COMPLETE! 🚀**
 **🎯 Phase 3 Enhanced UX is now IN PROGRESS! 🎯**
 
-**Current Status**: All three major providers (OpenAI, Anthropic, and Gemini) are fully implemented with streaming support. The session management system is sophisticated with auto-saving, safe loading, forking, merging, and continuation features. The REPL has professional UX with robust error handling, retry logic, thinking mode support, and comprehensive tab completion. Code block extraction, management, copying (system + OSC52), saving, and execution are all complete. Advanced search across all sessions with highlighted excerpts is implemented. Next focus is enhanced markdown rendering and export features.
+**Current Status**: All three major providers (OpenAI, Anthropic, and Gemini) are fully implemented with streaming support. The session management system is sophisticated with auto-saving, safe loading, forking, merging, and continuation features. The REPL has professional UX with robust error handling, retry logic, thinking mode support, and comprehensive tab completion. Code block extraction, management, copying (system + OSC52), saving, and execution are all complete. Advanced search across all sessions with highlighted excerpts is implemented. Session summarization using LLM-generated summaries is now available. Next focus is enhanced markdown rendering and export features.
 
 ### Phase 2 Success Criteria ✅ ALL COMPLETE!
 - [x] Code block extraction and management works (COMPLETE!)

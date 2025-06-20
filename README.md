@@ -25,6 +25,7 @@ Named after the Norse god of the sea and sailors, Njord guides you through the v
 - **Safe Loading**: Load copies of sessions without modifying originals
 - **Recent Sessions**: Quick access to recently used conversations
 - **Session Search**: Full-text search across all saved sessions with highlighted excerpts
+- **Session Summarization**: Generate AI-powered summaries of conversations for quick review
 
 ### 🔧 Code Block Management
 - **Automatic Extraction**: Code blocks automatically detected and numbered
@@ -121,12 +122,15 @@ Or with command-line options:
 - `/chat list` - List all saved sessions with metadata
 - `/chat recent` - Show recently used sessions
 - `/chat delete NAME` - Delete saved session
+- `/chat rename NEW_NAME [OLD_NAME]` - Rename sessions
+- `/chat auto-rename [NAME]` - Auto-generate session titles
 
 ### 📝 Message & History
 - `/history` - Show full conversation with timestamps
 - `/undo [N]` - Remove last N messages (default 1)
 - `/goto N` - Jump to message N, removing later messages
 - `/search TERM` - Search across all sessions with highlighted results
+- `/summarize [NAME]` - Generate AI summary of session (defaults to current)
 
 ### 🔧 Code Block Operations
 - `/blocks` - List all code blocks in current session
@@ -318,6 +322,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Universal Clipboard Integration**: Works in SSH sessions and all terminal environments
 - **Advanced Session Operations**: Fork, merge, continue, and safe loading of sessions
 - **Full-Text Search**: Search across all sessions with intelligent excerpt highlighting
+- **Session Summarization**: AI-powered summaries for quick conversation review
 - **Enhanced Tab Completion**: Smart command completion with helpful hints
 - **Thinking Mode Support**: See AI reasoning process for supported Anthropic models
 - **Robust Interruption Handling**: Ctrl-C with message queuing and retry logic
