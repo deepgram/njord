@@ -480,6 +480,7 @@ impl Repl {
                 println!("  /chat merge NAME - Merge another session into current");
                 println!("  /chat rename NEW_NAME [OLD_NAME] - Rename a session (defaults to current)");
                 println!("  /chat auto-rename [NAME] - Auto-generate title for session (defaults to current)");
+                println!("  /summarize [NAME] - Generate summary of session (defaults to current)");
                 println!("  /undo [N] - Remove last N responses (default 1)");
                 println!("  /goto N - Jump back to message N");
                 println!("  /history - Show conversation history");
@@ -685,6 +686,16 @@ impl Repl {
                     }
                     Err(e) => {
                         self.ui.print_error(&format!("Failed to auto-rename session: {}", e));
+                    }
+                }
+            }
+            Command::Summarize(session_name) => {
+                match self.handle_summarize(session_name).await {
+                    Ok(()) => {
+                        // Success - summary already printed
+                    }
+                    Err(e) => {
+                        self.ui.print_error(&format!("Failed to summarize session: {}", e));
                     }
                 }
             }
@@ -1541,5 +1552,160 @@ impl Repl {
         }
         
         sanitized.trim().to_string()
+    }
+    
+    async fn handle_summarize(&mut self, session_name: Option<String>) -> Result<()> {
+        // Determine which session to summarize
+        let target_session = if let Some(ref name) = session_name {
+            // Summarize specific session
+            if let Some(session) = self.history.load_session(name) {
+                session.clone()
+            } else {
+                return Err(anyhow::anyhow!("Session '{}' not found", name));
+            }
+        } else {
+            // Summarize current session
+            self.session.clone()
+        };
+        
+        // Check if session has messages
+        if target_session.messages.is_empty() {
+            return Err(anyhow::anyhow!("Cannot summarize empty session"));
+        }
+        
+        // Show session info
+        let session_display = if let Some(ref name) = session_name {
+            format!("\"{}\"", name)
+        } else {
+            "current session".to_string()
+        };
+        
+        self.ui.print_info(&format!("Generating summary for {} ({} messages)...", 
+            session_display, target_session.messages.len()));
+        
+        // Generate summary using LLM
+        let summary = self.generate_session_summary(&target_session).await?;
+        
+        // Display the summary
+        println!();
+        println!("\x1b[1;36mSession Summary\x1b[0m");
+        if let Some(name) = &target_session.name {
+            println!("Session: {}", name);
+        }
+        println!("Messages: {}", target_session.messages.len());
+        println!("Created: {}", target_session.created_at.format("%Y-%m-%d %H:%M UTC"));
+        println!("Model: {}", target_session.current_model);
+        println!();
+        println!("{}", summary);
+        println!();
+        
+        Ok(())
+    }
+    
+    async fn generate_session_summary(&self, session: &ChatSession) -> Result<String> {
+        // Determine which provider to use (prefer current session's provider)
+        let provider_name = self.get_current_provider()
+            .or_else(|| {
+                // Fallback to any available provider, preferring Anthropic
+                if self.providers.contains_key("anthropic") {
+                    Some("anthropic")
+                } else if self.providers.contains_key("openai") {
+                    Some("openai")
+                } else if self.providers.contains_key("gemini") {
+                    Some("gemini")
+                } else {
+                    None
+                }
+            })
+            .ok_or_else(|| anyhow::anyhow!("No provider available for summary generation"))?;
+        
+        let provider = self.providers.get(provider_name)
+            .ok_or_else(|| anyhow::anyhow!("Provider '{}' not available", provider_name))?;
+        
+        // Choose a reliable model for summary generation
+        let model = match provider_name {
+            "anthropic" => "claude-3-5-sonnet-20241022",
+            "openai" => "gpt-4o",
+            "gemini" => "gemini-2.5-pro",
+            _ => return Err(anyhow::anyhow!("Unknown provider: {}", provider_name)),
+        };
+        
+        // Create system prompt for summary generation
+        let system_prompt = "You are tasked with summarizing a conversation between a user and an AI assistant. Provide a concise but comprehensive summary that captures:
+
+1. The main topics discussed
+2. Key questions asked by the user
+3. Important information or solutions provided
+4. Any code, technical concepts, or specific domains covered
+5. The overall flow and progression of the conversation
+
+Format your summary in clear, readable paragraphs. Be objective and factual.";
+        
+        // Build conversation text from session messages
+        let mut conversation_text = String::new();
+        for (i, numbered_message) in session.messages.iter().enumerate() {
+            let role = match numbered_message.message.role.as_str() {
+                "user" => "User",
+                "assistant" => "Assistant",
+                "system" => "System",
+                _ => "Unknown",
+            };
+            
+            conversation_text.push_str(&format!("{}. {} ({}): {}\n\n", 
+                i + 1, 
+                role,
+                numbered_message.timestamp.format("%H:%M:%S"),
+                numbered_message.message.content
+            ));
+        }
+        
+        // Create messages for the request
+        let messages = vec![
+            Message {
+                role: "system".to_string(),
+                content: system_prompt.to_string(),
+            },
+            Message {
+                role: "user".to_string(),
+                content: format!("Please summarize the following conversation:\n\n{}", conversation_text),
+            },
+        ];
+        
+        // Create chat request (non-streaming for simplicity)
+        let chat_request = ChatRequest {
+            messages,
+            model: model.to_string(),
+            temperature: 0.3, // Lower temperature for more consistent summaries
+            max_tokens: 1000, // Allow for detailed summaries
+            thinking_budget: 0, // No thinking needed for summary generation
+            stream: false,
+            thinking: false,
+        };
+        
+        // Send request and collect response
+        let mut stream = provider.chat(chat_request).await?;
+        let mut response = String::new();
+        
+        while let Some(chunk_result) = stream.next().await {
+            match chunk_result {
+                Ok(chunk) => {
+                    // Handle both prefixed and non-prefixed content
+                    if chunk.starts_with("content:") {
+                        response.push_str(&chunk[8..]);
+                    } else {
+                        response.push_str(&chunk);
+                    }
+                }
+                Err(e) => {
+                    return Err(anyhow::anyhow!("Error generating summary: {}", e));
+                }
+            }
+        }
+        
+        if response.trim().is_empty() {
+            return Err(anyhow::anyhow!("Empty response from LLM"));
+        }
+        
+        Ok(response.trim().to_string())
     }
 }

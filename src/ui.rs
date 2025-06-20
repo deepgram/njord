@@ -46,7 +46,7 @@ impl NjordCompleter {
             "/help", "/models", "/model", "/status", "/quit", "/clear", "/history",
             "/chat", "/undo", "/goto", "/search", "/system", "/temp", "/max-tokens",
             "/thinking-budget", "/thinking", "/retry", "/stats", "/tokens", "/export",
-            "/block", "/blocks", "/copy", "/save", "/exec", "/edit"
+            "/block", "/blocks", "/copy", "/save", "/exec", "/edit", "/summarize"
         ];
         
         if line[..pos].starts_with('/') && !line[..pos].contains(' ') {
@@ -72,6 +72,8 @@ impl NjordCompleter {
             return self.complete_thinking_command(line, pos);
         } else if line[..pos].starts_with("/export ") {
             return self.complete_export_command(line, pos);
+        } else if line[..pos].starts_with("/summarize ") {
+            return self.complete_summarize_command(line, pos);
         }
         
         Vec::new()
@@ -198,6 +200,14 @@ impl NjordCompleter {
                 replacement: format.to_string(),
             })
             .collect()
+    }
+    
+    fn complete_summarize_command(&self, line: &str, pos: usize) -> Vec<Pair> {
+        let start_pos = self.find_completion_start(line, pos);
+        let current_word = &line[start_pos..pos];
+        
+        // Complete session names for summarize command
+        self.complete_session_names(current_word)
     }
     
     fn find_completion_start(&self, line: &str, pos: usize) -> usize {

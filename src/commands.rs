@@ -17,6 +17,7 @@ pub enum Command {
     ChatMerge(String),
     ChatRename(String, Option<String>), // (new_name, old_name)
     ChatAutoRename(Option<String>), // (session_name)
+    Summarize(Option<String>), // (session_name)
     Undo(Option<usize>),
     Goto(usize),
     History,
@@ -66,6 +67,7 @@ pub struct CommandParser {
     chat_merge_regex: Regex,
     chat_rename_regex: Regex,
     chat_auto_rename_regex: Regex,
+    summarize_regex: Regex,
 }
 
 impl CommandParser {
@@ -105,6 +107,7 @@ impl CommandParser {
             chat_merge_regex: Regex::new(r"^/chat\s+merge\s+(.+)$")?,
             chat_rename_regex: Regex::new(r"^/chat\s+rename\s+(.+?)(?:\s+(.+))?$")?,
             chat_auto_rename_regex: Regex::new(r"^/chat\s+auto-rename(?:\s+(.+))?$")?,
+            summarize_regex: Regex::new(r"^/summarize(?:\s+(.+))?$")?,
         })
     }
     
@@ -184,6 +187,9 @@ impl CommandParser {
                 } else if let Some(caps) = self.chat_auto_rename_regex.captures(input) {
                     let session_name = caps.get(1).map(|m| Self::unquote_session_name(m.as_str()));
                     Some(Command::ChatAutoRename(session_name))
+                } else if let Some(caps) = self.summarize_regex.captures(input) {
+                    let session_name = caps.get(1).map(|m| Self::unquote_session_name(m.as_str()));
+                    Some(Command::Summarize(session_name))
                 } else {
                     None
                 }
