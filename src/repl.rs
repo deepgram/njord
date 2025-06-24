@@ -1346,7 +1346,7 @@ impl Repl {
                                                             if content.starts_with("thinking:") {
                                                                 let thinking_text = &content[9..]; // Remove "thinking:" prefix
                                                                 if !thinking_started {
-                                                                    self.ui.print_thinking_prefix(message_number + 1);
+                                                                    self.ui.print_thinking_prefix(agent_number);
                                                                     thinking_started = true;
                                                                     has_thinking = true;
                                                                 }
