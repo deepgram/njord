@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use crate::session::ChatSession;
 
-const HISTORY_FILE: &str = ".llm-history";
+const HISTORY_FILE: &str = ".njord";
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct History {
