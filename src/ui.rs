@@ -398,7 +398,8 @@ impl UI {
         println!("  /models - List available models");
         println!("  /quit - Exit Njord");
         println!();
-        println!("For multi-line input, start with ``` and end with ``` on its own line.");
+        println!("For multi-line input, start with {{ and end with }} on its own line.");
+        println!("You can also use {{TAG and TAG}} for tagged blocks (e.g., {{python and python}}).");
         println!();
         
         Ok(())
@@ -439,7 +440,7 @@ impl UI {
                     // Add to history for arrow key navigation
                     self.editor.add_history_entry(&line)?;
                     
-                    if input.starts_with("```") {
+                    if input.starts_with("{") {
                         // Multi-line input mode
                         self.read_multiline_input(input.to_string(), session_name)
                     } else {
@@ -460,9 +461,22 @@ impl UI {
     }
     
     fn read_multiline_input(&mut self, first_line: String, session_name: Option<&str>) -> Result<Option<String>> {
-        let mut lines = vec![first_line];
+        // Parse the opening tag from the first line
+        let tag = self.parse_opening_tag(&first_line);
+        let end_marker = if let Some(ref tag_name) = tag {
+            format!("{}}}", tag_name)
+        } else {
+            "}".to_string()
+        };
         
-        println!("\x1b[2m(Multi-line mode - end with ``` on its own line)\x1b[0m");
+        let mut lines = Vec::new();
+        
+        // Show helpful message about the expected end marker
+        if let Some(ref tag_name) = tag {
+            println!("\x1b[2m(Multi-line mode - end with '{}' on its own line)\x1b[0m", end_marker);
+        } else {
+            println!("\x1b[2m(Multi-line mode - end with '}}' on its own line)\x1b[0m");
+        }
         
         let session_prefix = if let Some(name) = session_name {
             format!("[{}] ", name)
@@ -475,9 +489,8 @@ impl UI {
                 Ok(line) => {
                     let line = line.trim_end_matches('\n').trim_end_matches('\r');
                     
-                    // Check for end of code block
-                    if line.trim() == "```" {
-                        lines.push(line.to_string());
+                    // Check for end marker
+                    if line.trim() == end_marker {
                         break;
                     }
                     
@@ -490,18 +503,32 @@ impl UI {
             }
         }
         
-        // Remove the opening and closing ``` markers
-        if lines.len() >= 2 && lines[0].starts_with("```") && lines.last().unwrap().trim() == "```" {
-            lines.remove(0); // Remove opening ```
-            lines.pop(); // Remove closing ```
-        }
-        
         let full_input = lines.join("\n");
         if full_input.trim().is_empty() {
             Ok(None)
         } else {
             Ok(Some(full_input))
         }
+    }
+    
+    fn parse_opening_tag(&self, line: &str) -> Option<String> {
+        let trimmed = line.trim();
+        
+        // Check for simple "{" case
+        if trimmed == "{" {
+            return None;
+        }
+        
+        // Check for "{TAG" pattern
+        if trimmed.starts_with('{') && trimmed.len() > 1 {
+            let tag = &trimmed[1..];
+            // Validate that the tag doesn't contain invalid characters
+            if tag.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-') {
+                return Some(tag.to_string());
+            }
+        }
+        
+        None
     }
     
     pub fn print_user_message(&self, number: usize, message: &str) {
