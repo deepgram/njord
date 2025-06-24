@@ -124,7 +124,7 @@ impl NjordCompleter {
         let is_quoted_input = current_word.trim().starts_with('"') || current_word.trim().starts_with('\'');
         
         self.context.session_names.iter()
-            .filter(|name| name.to_lowercase().starts_with(&unquoted_current.to_lowercase()))
+            .filter(|name| name.starts_with(&unquoted_current))
             .map(|name| {
                 let (display, replacement) = if is_quoted_input {
                     // User started with quotes, so complete with quotes
@@ -344,10 +344,7 @@ impl Hinter for NjordCompleter {
     fn hint(&self, line: &str, pos: usize, _ctx: &rustyline::Context<'_>) -> Option<Self::Hint> {
         let completions = self.complete_command(line, pos);
         
-        if completions.len() == 1 {
-            // Single completion available - show it as a hint
-            Some(format!(" [{}]", completions[0].display))
-        } else if completions.len() > 1 {
+        if completions.len() > 1 {
             // Multiple completions available - show them as a hint
             let completion_names: Vec<String> = completions.iter()
                 .map(|pair| pair.display.clone())
@@ -364,6 +361,7 @@ impl Hinter for NjordCompleter {
             
             Some(format!(" [{}]", display_completions.join(" ")))
         } else {
+            // For single completion or no completions, don't show hints
             None
         }
     }

@@ -325,6 +325,9 @@ impl Repl {
                 // Auto-save session if it has LLM interactions
                 if let Err(e) = self.history.auto_save_session(&self.session) {
                     self.ui.print_error(&format!("Failed to auto-save session: {}", e));
+                } else {
+                    // Update completion context after auto-save
+                    let _ = self.update_completion_context();
                 }
             }
         }
@@ -530,6 +533,9 @@ impl Repl {
                 // Auto-save current session if it has interactions
                 if let Err(e) = self.history.auto_save_session(&self.session) {
                     self.ui.print_error(&format!("Failed to auto-save current session: {}", e));
+                } else {
+                    // Update completion context after auto-save
+                    let _ = self.update_completion_context();
                 }
                 
                 self.session = ChatSession::new(self.config.default_model.clone(), self.config.temperature, self.config.max_tokens, self.config.thinking_budget);
@@ -549,6 +555,9 @@ impl Repl {
                     // Auto-save current session if it has interactions
                     if let Err(e) = self.history.auto_save_session(&self.session) {
                         self.ui.print_error(&format!("Failed to auto-save current session: {}", e));
+                    } else {
+                        // Update completion context after auto-save
+                        let _ = self.update_completion_context();
                     }
                     
                     self.session = target_session;
@@ -601,6 +610,8 @@ impl Repl {
                             self.session = ChatSession::new(self.config.default_model.clone(), self.config.temperature, self.config.max_tokens, self.config.thinking_budget);
                             self.session.current_provider = get_provider_for_model(&self.session.current_model).map(|s| s.to_string());
                             self.ui.print_info("Started new session");
+                            // Update completion context with new session
+                            let _ = self.update_completion_context();
                         }
                         Err(e) => {
                             self.ui.print_error(&format!("Failed to fork session: {}", e));
@@ -797,6 +808,9 @@ impl Repl {
                     // Auto-save current session if it has interactions
                     if let Err(e) = self.history.auto_save_session(&self.session) {
                         self.ui.print_error(&format!("Failed to auto-save current session: {}", e));
+                    } else {
+                        // Update completion context after auto-save
+                        let _ = self.update_completion_context();
                     }
                     
                     // Create a copy of the session (new ID, no name, fresh timestamps)
