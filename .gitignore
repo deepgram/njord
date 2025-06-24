@@ -31,8 +31,8 @@ ehthumbs.db
 Thumbs.db
 
 # Project specific
-.llm-history
-.llm-history.*
+.njord
+.njord.*
 
 # Environment files
 .env

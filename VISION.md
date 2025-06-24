@@ -22,7 +22,7 @@ This is an **Interactive LLM REPL** - a terminal-based chat interface for multip
 
 ### Session Management
 - Numbered interactions (User 1, Agent 1, User 2, Agent 2...)
-- `/chat new` - Start fresh session, archive current to `.llm-history`
+- `/chat new` - Start fresh session, archive current to `.njord`
 - `/chat save NAME` - Save current session with custom name
 - `/chat load NAME` - Load named session
 - `/chat list` - Show available saved sessions
@@ -61,7 +61,7 @@ This is an **Interactive LLM REPL** - a terminal-based chat interface for multip
 - Tab completion for commands and model names
 
 ### Persistence
-- `.llm-history` in current directory (JSON format)
+- `.njord` in current directory (JSON format)
 - Automatic backup rotation
 - Resume last session on startup with context display
 - Cross-session search capabilities
