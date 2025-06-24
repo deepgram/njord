@@ -531,10 +531,6 @@ impl UI {
         None
     }
     
-    pub fn print_user_message(&self, number: usize, message: &str) {
-        println!("\x1b[1;34mUser {}\x1b[0m: {}", number, message);
-    }
-    
     pub fn print_agent_prefix(&self, number: usize) {
         print!("\x1b[1;35mAgent {}\x1b[0m: ", number);
         io::stdout().flush().unwrap();

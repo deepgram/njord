@@ -1230,7 +1230,6 @@ impl Repl {
         
         // Don't add user message to history until we have a successful response
         let message_number = self.session.messages.len() + 1;
-        self.ui.print_user_message(message_number, &message);
         
         for attempt in 1..=max_retries {
             if attempt > 1 {
