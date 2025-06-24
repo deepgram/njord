@@ -472,7 +472,7 @@ impl UI {
         let mut lines = Vec::new();
         
         // Show helpful message about the expected end marker
-        if let Some(ref tag_name) = tag {
+        if let Some(ref _tag_name) = tag {
             println!("\x1b[2m(Multi-line mode - end with '{}' on its own line)\x1b[0m", end_marker);
         } else {
             println!("\x1b[2m(Multi-line mode - end with '}}' on its own line)\x1b[0m");
