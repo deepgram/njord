@@ -464,6 +464,38 @@ impl Repl {
         }
     }
     
+    fn get_next_agent_number(&self) -> usize {
+        self.session.messages.iter()
+            .filter(|msg| msg.message.role == "assistant")
+            .count() + 1
+    }
+    
+    fn get_agent_number_for_message(&self, message_number: usize) -> Option<usize> {
+        let mut agent_count = 0;
+        for (i, msg) in self.session.messages.iter().enumerate() {
+            if msg.message.role == "assistant" {
+                agent_count += 1;
+                if i + 1 == message_number {
+                    return Some(agent_count);
+                }
+            }
+        }
+        None
+    }
+    
+    fn get_message_number_for_agent(&self, agent_number: usize) -> Option<usize> {
+        let mut agent_count = 0;
+        for (i, msg) in self.session.messages.iter().enumerate() {
+            if msg.message.role == "assistant" {
+                agent_count += 1;
+                if agent_count == agent_number {
+                    return Some(i + 1);
+                }
+            }
+        }
+        None
+    }
+    
     async fn handle_command(&mut self, command: Command) -> Result<bool> {
         match command {
             Command::Quit => return Ok(false),
@@ -485,7 +517,7 @@ impl Repl {
                 println!("  /chat auto-rename [NAME] - Auto-generate title for session (defaults to current)");
                 println!("  /summarize [NAME] - Generate summary of session (defaults to current)");
                 println!("  /undo [N] - Undo last N agent responses (default 1), restores user message for editing");
-                println!("  /goto N - Jump back to message N");
+                println!("  /goto N - Jump back to Agent N (removes later messages)");
                 println!("  /history - Show conversation history");
                 println!("  /blocks - List all code blocks in session");
                 println!("  /block N - Display code block N");
@@ -962,6 +994,7 @@ impl Repl {
                     }
                     println!();
                     
+                    let mut agent_count = 0;
                     for numbered_message in &self.session.messages {
                         let timestamp = numbered_message.timestamp.format("%H:%M:%S");
                         let role_color = if numbered_message.message.role == "user" {
@@ -970,10 +1003,23 @@ impl Repl {
                             "\x1b[1;35m" // Magenta for assistant
                         };
                         
+                        let display_number = if numbered_message.message.role == "assistant" {
+                            agent_count += 1;
+                            agent_count
+                        } else {
+                            numbered_message.number
+                        };
+                        
+                        let role_display = if numbered_message.message.role == "assistant" {
+                            "Agent".to_string()
+                        } else {
+                            numbered_message.message.role.chars().next().unwrap().to_uppercase().collect::<String>() + &numbered_message.message.role[1..]
+                        };
+                        
                         let mut header = format!("{}[{}] {} {}", 
                             role_color,
-                            numbered_message.number,
-                            numbered_message.message.role.chars().next().unwrap().to_uppercase().collect::<String>() + &numbered_message.message.role[1..],
+                            display_number,
+                            role_display,
                             timestamp
                         );
                         
@@ -993,16 +1039,21 @@ impl Repl {
                     }
                 }
             }
-            Command::Goto(message_number) => {
-                match self.session.goto(message_number) {
-                    Ok(()) => {
-                        self.ui.print_info(&format!("Jumped to message {}, removed {} later messages", 
-                            message_number, 
-                            self.session.messages.len().saturating_sub(message_number)));
+            Command::Goto(agent_number) => {
+                // Convert agent number to message number
+                if let Some(message_number) = self.get_message_number_for_agent(agent_number) {
+                    match self.session.goto(message_number) {
+                        Ok(()) => {
+                            let removed_count = self.session.messages.len().saturating_sub(message_number);
+                            self.ui.print_info(&format!("Jumped to Agent {}, removed {} later messages", 
+                                agent_number, removed_count));
+                        }
+                        Err(e) => {
+                            self.ui.print_error(&e.to_string());
+                        }
                     }
-                    Err(e) => {
-                        self.ui.print_error(&e.to_string());
-                    }
+                } else {
+                    self.ui.print_error(&format!("Agent {} not found", agent_number));
                 }
             }
             Command::System(prompt) => {
@@ -1230,6 +1281,7 @@ impl Repl {
         
         // Don't add user message to history until we have a successful response
         let message_number = self.session.messages.len() + 1;
+        let agent_number = self.get_next_agent_number();
         
         for attempt in 1..=max_retries {
             if attempt > 1 {
@@ -1303,10 +1355,10 @@ impl Repl {
                                                                 let content_text = &content[8..]; // Remove "content:" prefix
                                                                 if has_thinking && !has_content {
                                                                     self.ui.print_thinking_end();
-                                                                    self.ui.print_agent_prefix(message_number + 1);
+                                                                    self.ui.print_agent_prefix(agent_number);
                                                                     has_content = true;
                                                                 } else if !has_content {
-                                                                    self.ui.print_agent_prefix(message_number + 1);
+                                                                    self.ui.print_agent_prefix(agent_number);
                                                                     has_content = true;
                                                                 }
                                                                 self.ui.print_agent_chunk(content_text);
@@ -1317,7 +1369,7 @@ impl Repl {
                                                                     if has_thinking {
                                                                         self.ui.print_thinking_end();
                                                                     }
-                                                                    self.ui.print_agent_prefix(message_number + 1);
+                                                                    self.ui.print_agent_prefix(agent_number);
                                                                     has_content = true;
                                                                 }
                                                                 self.ui.print_agent_chunk(&content);
