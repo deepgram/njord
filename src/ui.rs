@@ -522,8 +522,8 @@ impl UI {
         // Check for "{TAG" pattern
         if trimmed.starts_with('{') && trimmed.len() > 1 {
             let tag = &trimmed[1..];
-            // Validate that the tag doesn't contain invalid characters
-            if tag.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-') {
+            // Any contiguous set of non-space characters is a valid tag
+            if !tag.contains(char::is_whitespace) && !tag.is_empty() {
                 return Some(tag.to_string());
             }
         }
