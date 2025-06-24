@@ -470,19 +470,6 @@ impl Repl {
             .count() + 1
     }
     
-    fn get_agent_number_for_message(&self, message_number: usize) -> Option<usize> {
-        let mut agent_count = 0;
-        for (i, msg) in self.session.messages.iter().enumerate() {
-            if msg.message.role == "assistant" {
-                agent_count += 1;
-                if i + 1 == message_number {
-                    return Some(agent_count);
-                }
-            }
-        }
-        None
-    }
-    
     fn get_message_number_for_agent(&self, agent_number: usize) -> Option<usize> {
         let mut agent_count = 0;
         for (i, msg) in self.session.messages.iter().enumerate() {
@@ -994,59 +981,93 @@ impl Repl {
                     }
                     println!();
                     
-                    let mut agent_count = 0;
-                    for numbered_message in &self.session.messages {
-                        let timestamp = numbered_message.timestamp.format("%H:%M:%S");
-                        let role_color = if numbered_message.message.role == "user" {
-                            "\x1b[1;34m" // Blue for user
+                    let mut conversation_index = 0;
+                    let mut i = 0;
+                    
+                    while i < self.session.messages.len() {
+                        let current_msg = &self.session.messages[i];
+                        
+                        if current_msg.message.role == "user" {
+                            conversation_index += 1;
+                            
+                            // Print user message
+                            let timestamp = current_msg.timestamp.format("%H:%M:%S");
+                            let header = format!("\x1b[1;34m[{}] User {}", conversation_index, timestamp);
+                            let styled_content = self.ui.style_code_blocks(&current_msg.message.content);
+                            println!("{}\x1b[0m: {}", header, styled_content);
+                            println!();
+                            
+                            // Look for the corresponding agent message
+                            if i + 1 < self.session.messages.len() {
+                                let next_msg = &self.session.messages[i + 1];
+                                if next_msg.message.role == "assistant" {
+                                    let agent_timestamp = next_msg.timestamp.format("%H:%M:%S");
+                                    let mut agent_header = format!("\x1b[1;35m[{}] Agent {}", conversation_index, agent_timestamp);
+                                    
+                                    // Add provider/model info for assistant messages
+                                    if let (Some(provider), Some(model)) = (&next_msg.provider, &next_msg.model) {
+                                        agent_header.push_str(&format!(" ({}:{})", provider, model));
+                                    } else if let Some(provider) = &next_msg.provider {
+                                        agent_header.push_str(&format!(" ({})", provider));
+                                    }
+                                    
+                                    let agent_styled_content = self.ui.style_code_blocks(&next_msg.message.content);
+                                    println!("{}\x1b[0m: {}", agent_header, agent_styled_content);
+                                    println!();
+                                    
+                                    i += 2; // Skip both user and agent message
+                                } else {
+                                    i += 1; // Only skip user message
+                                }
+                            } else {
+                                i += 1; // Only skip user message
+                            }
                         } else {
-                            "\x1b[1;35m" // Magenta for assistant
-                        };
-                        
-                        let display_number = if numbered_message.message.role == "assistant" {
-                            agent_count += 1;
-                            agent_count
-                        } else {
-                            numbered_message.number
-                        };
-                        
-                        let role_display = if numbered_message.message.role == "assistant" {
-                            "Agent".to_string()
-                        } else {
-                            numbered_message.message.role.chars().next().unwrap().to_uppercase().collect::<String>() + &numbered_message.message.role[1..]
-                        };
-                        
-                        let mut header = format!("{}[{}] {} {}", 
-                            role_color,
-                            display_number,
-                            role_display,
-                            timestamp
-                        );
-                        
-                        // Add provider/model info for assistant messages
-                        if numbered_message.message.role == "assistant" {
-                            if let (Some(provider), Some(model)) = (&numbered_message.provider, &numbered_message.model) {
+                            // Orphaned agent message (shouldn't happen in normal flow)
+                            let timestamp = current_msg.timestamp.format("%H:%M:%S");
+                            let mut header = format!("\x1b[1;35m[orphaned] Agent {}", timestamp);
+                            
+                            if let (Some(provider), Some(model)) = (&current_msg.provider, &current_msg.model) {
                                 header.push_str(&format!(" ({}:{})", provider, model));
-                            } else if let Some(provider) = &numbered_message.provider {
+                            } else if let Some(provider) = &current_msg.provider {
                                 header.push_str(&format!(" ({})", provider));
                             }
+                            
+                            let styled_content = self.ui.style_code_blocks(&current_msg.message.content);
+                            println!("{}\x1b[0m: {}", header, styled_content);
+                            println!();
+                            
+                            i += 1;
                         }
-                        
-                        // Apply code block styling to the message content
-                        let styled_content = self.ui.style_code_blocks(&numbered_message.message.content);
-                        println!("{}\x1b[0m: {}", header, styled_content);
-                        println!();
                     }
                 }
             }
             Command::Goto(agent_number) => {
                 // Convert agent number to message number
                 if let Some(message_number) = self.get_message_number_for_agent(agent_number) {
+                    let removed_count = self.session.messages.len().saturating_sub(message_number);
+                    
+                    // Before jumping, check if there's a user message after this agent message
+                    let user_message_to_stage = if message_number < self.session.messages.len() {
+                        // Look for the next user message after this agent message
+                        self.session.messages.iter()
+                            .skip(message_number)
+                            .find(|msg| msg.message.role == "user")
+                            .map(|msg| msg.message.content.clone())
+                    } else {
+                        None
+                    };
+                    
                     match self.session.goto(message_number) {
                         Ok(()) => {
-                            let removed_count = self.session.messages.len().saturating_sub(message_number);
                             self.ui.print_info(&format!("Jumped to Agent {}, removed {} later messages", 
                                 agent_number, removed_count));
+                            
+                            // Stage the user message if we found one
+                            if let Some(user_msg) = user_message_to_stage {
+                                self.queued_message = Some(user_msg);
+                                self.ui.print_info("User message staged for editing - press Enter to modify and resend");
+                            }
                         }
                         Err(e) => {
                             self.ui.print_error(&e.to_string());
@@ -1280,7 +1301,6 @@ impl Repl {
         };
         
         // Don't add user message to history until we have a successful response
-        let message_number = self.session.messages.len() + 1;
         let agent_number = self.get_next_agent_number();
         
         for attempt in 1..=max_retries {
