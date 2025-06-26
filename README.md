@@ -123,7 +123,8 @@ Or with command-line options:
 - `/chat recent` - Show recently used sessions
 - `/chat delete NAME` - Delete saved session
 - `/chat rename NEW_NAME [OLD_NAME]` - Rename sessions
-- `/chat auto-rename [NAME]` - Auto-generate session titles
+- `/chat auto-rename [NAME]` - Auto-generate session titles using LLM
+- `/chat auto-rename-all` - Bulk auto-rename all anonymous sessions
 
 ### 📝 Message & History
 - `/history` - Show full conversation with timestamps
@@ -323,6 +324,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Advanced Session Operations**: Fork, merge, continue, and safe loading of sessions
 - **Full-Text Search**: Search across all sessions with intelligent excerpt highlighting
 - **Session Summarization**: AI-powered summaries for quick conversation review
+- **Auto-Renaming System**: LLM-generated session titles with bulk processing support
 - **Enhanced Tab Completion**: Smart command completion with helpful hints
 - **Thinking Mode Support**: See AI reasoning process for supported Anthropic models
 - **Robust Interruption Handling**: Ctrl-C with message queuing and retry logic

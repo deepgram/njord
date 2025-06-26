@@ -46,8 +46,11 @@ Njord is an interactive LLM REPL that aims to provide a powerful terminal-based 
   - [x] `/chat save NAME` - Save current session with name
   - [x] `/chat fork NAME` - Save current session and start fresh
   - [x] `/chat merge NAME` - Merge another session into current
+  - [x] `/chat auto-rename [NAME]` - Auto-generate session titles using LLM
+  - [x] `/chat auto-rename-all` - Bulk auto-rename all anonymous sessions
   - [x] Automatic session naming with timestamps
   - [x] Prevention of saving empty or command-only sessions
+  - [x] Session name source tracking (user-provided vs auto-generated)
 
 ## Next Priority 🎯
 
@@ -179,6 +182,8 @@ Based on current progress, the next most valuable features to implement are:
   - [x] Session metadata (timestamps, provider/model tracking)
   - [x] Safe session loading (non-destructive copies)
   - [x] Session summarization with LLM-generated summaries
+  - [x] Auto-renaming with LLM-generated titles (single and bulk)
+  - [x] Session name source tracking and duplicate handling
   - [ ] Session templates
   - [ ] Session tagging and descriptions
 
