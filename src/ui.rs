@@ -88,7 +88,7 @@ impl NjordCompleter {
         if parts.len() == 1 || (parts.len() == 2 && !input.ends_with(' ')) {
             // Complete chat subcommand
             let subcommands = vec![
-                "new", "save", "load", "list", "delete", "continue", "recent", "fork", "merge", "rename", "auto-rename"
+                "new", "save", "load", "list", "delete", "continue", "recent", "fork", "merge", "rename", "auto-rename", "auto-rename-all"
             ];
             
             return subcommands.iter()

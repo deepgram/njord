@@ -17,6 +17,7 @@ pub enum Command {
     ChatMerge(String),
     ChatRename(String, Option<String>), // (new_name, old_name)
     ChatAutoRename(Option<String>), // (session_name)
+    ChatAutoRenameAll,
     Summarize(Option<String>), // (session_name)
     Undo(Option<usize>),
     Goto(usize),
@@ -123,6 +124,7 @@ impl CommandParser {
             "/chat new" => Some(Command::ChatNew),
             "/chat list" => Some(Command::ChatList),
             "/chat recent" => Some(Command::ChatRecent),
+            "/chat auto-rename-all" => Some(Command::ChatAutoRenameAll),
             "/history" => Some(Command::History),
             "/blocks" => Some(Command::Blocks),
             "/tokens" => Some(Command::Tokens),
