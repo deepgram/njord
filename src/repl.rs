@@ -1860,8 +1860,14 @@ Format your summary in clear, readable paragraphs. Be objective and factual.";
         let mut failed_count = 0;
         let mut skipped_count = 0;
         
+        // Collect session names and data to avoid borrow checker issues
+        let candidate_data: Vec<(String, ChatSession)> = candidates
+            .into_iter()
+            .map(|(name, session)| (name.clone(), session.clone()))
+            .collect();
+        
         // Process each candidate session
-        for (session_name, session) in candidates {
+        for (session_name, session) in candidate_data {
             // Skip sessions with no messages
             if session.messages.is_empty() {
                 self.ui.print_info(&format!("Skipping \"{}\" (no messages)", session_name));
