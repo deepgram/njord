@@ -496,7 +496,7 @@ impl Repl {
                 println!("  /chat load NAME - Load a previously saved session");
                 println!("  /chat list - List all saved sessions");
                 println!("  /chat delete [NAME] - Delete a saved session (defaults to current)");
-                println!("  /chat continue - Continue the most recent session");
+                println!("  /chat continue [NAME] - Continue the most recent session or specified session");
                 println!("  /chat recent - Show recent sessions");
                 println!("  /chat fork NAME - Save current session and start fresh");
                 println!("  /chat merge NAME - Merge another session into current");
