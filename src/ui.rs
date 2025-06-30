@@ -452,7 +452,7 @@ impl UI {
     pub fn new() -> Result<Self> {
         // Create config with bracketed paste enabled
         let config = Config::builder()
-            .enable_bracketed_paste(true)
+            .bracketed_paste(true)
             .build();
         
         let mut editor = Editor::with_config(config)?;
