@@ -788,9 +788,9 @@ impl Repl {
                 if new_name.trim().is_empty() {
                     self.ui.print_error("New session name cannot be empty");
                 } else {
-                    let target_name = if let Some(session_ref) = old_session_ref {
+                    let target_name = if let Some(ref session_ref) = old_session_ref {
                         // Rename specific session by reference
-                        match self.resolve_session_reference(&session_ref) {
+                        match self.resolve_session_reference(session_ref) {
                             Ok(name) => name,
                             Err(e) => {
                                 self.ui.print_error(&e.to_string());
@@ -1363,7 +1363,7 @@ impl Repl {
                 match save_type {
                     SaveType::Agent => {
                         if let Some(content) = self.get_agent_message(number) {
-                            match std::fs::write(filename, content) {
+                            match std::fs::write(&filename, content) {
                                 Ok(()) => {
                                     let display_number = number.unwrap_or_else(|| {
                                         self.session.messages.iter()
@@ -1383,7 +1383,7 @@ impl Repl {
                     }
                     SaveType::User => {
                         if let Some(content) = self.get_user_message(number) {
-                            match std::fs::write(filename, content) {
+                            match std::fs::write(&filename, content) {
                                 Ok(()) => {
                                     let display_number = number.unwrap_or_else(|| {
                                         self.session.messages.iter()
@@ -1405,7 +1405,7 @@ impl Repl {
                         let block_number = number.unwrap_or(1);
                         let all_blocks = self.get_all_code_blocks();
                         if let Some(block) = all_blocks.get(block_number.saturating_sub(1)) {
-                            match std::fs::write(filename, &block.code_block.content) {
+                            match std::fs::write(&filename, &block.code_block.content) {
                                 Ok(()) => {
                                     self.ui.print_info(&format!("Code block {} saved to '{}'", block_number, filename));
                                 }
