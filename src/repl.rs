@@ -6,7 +6,7 @@ use tokio_util::sync::CancellationToken;
 use chrono::Utc;
 
 use crate::{
-    commands::{Command, CommandParser},
+    commands::{Command, CommandParser, CopyType, SaveType, SessionReference},
     config::Config,
     history::History,
     providers::{create_provider, get_provider_for_model, LLMProvider, Message, ChatRequest},
@@ -32,6 +32,7 @@ pub struct Repl {
     active_request_token: Option<CancellationToken>,
     interrupted_message: Option<String>,
     ctrl_c_rx: mpsc::UnboundedReceiver<()>,
+    last_session_list: Vec<String>, // For ephemeral session references
 }
 
 impl Repl {
@@ -106,6 +107,7 @@ impl Repl {
             active_request_token: None,
             interrupted_message: None,
             ctrl_c_rx,
+            last_session_list: Vec::new(),
         })
     }
     
@@ -194,6 +196,36 @@ impl Repl {
         std::io::stdout().flush().unwrap_or(());
         
         true // OSC52 emission always "succeeds" (we can't know if terminal supports it)
+    }
+    
+    fn copy_content_to_clipboard(&self, content: &str, description: &str) -> Result<()> {
+        let mut success_methods = Vec::new();
+        
+        // Try system clipboard first
+        match self.copy_to_system_clipboard(content) {
+            Ok(()) => success_methods.push("system clipboard"),
+            Err(e) => {
+                // Don't show error yet, we'll try OSC52
+                eprintln!("System clipboard failed: {}", e);
+            }
+        }
+        
+        // Always emit OSC52 for terminal/SSH compatibility
+        if self.copy_via_osc52(content) {
+            success_methods.push("OSC52 (terminal)");
+        }
+        
+        if !success_methods.is_empty() {
+            self.ui.print_info(&format!("{} copied via: {}", 
+                description, success_methods.join(", ")));
+        } else {
+            self.ui.print_error("Failed to copy to clipboard");
+            self.ui.print_info("Content displayed below:");
+            println!();
+            println!("{}", content);
+        }
+        
+        Ok(())
     }
     
     fn execute_code_block(&mut self, block_ref: &CodeBlockReference) -> Result<()> {
@@ -484,6 +516,70 @@ impl Repl {
         None
     }
     
+    fn get_agent_message(&self, agent_number: Option<usize>) -> Option<&str> {
+        let target_number = agent_number.unwrap_or_else(|| {
+            // Get the most recent agent message number
+            self.session.messages.iter()
+                .filter(|msg| msg.message.role == "assistant")
+                .count()
+        });
+        
+        if target_number == 0 {
+            return None;
+        }
+        
+        let mut agent_count = 0;
+        for msg in &self.session.messages {
+            if msg.message.role == "assistant" {
+                agent_count += 1;
+                if agent_count == target_number {
+                    return Some(&msg.message.content);
+                }
+            }
+        }
+        None
+    }
+    
+    fn get_user_message(&self, user_number: Option<usize>) -> Option<&str> {
+        let target_number = user_number.unwrap_or_else(|| {
+            // Get the most recent user message number
+            self.session.messages.iter()
+                .filter(|msg| msg.message.role == "user")
+                .count()
+        });
+        
+        if target_number == 0 {
+            return None;
+        }
+        
+        let mut user_count = 0;
+        for msg in &self.session.messages {
+            if msg.message.role == "user" {
+                user_count += 1;
+                if user_count == target_number {
+                    return Some(&msg.message.content);
+                }
+            }
+        }
+        None
+    }
+    
+    fn resolve_session_reference(&self, session_ref: &SessionReference) -> Result<String> {
+        match session_ref {
+            SessionReference::Named(name) => Ok(name.clone()),
+            SessionReference::Ephemeral(number) => {
+                if *number == 0 || *number > self.last_session_list.len() {
+                    Err(anyhow::anyhow!("Invalid ephemeral session reference #{}", number))
+                } else {
+                    Ok(self.last_session_list[*number - 1].clone())
+                }
+            }
+            SessionReference::Invalid(error) => {
+                Err(anyhow::anyhow!("{}", error))
+            }
+        }
+    }
+    
     async fn handle_command(&mut self, command: Command) -> Result<bool> {
         match command {
             Command::Quit => return Ok(false),
@@ -494,10 +590,10 @@ impl Repl {
                 println!("  /status - Show current provider and model");
                 println!("  /chat new - Start a new chat session");
                 println!("  /chat save NAME - Save current session with given name");
-                println!("  /chat load NAME - Load a previously saved session");
-                println!("  /chat list - List all saved sessions");
-                println!("  /chat delete [NAME] - Delete a saved session (defaults to current)");
-                println!("  /chat continue [NAME] - Continue the most recent session or specified session");
+                println!("  /chat load NAME|#N - Load a previously saved session");
+                println!("  /chat list - List all saved sessions with ephemeral numbers");
+                println!("  /chat delete [NAME|#N] - Delete a saved session (defaults to current)");
+                println!("  /chat continue [NAME|#N] - Continue the most recent session or specified session");
                 println!("  /chat recent - Show recent sessions");
                 println!("  /chat fork NAME - Save current session and start fresh");
                 println!("  /chat merge NAME - Merge another session into current");
@@ -510,8 +606,16 @@ impl Repl {
                 println!("  /history - Show conversation history");
                 println!("  /blocks - List all code blocks in session");
                 println!("  /block N - Display code block N");
-                println!("  /copy N - Copy code block N to clipboard");
-                println!("  /save N FILE - Save code block N to file");
+                println!("  /copy [TYPE] [N] - Copy message/block to clipboard");
+                println!("    /copy - Copy most recent agent response");
+                println!("    /copy 2 - Copy Agent #2 response");
+                println!("    /copy user 1 - Copy User #1 message");
+                println!("    /copy block 3 - Copy code block #3");
+                println!("  /save [TYPE] [N] FILE - Save message/block to file");
+                println!("    /save auth.md - Save most recent agent response");
+                println!("    /save agent 2 response.md - Save Agent #2 response");
+                println!("    /save user 1 question.txt - Save User #1 message");
+                println!("    /save block 3 code.py - Save code block #3");
                 println!("  /exec N - Execute code block N (with confirmation)");
                 println!("  /system [PROMPT] - Set system prompt (empty to view, 'clear' to remove)");
                 println!("  /temp TEMPERATURE - Set temperature (0.0-2.0)");
@@ -563,10 +667,16 @@ impl Repl {
                 self.session.current_provider = get_provider_for_model(&self.session.current_model).map(|s| s.to_string());
                 self.ui.print_info("Started new chat session");
             }
-            Command::ChatContinue(session_name) => {
-                let target_session = if let Some(ref name) = session_name {
-                    // Continue specific named session
-                    self.history.load_session(name).cloned()
+            Command::ChatContinue(session_ref_opt) => {
+                let target_session = if let Some(session_ref) = session_ref_opt {
+                    // Continue specific session by reference
+                    match self.resolve_session_reference(session_ref) {
+                        Ok(name) => self.history.load_session(&name).cloned(),
+                        Err(e) => {
+                            self.ui.print_error(&e.to_string());
+                            return Ok(true);
+                        }
+                    }
                 } else {
                     // Continue most recent session
                     self.history.get_most_recent_session().cloned()
@@ -598,11 +708,7 @@ impl Repl {
                         self.ui.print_info(&format!("Session model: {}", self.session.current_model));
                     }
                 } else {
-                    if let Some(name) = session_name {
-                        self.ui.print_error(&format!("Session '{}' not found", name));
-                    } else {
-                        self.ui.print_error("No recent sessions found");
-                    }
+                    self.ui.print_error("No sessions found to continue");
                 }
             }
             Command::ChatRecent => {
@@ -611,11 +717,18 @@ impl Repl {
                     self.ui.print_info("No recent sessions found");
                 } else {
                     self.ui.print_info("Recent sessions:");
-                    for (name, session) in recent_sessions {
+                    
+                    // Update the ephemeral session list with recent sessions
+                    self.last_session_list = recent_sessions.iter().map(|(name, _)| (*name).clone()).collect();
+                    
+                    for (index, (name, session)) in recent_sessions.iter().enumerate() {
                         let message_count = session.messages.len();
                         let updated = session.updated_at.format("%Y-%m-%d %H:%M");
-                        println!("  {} - {} messages (updated {})", name, message_count, updated);
+                        println!("  #{}: \"{}\" ({} messages, updated {})", 
+                            index + 1, name, message_count, updated);
                     }
+                    println!();
+                    self.ui.print_info("Use '/chat continue #N' to continue by number or '/chat continue \"name\"' to continue by name");
                 }
             }
             Command::ChatFork(name) => {
@@ -831,49 +944,56 @@ impl Repl {
                     }
                 }
             }
-            Command::ChatLoad(name) => {
-                // First, clone the session if it exists
-                let session_to_load = self.history.load_session(&name).cloned();
-                
-                if let Some(session) = session_to_load {
-                    // Auto-save current session if it has interactions
-                    if let Err(e) = self.history.auto_save_session(&self.session) {
-                        self.ui.print_error(&format!("Failed to auto-save current session: {}", e));
-                    } else {
-                        // Update completion context after auto-save
-                        let _ = self.update_completion_context();
-                    }
-                    
-                    // Create a copy of the session (new ID, no name, fresh timestamps)
-                    self.session = session.create_copy();
-                    
-                    // Update current provider based on session's model
-                    self.session.current_provider = get_provider_for_model(&self.session.current_model).map(|s| s.to_string());
-                    
-                    // Enhanced feedback with full context
-                    let created = self.session.created_at.format("%Y-%m-%d %H:%M");
-                    self.ui.print_info(&format!("Loaded copy of session \"{}\" ({} messages, created {})", 
-                        name, self.session.messages.len(), created));
-                    
-                    if let Some(session_provider) = &self.session.current_provider {
-                        if self.providers.contains_key(session_provider) {
-                            self.ui.print_info(&format!("Session model: {} ({})", self.session.current_model, session_provider));
+            Command::ChatLoad(session_ref) => {
+                match self.resolve_session_reference(session_ref) {
+                    Ok(name) => {
+                        // First, clone the session if it exists
+                        let session_to_load = self.history.load_session(&name).cloned();
+                        
+                        if let Some(session) = session_to_load {
+                            // Auto-save current session if it has interactions
+                            if let Err(e) = self.history.auto_save_session(&self.session) {
+                                self.ui.print_error(&format!("Failed to auto-save current session: {}", e));
+                            } else {
+                                // Update completion context after auto-save
+                                let _ = self.update_completion_context();
+                            }
+                            
+                            // Create a copy of the session (new ID, no name, fresh timestamps)
+                            self.session = session.create_copy();
+                            
+                            // Update current provider based on session's model
+                            self.session.current_provider = get_provider_for_model(&self.session.current_model).map(|s| s.to_string());
+                            
+                            // Enhanced feedback with full context
+                            let created = self.session.created_at.format("%Y-%m-%d %H:%M");
+                            self.ui.print_info(&format!("Loaded copy of session \"{}\" ({} messages, created {})", 
+                                name, self.session.messages.len(), created));
+                            
+                            if let Some(session_provider) = &self.session.current_provider {
+                                if self.providers.contains_key(session_provider) {
+                                    self.ui.print_info(&format!("Session model: {} ({})", self.session.current_model, session_provider));
+                                } else {
+                                    self.ui.print_info(&format!("Session model: {} (provider '{}' not available)", self.session.current_model, session_provider));
+                                }
+                            } else {
+                                self.ui.print_info(&format!("Session model: {}", self.session.current_model));
+                            }
+                            
+                            self.ui.print_info(&format!("Original session \"{}\" unchanged", name));
                         } else {
-                            self.ui.print_info(&format!("Session model: {} (provider '{}' not available)", self.session.current_model, session_provider));
+                            self.ui.print_error(&format!("Session '{}' not found", name));
+                            let available_sessions = self.history.list_sessions();
+                            if !available_sessions.is_empty() {
+                                self.ui.print_info("Available sessions:");
+                                for session_name in available_sessions {
+                                    println!("  {}", session_name);
+                                }
+                            }
                         }
-                    } else {
-                        self.ui.print_info(&format!("Session model: {}", self.session.current_model));
                     }
-                    
-                    self.ui.print_info(&format!("Original session \"{}\" unchanged", name));
-                } else {
-                    self.ui.print_error(&format!("Session '{}' not found", name));
-                    let available_sessions = self.history.list_sessions();
-                    if !available_sessions.is_empty() {
-                        self.ui.print_info("Available sessions:");
-                        for session_name in available_sessions {
-                            println!("  {}", session_name);
-                        }
+                    Err(e) => {
+                        self.ui.print_error(&e.to_string());
                     }
                 }
             }
@@ -883,13 +1003,24 @@ impl Repl {
                     self.ui.print_info("No saved sessions");
                 } else {
                     self.ui.print_info("Saved sessions:");
-                    for session_name in sessions {
+                    
+                    // Update the ephemeral session list
+                    self.last_session_list = sessions.iter().cloned().collect();
+                    
+                    for (index, session_name) in sessions.iter().enumerate() {
                         if let Some(session) = self.history.load_session(session_name) {
                             let message_count = session.messages.len();
                             let created = session.created_at.format("%Y-%m-%d %H:%M");
-                            println!("  {} ({} messages, created {})", session_name, message_count, created);
+                            let code_blocks = session.messages.iter()
+                                .map(|msg| msg.code_blocks.len())
+                                .sum::<usize>();
+                            
+                            println!("  #{}: \"{}\" ({} messages, {} blocks, created {})", 
+                                index + 1, session_name, message_count, code_blocks, created);
                         }
                     }
+                    println!();
+                    self.ui.print_info("Use '/chat load #N' to load by number or '/chat load \"name\"' to load by name");
                 }
             }
             Command::ChatDelete(name_opt) => {
@@ -1170,52 +1301,103 @@ impl Repl {
                     self.ui.print_error(&format!("Code block {} not found. Use /blocks to list all code blocks.", block_number));
                 }
             }
-            Command::Copy(block_number) => {
-                let all_blocks = self.get_all_code_blocks();
-                if let Some(block) = all_blocks.get(block_number.saturating_sub(1)) {
-                    let content = &block.code_block.content;
-                    let mut success_methods = Vec::new();
-                    
-                    // Try system clipboard first
-                    match self.copy_to_system_clipboard(content) {
-                        Ok(()) => success_methods.push("system clipboard"),
-                        Err(e) => {
-                            // Don't show error yet, we'll try OSC52
-                            eprintln!("System clipboard failed: {}", e);
+            Command::Copy(copy_type, number) => {
+                match copy_type {
+                    CopyType::Agent => {
+                        if let Some(content) = self.get_agent_message(*number) {
+                            let display_number = number.unwrap_or_else(|| {
+                                self.session.messages.iter()
+                                    .filter(|msg| msg.message.role == "assistant")
+                                    .count()
+                            });
+                            self.copy_content_to_clipboard(content, &format!("Agent #{}", display_number))?;
+                        } else {
+                            let display_number = number.unwrap_or(1);
+                            self.ui.print_error(&format!("Agent #{} not found", display_number));
                         }
                     }
-                    
-                    // Always emit OSC52 for terminal/SSH compatibility
-                    if self.copy_via_osc52(content) {
-                        success_methods.push("OSC52 (terminal)");
+                    CopyType::User => {
+                        if let Some(content) = self.get_user_message(*number) {
+                            let display_number = number.unwrap_or_else(|| {
+                                self.session.messages.iter()
+                                    .filter(|msg| msg.message.role == "user")
+                                    .count()
+                            });
+                            self.copy_content_to_clipboard(content, &format!("User #{}", display_number))?;
+                        } else {
+                            let display_number = number.unwrap_or(1);
+                            self.ui.print_error(&format!("User #{} not found", display_number));
+                        }
                     }
-                    
-                    if !success_methods.is_empty() {
-                        self.ui.print_info(&format!("Code block {} copied via: {}", 
-                            block_number, success_methods.join(", ")));
-                    } else {
-                        self.ui.print_error("Failed to copy to clipboard");
-                        self.ui.print_info("Content displayed below:");
-                        println!();
-                        self.ui.print_styled_code_block(content, block.code_block.language.as_deref());
+                    CopyType::Block => {
+                        let block_number = number.unwrap_or(1);
+                        let all_blocks = self.get_all_code_blocks();
+                        if let Some(block) = all_blocks.get(block_number.saturating_sub(1)) {
+                            self.copy_content_to_clipboard(&block.code_block.content, &format!("Code block #{}", block_number))?;
+                        } else {
+                            self.ui.print_error(&format!("Code block {} not found. Use /blocks to list all code blocks.", block_number));
+                        }
                     }
-                } else {
-                    self.ui.print_error(&format!("Code block {} not found. Use /blocks to list all code blocks.", block_number));
                 }
             }
-            Command::Save(block_number, filename) => {
-                let all_blocks = self.get_all_code_blocks();
-                if let Some(block) = all_blocks.get(block_number.saturating_sub(1)) {
-                    match std::fs::write(&filename, &block.code_block.content) {
-                        Ok(()) => {
-                            self.ui.print_info(&format!("Code block {} saved to '{}'", block_number, filename));
-                        }
-                        Err(e) => {
-                            self.ui.print_error(&format!("Failed to save code block: {}", e));
+            Command::Save(save_type, number, filename) => {
+                match save_type {
+                    SaveType::Agent => {
+                        if let Some(content) = self.get_agent_message(*number) {
+                            match std::fs::write(filename, content) {
+                                Ok(()) => {
+                                    let display_number = number.unwrap_or_else(|| {
+                                        self.session.messages.iter()
+                                            .filter(|msg| msg.message.role == "assistant")
+                                            .count()
+                                    });
+                                    self.ui.print_info(&format!("Agent #{} saved to '{}'", display_number, filename));
+                                }
+                                Err(e) => {
+                                    self.ui.print_error(&format!("Failed to save agent response: {}", e));
+                                }
+                            }
+                        } else {
+                            let display_number = number.unwrap_or(1);
+                            self.ui.print_error(&format!("Agent #{} not found", display_number));
                         }
                     }
-                } else {
-                    self.ui.print_error(&format!("Code block {} not found. Use /blocks to list all code blocks.", block_number));
+                    SaveType::User => {
+                        if let Some(content) = self.get_user_message(*number) {
+                            match std::fs::write(filename, content) {
+                                Ok(()) => {
+                                    let display_number = number.unwrap_or_else(|| {
+                                        self.session.messages.iter()
+                                            .filter(|msg| msg.message.role == "user")
+                                            .count()
+                                    });
+                                    self.ui.print_info(&format!("User #{} saved to '{}'", display_number, filename));
+                                }
+                                Err(e) => {
+                                    self.ui.print_error(&format!("Failed to save user message: {}", e));
+                                }
+                            }
+                        } else {
+                            let display_number = number.unwrap_or(1);
+                            self.ui.print_error(&format!("User #{} not found", display_number));
+                        }
+                    }
+                    SaveType::Block => {
+                        let block_number = number.unwrap_or(1);
+                        let all_blocks = self.get_all_code_blocks();
+                        if let Some(block) = all_blocks.get(block_number.saturating_sub(1)) {
+                            match std::fs::write(filename, &block.code_block.content) {
+                                Ok(()) => {
+                                    self.ui.print_info(&format!("Code block {} saved to '{}'", block_number, filename));
+                                }
+                                Err(e) => {
+                                    self.ui.print_error(&format!("Failed to save code block: {}", e));
+                                }
+                            }
+                        } else {
+                            self.ui.print_error(&format!("Code block {} not found. Use /blocks to list all code blocks.", block_number));
+                        }
+                    }
                 }
             }
             Command::Exec(block_number) => {
