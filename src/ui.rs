@@ -6,7 +6,6 @@ use rustyline::completion::{Completer, Pair};
 use rustyline::hint::Hinter;
 use rustyline::highlight::Highlighter;
 use rustyline::validate::Validator;
-use rustyline::config::Configurer;
 use std::io::{self, Write};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -452,9 +451,6 @@ impl Helper for NjordCompleter {}
 impl UI {
     pub fn new() -> Result<Self> {
         let mut editor = Editor::new()?;
-        
-        // Enable bracketed paste mode - this is the key feature for detecting pastes
-        editor.set_bracketed_paste_mode(true)?;
         
         let completer = NjordCompleter::new(CompletionContext::new());
         editor.set_helper(Some(completer));
