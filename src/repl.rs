@@ -96,6 +96,9 @@ impl Repl {
         let completion_context = Self::build_completion_context(&providers, &history);
         ui.update_completion_context(completion_context)?;
         
+        // Auto-populate ephemeral session list on startup
+        let last_session_list = history.list_sessions().iter().map(|s| s.to_string()).collect();
+        
         Ok(Self {
             config,
             providers,
@@ -107,7 +110,7 @@ impl Repl {
             active_request_token: None,
             interrupted_message: None,
             ctrl_c_rx,
-            last_session_list: Vec::new(),
+            last_session_list,
         })
     }
     
@@ -151,6 +154,10 @@ impl Repl {
     fn update_completion_context(&mut self) -> Result<()> {
         let context = Self::build_completion_context(&self.providers, &self.history);
         self.ui.update_completion_context(context)
+    }
+    
+    fn update_session_list(&mut self) {
+        self.last_session_list = self.history.list_sessions().iter().map(|s| s.to_string()).collect();
     }
     
     fn get_all_code_blocks(&self) -> Vec<CodeBlockReference> {
@@ -359,8 +366,9 @@ impl Repl {
                 if let Err(e) = self.history.auto_save_session(&self.session) {
                     self.ui.print_error(&format!("Failed to auto-save session: {}", e));
                 } else {
-                    // Update completion context after auto-save
+                    // Update completion context and session list after auto-save
                     let _ = self.update_completion_context();
+                    self.update_session_list();
                 }
             }
         }
@@ -659,8 +667,9 @@ impl Repl {
                 if let Err(e) = self.history.auto_save_session(&self.session) {
                     self.ui.print_error(&format!("Failed to auto-save current session: {}", e));
                 } else {
-                    // Update completion context after auto-save
+                    // Update completion context and session list after auto-save
                     let _ = self.update_completion_context();
+                    self.update_session_list();
                 }
                 
                 self.session = ChatSession::new(self.config.default_model.clone(), self.config.temperature, self.config.max_tokens, self.config.thinking_budget);
@@ -687,8 +696,9 @@ impl Repl {
                     if let Err(e) = self.history.auto_save_session(&self.session) {
                         self.ui.print_error(&format!("Failed to auto-save current session: {}", e));
                     } else {
-                        // Update completion context after auto-save
+                        // Update completion context and session list after auto-save
                         let _ = self.update_completion_context();
+                        self.update_session_list();
                     }
                     
                     self.session = target_session;
@@ -744,8 +754,9 @@ impl Repl {
                             self.session = ChatSession::new(self.config.default_model.clone(), self.config.temperature, self.config.max_tokens, self.config.thinking_budget);
                             self.session.current_provider = get_provider_for_model(&self.session.current_model).map(|s| s.to_string());
                             self.ui.print_info("Started new session");
-                            // Update completion context with new session
+                            // Update completion context and session list with new session
                             let _ = self.update_completion_context();
+                            self.update_session_list();
                         }
                         Err(e) => {
                             self.ui.print_error(&format!("Failed to fork session: {}", e));
@@ -818,8 +829,9 @@ impl Repl {
                                     new_name, self.session.messages.len()));
                             }
                         
-                            // Update completion context with new session name
+                            // Update completion context and session list with new session name
                             let _ = self.update_completion_context();
+                            self.update_session_list();
                         }
                         Ok(false) => {
                             self.ui.print_error(&format!("Session '{}' not found", target_name));
@@ -948,8 +960,9 @@ impl Repl {
                     match self.history.save_session(name.clone(), self.session.clone()) {
                         Ok(()) => {
                             self.ui.print_info(&format!("Session saved as '{}'", name));
-                            // Update completion context with new session
+                            // Update completion context and session list with new session
                             let _ = self.update_completion_context();
+                            self.update_session_list();
                         }
                         Err(e) => {
                             self.ui.print_error(&format!("Failed to save session: {}", e));
@@ -968,8 +981,9 @@ impl Repl {
                             if let Err(e) = self.history.auto_save_session(&self.session) {
                                 self.ui.print_error(&format!("Failed to auto-save current session: {}", e));
                             } else {
-                                // Update completion context after auto-save
+                                // Update completion context and session list after auto-save
                                 let _ = self.update_completion_context();
+                                self.update_session_list();
                             }
                             
                             // Create a copy of the session (new ID, no name, fresh timestamps)
@@ -1073,8 +1087,9 @@ impl Repl {
                             self.ui.print_info("Current session was deleted - started new anonymous session");
                         }
                         
-                        // Update completion context after deletion
+                        // Update completion context and session list after deletion
                         let _ = self.update_completion_context();
+                        self.update_session_list();
                     }
                     Ok(false) => {
                         self.ui.print_error(&format!("Session '{}' not found", target_name));
@@ -1757,8 +1772,9 @@ impl Repl {
                         unique_title, self.session.messages.len()));
                 }
                 
-                // Update completion context with new session name
+                // Update completion context and session list with new session name
                 let _ = self.update_completion_context();
+                self.update_session_list();
                 Ok(())
             }
             Ok(false) => {
@@ -2153,8 +2169,9 @@ Format your summary in clear, readable paragraphs. Be objective and factual.";
             }
         }
         
-        // Update completion context with new session names
+        // Update completion context and session list with new session names
         let _ = self.update_completion_context();
+        self.update_session_list();
         
         // Print summary
         println!();
