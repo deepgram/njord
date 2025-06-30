@@ -468,7 +468,8 @@ impl UI {
     // Add buffer clearing method
     pub fn clear_input_buffer(&mut self) {
         // This helps clear any residual input after processing
-        let _ = self.editor.clear_screen();
+        // Note: rustyline doesn't have a direct way to clear input buffer,
+        // but the bracketed paste mode should handle most paste issues
     }
     
     pub fn update_completion_context(&mut self, context: CompletionContext) -> Result<()> {
