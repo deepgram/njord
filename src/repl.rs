@@ -331,6 +331,8 @@ impl Repl {
                     // Clear all queued/interrupted messages
                     self.queued_message = None;
                     self.interrupted_message = None;
+                    // Clear input buffer to prevent processing queued input
+                    self.ui.clear_input_buffer();
                     continue;
                 }
                 
@@ -338,6 +340,7 @@ impl Repl {
                 // Clear queued/interrupted messages once we get input
                 self.queued_message = None;
                 self.interrupted_message = None;
+                
                 if input.starts_with('/') {
                     // This is a command attempt
                     if let Some(command) = self.command_parser.parse(&input) {
@@ -360,6 +363,10 @@ impl Repl {
                     if let Err(e) = self.handle_message(input).await {
                         self.ui.print_error(&e.to_string());
                     }
+                    
+                    // Clear input buffer after processing message to prevent
+                    // any residual pasted content from being processed
+                    self.ui.clear_input_buffer();
                 }
                 
                 // Auto-save session if it has LLM interactions
