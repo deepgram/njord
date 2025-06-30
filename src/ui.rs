@@ -101,14 +101,11 @@ impl NjordCompleter {
         } else if parts.len() >= 2 {
             // Complete session names for commands that need them
             let subcommand = parts[1];
-            if matches!(subcommand, "load" | "delete" | "continue" | "merge") {
-                return self.complete_session_names(current_word);
+            if matches!(subcommand, "load" | "delete" | "continue" | "merge" | "auto-rename") {
+                return self.complete_session_references(current_word);
             } else if subcommand == "rename" && parts.len() >= 3 {
                 // For rename command, complete session names for the second argument (old_name)
-                return self.complete_session_names(current_word);
-            } else if subcommand == "auto-rename" {
-                // For auto-rename command, complete session names for the optional argument
-                return self.complete_session_names(current_word);
+                return self.complete_session_references(current_word);
             } else if matches!(subcommand, "save" | "fork") {
                 // These commands take new session names, no completion needed
                 return Vec::new();
@@ -227,7 +224,74 @@ impl NjordCompleter {
         let current_word = &line[start_pos..pos];
         
         // Complete session names for summarize command
-        self.complete_session_names(current_word)
+        self.complete_session_references(current_word)
+    }
+    
+    fn complete_session_references(&self, current_word: &str) -> Vec<Pair> {
+        let mut completions = Vec::new();
+        
+        // Add ephemeral references (#1, #2, etc.) if current word starts with #
+        if current_word.starts_with('#') {
+            let number_part = &current_word[1..];
+            for i in 1..=10 { // Show up to 10 ephemeral references
+                let ephemeral_ref = format!("#{}", i);
+                if ephemeral_ref.starts_with(current_word) {
+                    completions.push(Pair {
+                        display: ephemeral_ref.clone(),
+                        replacement: ephemeral_ref,
+                    });
+                }
+            }
+        }
+        
+        // Add regular session name completions
+        completions.extend(self.complete_session_names(current_word));
+        
+        completions
+    }
+    
+    fn complete_copy_command(&self, line: &str, pos: usize) -> Vec<Pair> {
+        let start_pos = self.find_completion_start(line, pos);
+        let current_word = &line[start_pos..pos];
+        let input = &line[..pos];
+        let parts: Vec<&str> = input.split_whitespace().collect();
+        
+        if parts.len() == 1 || (parts.len() == 2 && !input.ends_with(' ')) {
+            // Complete copy type
+            let types = vec!["agent", "user", "block"];
+            types.iter()
+                .filter(|t| t.starts_with(current_word))
+                .map(|t| Pair {
+                    display: t.to_string(),
+                    replacement: t.to_string(),
+                })
+                .collect()
+        } else {
+            // No further completion needed for numbers
+            Vec::new()
+        }
+    }
+    
+    fn complete_save_command(&self, line: &str, pos: usize) -> Vec<Pair> {
+        let start_pos = self.find_completion_start(line, pos);
+        let current_word = &line[start_pos..pos];
+        let input = &line[..pos];
+        let parts: Vec<&str> = input.split_whitespace().collect();
+        
+        if parts.len() == 1 || (parts.len() == 2 && !input.ends_with(' ')) {
+            // Complete save type
+            let types = vec!["agent", "user", "block"];
+            types.iter()
+                .filter(|t| t.starts_with(current_word))
+                .map(|t| Pair {
+                    display: t.to_string(),
+                    replacement: t.to_string(),
+                })
+                .collect()
+        } else {
+            // No further completion for numbers or filenames
+            Vec::new()
+        }
     }
     
     fn find_completion_start(&self, line: &str, pos: usize) -> usize {

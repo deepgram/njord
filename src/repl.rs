@@ -753,37 +753,50 @@ impl Repl {
                     }
                 }
             }
-            Command::ChatMerge(name) => {
-                if let Some(other_session) = self.history.load_session(&name).cloned() {
-                    let other_message_count = other_session.messages.len();
-                    match self.session.merge_session(&other_session) {
-                        Ok(()) => {
-                            self.ui.print_info(&format!("Merged {} messages from '{}' into current session", 
-                                other_message_count, name));
-                            self.ui.print_info(&format!("Current session now has {} messages", self.session.messages.len()));
-                        }
-                        Err(e) => {
-                            self.ui.print_error(&format!("Failed to merge session: {}", e));
+            Command::ChatMerge(session_ref) => {
+                match self.resolve_session_reference(session_ref) {
+                    Ok(name) => {
+                        if let Some(other_session) = self.history.load_session(&name).cloned() {
+                            let other_message_count = other_session.messages.len();
+                            match self.session.merge_session(&other_session) {
+                                Ok(()) => {
+                                    self.ui.print_info(&format!("Merged {} messages from '{}' into current session", 
+                                        other_message_count, name));
+                                    self.ui.print_info(&format!("Current session now has {} messages", self.session.messages.len()));
+                                }
+                                Err(e) => {
+                                    self.ui.print_error(&format!("Failed to merge session: {}", e));
+                                }
+                            }
+                        } else {
+                            self.ui.print_error(&format!("Session '{}' not found", name));
+                            let available_sessions = self.history.list_sessions();
+                            if !available_sessions.is_empty() {
+                                self.ui.print_info("Available sessions:");
+                                for session_name in available_sessions.iter().take(5) {
+                                    println!("  {}", session_name);
+                                }
+                            }
                         }
                     }
-                } else {
-                    self.ui.print_error(&format!("Session '{}' not found", name));
-                    let available_sessions = self.history.list_sessions();
-                    if !available_sessions.is_empty() {
-                        self.ui.print_info("Available sessions:");
-                        for session_name in available_sessions.iter().take(5) {
-                            println!("  {}", session_name);
-                        }
+                    Err(e) => {
+                        self.ui.print_error(&e.to_string());
                     }
                 }
             }
-            Command::ChatRename(new_name, old_name) => {
+            Command::ChatRename(new_name, old_session_ref) => {
                 if new_name.trim().is_empty() {
                     self.ui.print_error("New session name cannot be empty");
                 } else {
-                    let target_name = if let Some(ref old_name) = old_name {
-                        // Rename specific session
-                        old_name.clone()
+                    let target_name = if let Some(session_ref) = old_session_ref {
+                        // Rename specific session by reference
+                        match self.resolve_session_reference(session_ref) {
+                            Ok(name) => name,
+                            Err(e) => {
+                                self.ui.print_error(&e.to_string());
+                                return Ok(true);
+                            }
+                        }
                     } else {
                         // Rename current session - it must be saved first
                         if let Some(ref current_name) = self.session.name {
@@ -799,7 +812,7 @@ impl Repl {
                             self.ui.print_info(&format!("Session \"{}\" renamed to \"{}\"", target_name, new_name));
                         
                             // If we renamed the current session, update its name and show context
-                            if old_name.is_none() || self.session.name.as_ref() == Some(&target_name) {
+                            if old_session_ref.is_none() || self.session.name.as_ref() == Some(&target_name) {
                                 self.session.name = Some(new_name.clone());
                                 self.ui.print_info(&format!("Current session: \"{}\" ({} messages)", 
                                     new_name, self.session.messages.len()));
@@ -824,8 +837,8 @@ impl Repl {
                     }
                 }
             }
-            Command::ChatAutoRename(session_name) => {
-                match self.handle_auto_rename(session_name).await {
+            Command::ChatAutoRename(session_ref_opt) => {
+                match self.handle_auto_rename(session_ref_opt).await {
                     Ok(()) => {
                         // Success message already printed in handle_auto_rename
                     }
@@ -844,8 +857,8 @@ impl Repl {
                     }
                 }
             }
-            Command::Summarize(session_name) => {
-                match self.handle_summarize(session_name).await {
+            Command::Summarize(session_ref_opt) => {
+                match self.handle_summarize(session_ref_opt).await {
                     Ok(()) => {
                         // Success - summary already printed
                     }
@@ -1005,7 +1018,7 @@ impl Repl {
                     self.ui.print_info("Saved sessions:");
                     
                     // Update the ephemeral session list
-                    self.last_session_list = sessions.iter().cloned().collect();
+                    self.last_session_list = sessions.iter().map(|s| s.to_string()).collect();
                     
                     for (index, session_name) in sessions.iter().enumerate() {
                         if let Some(session) = self.history.load_session(session_name) {
@@ -1023,10 +1036,16 @@ impl Repl {
                     self.ui.print_info("Use '/chat load #N' to load by number or '/chat load \"name\"' to load by name");
                 }
             }
-            Command::ChatDelete(name_opt) => {
-                let target_name = if let Some(name) = name_opt {
-                    // Delete specific named session
-                    name
+            Command::ChatDelete(session_ref_opt) => {
+                let target_name = if let Some(session_ref) = session_ref_opt {
+                    // Delete specific session by reference
+                    match self.resolve_session_reference(session_ref) {
+                        Ok(name) => name,
+                        Err(e) => {
+                            self.ui.print_error(&e.to_string());
+                            return Ok(true);
+                        }
+                    }
                 } else {
                     // Delete current session - it must be saved first
                     if let Some(ref current_name) = self.session.name {
@@ -1664,19 +1683,20 @@ impl Repl {
         Err(anyhow::anyhow!("No provider available"))
     }
     
-    async fn handle_auto_rename(&mut self, session_name: Option<String>) -> Result<()> {
+    async fn handle_auto_rename(&mut self, session_ref_opt: Option<&SessionReference>) -> Result<()> {
         // Determine which session to rename
-        let (target_session, is_current_session) = if let Some(ref name) = session_name {
-            // Auto-rename specific session
-            if let Some(session) = self.history.load_session(name) {
-                (session.clone(), false)
+        let (target_session, is_current_session, session_name) = if let Some(session_ref) = session_ref_opt {
+            // Auto-rename specific session by reference
+            let name = self.resolve_session_reference(session_ref)?;
+            if let Some(session) = self.history.load_session(&name) {
+                (session.clone(), false, name)
             } else {
                 return Err(anyhow::anyhow!("Session '{}' not found", name));
             }
         } else {
             // Auto-rename current session - it must be saved first
-            if self.session.name.is_some() {
-                (self.session.clone(), true)
+            if let Some(ref current_name) = self.session.name {
+                (self.session.clone(), true, current_name.clone())
             } else {
                 return Err(anyhow::anyhow!("Current session has no name. Save it first with /chat save NAME"));
             }
@@ -1707,16 +1727,8 @@ impl Repl {
         // Ensure the title is unique
         let unique_title = self.ensure_unique_session_name(&sanitized_title);
         
-        // Get the current session name for renaming
-        let current_name = if is_current_session {
-            if let Some(ref current_name) = self.session.name {
-                current_name.clone()
-            } else {
-                return Err(anyhow::anyhow!("Current session has no name"));
-            }
-        } else {
-            session_name.unwrap()
-        };
+        // Use the session_name we already resolved
+        let current_name = session_name;
         
         // Rename the session with auto-generated source
         match self.history.rename_session_with_source(&current_name, &unique_title, crate::session::NameSource::AutoGenerated) {
@@ -1892,31 +1904,25 @@ impl Repl {
         sanitized.trim().to_string()
     }
     
-    async fn handle_summarize(&mut self, session_name: Option<String>) -> Result<()> {
+    async fn handle_summarize(&mut self, session_ref_opt: Option<&SessionReference>) -> Result<()> {
         // Determine which session to summarize
-        let target_session = if let Some(ref name) = session_name {
-            // Summarize specific session
-            if let Some(session) = self.history.load_session(name) {
-                session.clone()
+        let (target_session, session_display) = if let Some(session_ref) = session_ref_opt {
+            // Summarize specific session by reference
+            let name = self.resolve_session_reference(session_ref)?;
+            if let Some(session) = self.history.load_session(&name) {
+                (session.clone(), format!("\"{}\"", name))
             } else {
                 return Err(anyhow::anyhow!("Session '{}' not found", name));
             }
         } else {
             // Summarize current session
-            self.session.clone()
+            (self.session.clone(), "current session".to_string())
         };
         
         // Check if session has messages
         if target_session.messages.is_empty() {
             return Err(anyhow::anyhow!("Cannot summarize empty session"));
         }
-        
-        // Show session info
-        let session_display = if let Some(ref name) = session_name {
-            format!("\"{}\"", name)
-        } else {
-            "current session".to_string()
-        };
         
         self.ui.print_info(&format!("Generating summary for {} ({} messages)...", 
             session_display, target_session.messages.len()));
