@@ -74,6 +74,10 @@ impl NjordCompleter {
             return self.complete_export_command(line, pos);
         } else if line[..pos].starts_with("/summarize ") {
             return self.complete_summarize_command(line, pos);
+        } else if line[..pos].starts_with("/copy ") {
+            return self.complete_copy_command(line, pos);
+        } else if line[..pos].starts_with("/save ") {
+            return self.complete_save_command(line, pos);
         }
         
         Vec::new()
