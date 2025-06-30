@@ -1037,7 +1037,6 @@ impl Repl {
                     for (index, session_name) in sessions.iter().enumerate() {
                         if let Some(session) = self.history.load_session(session_name) {
                             let message_count = session.messages.len();
-                            let created = session.created_at.format("%Y-%m-%d %H:%M");
                             let code_blocks = session.messages.iter()
                                 .map(|msg| msg.code_blocks.len())
                                 .sum::<usize>();
