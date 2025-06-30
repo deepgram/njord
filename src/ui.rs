@@ -236,7 +236,7 @@ impl NjordCompleter {
         
         // Add ephemeral references (#1, #2, etc.) if current word starts with #
         if current_word.starts_with('#') {
-            let number_part = &current_word[1..];
+            let _number_part = &current_word[1..];
             for i in 1..=10 { // Show up to 10 ephemeral references
                 let ephemeral_ref = format!("#{}", i);
                 if ephemeral_ref.starts_with(current_word) {

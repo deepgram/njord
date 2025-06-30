@@ -670,7 +670,7 @@ impl Repl {
             Command::ChatContinue(session_ref_opt) => {
                 let target_session = if let Some(session_ref) = session_ref_opt {
                     // Continue specific session by reference
-                    match self.resolve_session_reference(session_ref) {
+                    match self.resolve_session_reference(&session_ref) {
                         Ok(name) => self.history.load_session(&name).cloned(),
                         Err(e) => {
                             self.ui.print_error(&e.to_string());
@@ -754,7 +754,7 @@ impl Repl {
                 }
             }
             Command::ChatMerge(session_ref) => {
-                match self.resolve_session_reference(session_ref) {
+                match self.resolve_session_reference(&session_ref) {
                     Ok(name) => {
                         if let Some(other_session) = self.history.load_session(&name).cloned() {
                             let other_message_count = other_session.messages.len();
@@ -790,7 +790,7 @@ impl Repl {
                 } else {
                     let target_name = if let Some(session_ref) = old_session_ref {
                         // Rename specific session by reference
-                        match self.resolve_session_reference(session_ref) {
+                        match self.resolve_session_reference(&session_ref) {
                             Ok(name) => name,
                             Err(e) => {
                                 self.ui.print_error(&e.to_string());
@@ -838,7 +838,7 @@ impl Repl {
                 }
             }
             Command::ChatAutoRename(session_ref_opt) => {
-                match self.handle_auto_rename(session_ref_opt).await {
+                match self.handle_auto_rename(session_ref_opt.as_ref()).await {
                     Ok(()) => {
                         // Success message already printed in handle_auto_rename
                     }
@@ -858,7 +858,7 @@ impl Repl {
                 }
             }
             Command::Summarize(session_ref_opt) => {
-                match self.handle_summarize(session_ref_opt).await {
+                match self.handle_summarize(session_ref_opt.as_ref()).await {
                     Ok(()) => {
                         // Success - summary already printed
                     }
@@ -958,7 +958,7 @@ impl Repl {
                 }
             }
             Command::ChatLoad(session_ref) => {
-                match self.resolve_session_reference(session_ref) {
+                match self.resolve_session_reference(&session_ref) {
                     Ok(name) => {
                         // First, clone the session if it exists
                         let session_to_load = self.history.load_session(&name).cloned();
@@ -1039,7 +1039,7 @@ impl Repl {
             Command::ChatDelete(session_ref_opt) => {
                 let target_name = if let Some(session_ref) = session_ref_opt {
                     // Delete specific session by reference
-                    match self.resolve_session_reference(session_ref) {
+                    match self.resolve_session_reference(&session_ref) {
                         Ok(name) => name,
                         Err(e) => {
                             self.ui.print_error(&e.to_string());
@@ -1323,7 +1323,7 @@ impl Repl {
             Command::Copy(copy_type, number) => {
                 match copy_type {
                     CopyType::Agent => {
-                        if let Some(content) = self.get_agent_message(*number) {
+                        if let Some(content) = self.get_agent_message(number) {
                             let display_number = number.unwrap_or_else(|| {
                                 self.session.messages.iter()
                                     .filter(|msg| msg.message.role == "assistant")
@@ -1336,7 +1336,7 @@ impl Repl {
                         }
                     }
                     CopyType::User => {
-                        if let Some(content) = self.get_user_message(*number) {
+                        if let Some(content) = self.get_user_message(number) {
                             let display_number = number.unwrap_or_else(|| {
                                 self.session.messages.iter()
                                     .filter(|msg| msg.message.role == "user")
@@ -1362,7 +1362,7 @@ impl Repl {
             Command::Save(save_type, number, filename) => {
                 match save_type {
                     SaveType::Agent => {
-                        if let Some(content) = self.get_agent_message(*number) {
+                        if let Some(content) = self.get_agent_message(number) {
                             match std::fs::write(filename, content) {
                                 Ok(()) => {
                                     let display_number = number.unwrap_or_else(|| {
@@ -1382,7 +1382,7 @@ impl Repl {
                         }
                     }
                     SaveType::User => {
-                        if let Some(content) = self.get_user_message(*number) {
+                        if let Some(content) = self.get_user_message(number) {
                             match std::fs::write(filename, content) {
                                 Ok(()) => {
                                     let display_number = number.unwrap_or_else(|| {
