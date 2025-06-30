@@ -1,6 +1,6 @@
 use anyhow::Result;
 use rustyline::error::ReadlineError;
-use rustyline::{Editor, Helper};
+use rustyline::{Editor, Helper, Config};
 use rustyline::history::DefaultHistory;
 use rustyline::completion::{Completer, Pair};
 use rustyline::hint::Hinter;
@@ -450,7 +450,12 @@ impl Helper for NjordCompleter {}
 
 impl UI {
     pub fn new() -> Result<Self> {
-        let mut editor = Editor::new()?;
+        // Create config with bracketed paste enabled
+        let config = Config::builder()
+            .enable_bracketed_paste(true)
+            .build();
+        
+        let mut editor = Editor::with_config(config)?;
         
         let completer = NjordCompleter::new(CompletionContext::new());
         editor.set_helper(Some(completer));
