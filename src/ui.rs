@@ -660,6 +660,8 @@ impl UI {
     
     pub fn print_agent_newline(&self) {
         println!();
+        println!("\x1b[2m────────────────────────────────────────\x1b[0m"); // Dimmed horizontal rule
+        println!();
     }
     
     pub fn print_error(&self, error: &str) {
