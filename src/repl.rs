@@ -96,7 +96,7 @@ impl Repl {
         let completion_context = Self::build_completion_context(&providers, &history);
         ui.update_completion_context(completion_context)?;
         
-        // Auto-populate ephemeral session list on startup
+        // Auto-populate ephemeral session list on startup (newest first)
         let last_session_list = history.list_sessions().iter().map(|s| s.to_string()).collect();
         
         Ok(Self {
@@ -1042,12 +1042,13 @@ impl Repl {
                                 .map(|msg| msg.code_blocks.len())
                                 .sum::<usize>();
                             
-                            println!("  #{}: \"{}\" ({} messages, {} blocks, created {})", 
-                                index + 1, session_name, message_count, code_blocks, created);
+                            let updated = session.updated_at.format("%Y-%m-%d %H:%M");
+                            println!("  #{}: \"{}\" ({} messages, {} blocks, updated {})", 
+                                index + 1, session_name, message_count, code_blocks, updated);
                         }
                     }
                     println!();
-                    self.ui.print_info("Use '/chat load #N' to load by number or '/chat load \"name\"' to load by name");
+                    self.ui.print_info("Sessions ordered by most recent update. Use '/chat load #N' to load by number or '/chat load \"name\"' to load by name");
                 }
             }
             Command::ChatDelete(session_ref_opt) => {

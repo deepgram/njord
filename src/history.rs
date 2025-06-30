@@ -54,7 +54,9 @@ impl History {
     }
     
     pub fn list_sessions(&self) -> Vec<&String> {
-        self.saved_sessions.keys().collect()
+        let mut sessions: Vec<_> = self.saved_sessions.iter().collect();
+        sessions.sort_by(|a, b| b.1.updated_at.cmp(&a.1.updated_at)); // Newest first
+        sessions.into_iter().map(|(name, _)| name).collect()
     }
     
     pub fn delete_session(&mut self, name: &str) -> Result<bool> {
