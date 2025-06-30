@@ -7,9 +7,13 @@ use rustyline::hint::Hinter;
 use rustyline::highlight::Highlighter;
 use rustyline::validate::Validator;
 use std::io::{self, Write};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use tokio::time::Duration;
 
 pub struct UI {
     editor: Editor<NjordCompleter, DefaultHistory>,
+    spinner_active: Arc<AtomicBool>,
 }
 
 #[derive(Clone)]
@@ -449,7 +453,10 @@ impl UI {
         let mut editor = Editor::new()?;
         let completer = NjordCompleter::new(CompletionContext::new());
         editor.set_helper(Some(completer));
-        Ok(Self { editor })
+        Ok(Self { 
+            editor,
+            spinner_active: Arc::new(AtomicBool::new(false)),
+        })
     }
     
     pub fn update_completion_context(&mut self, context: CompletionContext) -> Result<()> {
@@ -694,4 +701,52 @@ impl UI {
         println!("\x1b[0;36m```\x1b[0m");
     }
     
+    pub fn start_spinner(&self, message: &str) -> SpinnerHandle {
+        let spinner_active = Arc::clone(&self.spinner_active);
+        spinner_active.store(true, Ordering::Relaxed);
+        
+        let message = message.to_string();
+        let spinner_active_clone = Arc::clone(&spinner_active);
+        
+        let handle = tokio::spawn(async move {
+            let spinner_chars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+            let mut interval = tokio::time::interval(Duration::from_millis(100));
+            let mut frame = 0;
+            
+            // Print initial message
+            print!("\r\x1b[2K\x1b[1;33m{} {}\x1b[0m", spinner_chars[0], message);
+            io::stdout().flush().unwrap();
+            
+            while spinner_active_clone.load(Ordering::Relaxed) {
+                interval.tick().await;
+                frame = (frame + 1) % spinner_chars.len();
+                
+                if spinner_active_clone.load(Ordering::Relaxed) {
+                    print!("\r\x1b[2K\x1b[1;33m{} {}\x1b[0m", spinner_chars[frame], message);
+                    io::stdout().flush().unwrap();
+                }
+            }
+            
+            // Clear the spinner line when done
+            print!("\r\x1b[2K");
+            io::stdout().flush().unwrap();
+        });
+        
+        SpinnerHandle {
+            handle,
+            spinner_active,
+        }
+    }
+}
+
+pub struct SpinnerHandle {
+    handle: tokio::task::JoinHandle<()>,
+    spinner_active: Arc<AtomicBool>,
+}
+
+impl SpinnerHandle {
+    pub async fn stop(self) {
+        self.spinner_active.store(false, Ordering::Relaxed);
+        let _ = self.handle.await;
+    }
 }

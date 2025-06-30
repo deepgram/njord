@@ -1530,6 +1530,14 @@ impl Repl {
                 }
             }
             
+            // Start spinner for this attempt
+            let spinner_message = if attempt == 1 {
+                "Sending message...".to_string()
+            } else {
+                format!("Retrying... (attempt {}/{})", attempt, max_retries)
+            };
+            let spinner = self.ui.start_spinner(&spinner_message);
+            
             // Send to LLM provider and handle streaming response
             if let Some(provider_name) = self.get_current_provider() {
                 if let Some(provider) = self.providers.get(provider_name) {
@@ -1562,6 +1570,9 @@ impl Repl {
                     
                     match provider.chat(chat_request).await {
                         Ok(mut stream) => {
+                            // Stop spinner once we start receiving response
+                            spinner.stop().await;
+                            
                             let mut full_response = String::new();
                             let mut stream_error = false;
                             let mut has_thinking = false;
@@ -1667,6 +1678,9 @@ impl Repl {
                             }
                         }
                         Err(e) => {
+                            // Stop spinner on error
+                            spinner.stop().await;
+                            
                             if attempt < max_retries {
                                 self.ui.print_error(&format!("API error (attempt {}/{}): {}", attempt, max_retries, e));
                                 continue; // Retry on API error
