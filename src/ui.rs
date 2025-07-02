@@ -436,13 +436,11 @@ impl Completer for NjordCompleter {
                 
                 // Only complete if we have a meaningful common prefix beyond the current word
                 if common_prefix.len() > unquoted_current.len() {
-                    // Calculate just the additional characters that need to be inserted
-                    let additional_chars = &common_prefix[unquoted_current.len()..];
-                    // We need to insert the opening quote + additional chars
-                    let extension = format!("\"{}\"", additional_chars);
-                    return Ok((pos, vec![Pair {
-                        display: format!("\"{}\"", common_prefix),
-                        replacement: extension,
+                    // Replace the entire current word with the quoted common prefix
+                    let quoted_prefix = format!("\"{}\"", common_prefix);
+                    return Ok((start_pos, vec![Pair {
+                        display: quoted_prefix.clone(),
+                        replacement: quoted_prefix,
                     }]));
                 }
                 // If no meaningful extension, return empty to prevent toggling
