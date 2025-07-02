@@ -94,6 +94,16 @@ mod tests {
 
     #[test]
     fn test_config_default_model_selection() {
+        // Store original values to restore later
+        let original_openai = std::env::var("OPENAI_API_KEY").ok();
+        let original_anthropic = std::env::var("ANTHROPIC_API_KEY").ok();
+        let original_gemini = std::env::var("GEMINI_API_KEY").ok();
+        
+        // Clear environment variables to ensure clean test
+        std::env::remove_var("OPENAI_API_KEY");
+        std::env::remove_var("ANTHROPIC_API_KEY");
+        std::env::remove_var("GEMINI_API_KEY");
+        
         // Test with Anthropic key - should default to Claude
         let args_anthropic = Args {
             openai_key: None,
@@ -141,6 +151,17 @@ mod tests {
         
         let config = Config::from_args(&args_gemini).unwrap();
         assert_eq!(config.default_model, "gemini-2.5-pro");
+        
+        // Restore original environment variables
+        if let Some(key) = original_openai {
+            std::env::set_var("OPENAI_API_KEY", key);
+        }
+        if let Some(key) = original_anthropic {
+            std::env::set_var("ANTHROPIC_API_KEY", key);
+        }
+        if let Some(key) = original_gemini {
+            std::env::set_var("GEMINI_API_KEY", key);
+        }
     }
 
     #[test]
