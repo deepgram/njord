@@ -382,6 +382,7 @@ impl Completer for NjordCompleter {
         
         // Find the start position of the word being completed
         let start_pos = self.find_completion_start(line, pos);
+        let current_word = &line[start_pos..pos];
         
         // For single completion, return the full replacement
         if completions.len() == 1 {
@@ -392,8 +393,66 @@ impl Completer for NjordCompleter {
             }]));
         }
         
-        // For multiple completions, find common prefix
-        let current_word = &line[start_pos..pos];
+        // For multiple completions, handle the case where completions are quoted
+        // but current word isn't
+        let current_is_quoted = current_word.trim().starts_with('"') || current_word.trim().starts_with('\'');
+        let completions_are_quoted = completions.iter().any(|c| c.replacement.starts_with('"'));
+        
+        if !current_is_quoted && completions_are_quoted {
+            // Current word isn't quoted but completions are - we need to add quote and find common prefix
+            let unquoted_current = current_word.trim();
+            let unquoted_completions: Vec<String> = completions.iter()
+                .map(|c| {
+                    let replacement = &c.replacement;
+                    if replacement.starts_with('"') && replacement.ends_with('"') && replacement.len() > 1 {
+                        replacement[1..replacement.len()-1].to_string()
+                    } else {
+                        replacement.clone()
+                    }
+                })
+                .collect();
+            
+            // Find common prefix among unquoted completions
+            if let Some(first_unquoted) = unquoted_completions.first() {
+                let mut common_prefix = first_unquoted.clone();
+                
+                for completion in &unquoted_completions[1..] {
+                    let mut common_len = 0;
+                    let prefix_chars: Vec<char> = common_prefix.chars().collect();
+                    let completion_chars: Vec<char> = completion.chars().collect();
+                    
+                    for (i, (&p_char, &c_char)) in prefix_chars.iter().zip(completion_chars.iter()).enumerate() {
+                        if p_char == c_char {
+                            common_len = i + 1;
+                        } else {
+                            break;
+                        }
+                    }
+                    
+                    if common_len < prefix_chars.len() {
+                        common_prefix = prefix_chars[..common_len].iter().collect();
+                    }
+                }
+                
+                // If we have a meaningful common prefix beyond the current word
+                if common_prefix.len() > unquoted_current.len() {
+                    let quoted_prefix = format!("\"{}\"", common_prefix);
+                    return Ok((start_pos, vec![Pair {
+                        display: quoted_prefix.clone(),
+                        replacement: quoted_prefix,
+                    }]));
+                } else if !unquoted_current.is_empty() {
+                    // At least add the opening quote
+                    let quoted_current = format!("\"{}\"", unquoted_current);
+                    return Ok((start_pos, vec![Pair {
+                        display: quoted_current.clone(),
+                        replacement: quoted_current,
+                    }]));
+                }
+            }
+        }
+        
+        // For multiple completions, find common prefix (original logic)
         let longest_prefix = self.find_longest_common_prefix(&completions, current_word);
         
         if longest_prefix.len() > current_word.len() {
