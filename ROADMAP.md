@@ -13,6 +13,14 @@ Njord is an interactive LLM REPL that aims to provide a powerful terminal-based 
 - [x] ~~TUI framework setup with ratatui and crossterm~~ (Replaced with simple REPL)
 - [x] Project structure with proper module organization
 - [x] Comprehensive tab completion for commands and parameters
+- [x] Universal clipboard integration (system + OSC52)
+- [x] Code block extraction, management, and execution
+- [x] Advanced session operations (fork, merge, continue, safe loading)
+- [x] Full-text search across all sessions with highlighted excerpts
+- [x] Session summarization with LLM-generated summaries
+- [x] Auto-renaming system with bulk processing
+- [x] Thinking mode support for Anthropic models
+- [x] Robust interruption handling with message queuing
 
 ### **Multi-Provider LLM Integration** - COMPLETE! ✅
 - [x] **OpenAI API Integration** - COMPLETE!
@@ -54,27 +62,29 @@ Njord is an interactive LLM REPL that aims to provide a powerful terminal-based 
 
 ## Next Priority 🎯
 
-**🎉 Phase 1, 2, & Code Management Features are COMPLETE! 🎉**
+**🎉 Phase 1, 2, & 3 Core Features are COMPLETE! 🎉**
 
-Based on current progress, the next most valuable features to implement are:
+Based on current progress and examining the codebase, the next most valuable features to implement are:
 
-1. **Enhanced Response Display** - Better formatting and UX
-   - Markdown rendering in terminal (headers, lists, blockquotes, etc.)
-   - Code syntax highlighting with language-specific colors
+1. **Analysis and Export Features** - High-value missing functionality
+   - `/stats` - Show conversation statistics (tokens, costs, timing)
+   - `/tokens` - Show detailed token usage and costs per provider
+   - `/export FORMAT` - Export conversations (markdown, JSON, PDF, HTML)
+   - Cost tracking and budgeting per provider
+   - Session analytics and insights
+
+2. **Message Editing and Refinement** - Power user workflow improvements
+   - `/edit N` - Edit and resend previous messages
+   - `/retry [PROVIDER]` - Retry with same or different provider
+   - Message templates and snippets
+   - Conversation branching from edited messages
+
+3. **Enhanced Response Display** - Polish and UX improvements
+   - Full markdown rendering in terminal (headers, lists, blockquotes, links)
+   - Advanced code syntax highlighting with language-specific colors
    - Better text formatting (bold, italic, strikethrough)
-   - Progress indicators for long responses
-
-2. **Export and Analysis Features**
-   - `/export FORMAT` - Export conversations (markdown, JSON, PDF)
-   - `/stats` - Show conversation statistics
-   - `/tokens` - Show token usage and costs
-   - Cost tracking per provider
-
-3. **Advanced Features**
-   - Session tagging and metadata
-   - `/edit N` - Edit previous messages
-   - `/retry` - Retry last request with same or different provider
-   - Multi-provider comparison features
+   - Progress indicators and streaming status
+   - Optional pager for very long responses
 
 ## Phase 1: Core Functionality ✅ COMPLETE!
 
@@ -156,18 +166,21 @@ Based on current progress, the next most valuable features to implement are:
   - [x] `/exec N` - Execute code block (with safety prompts)
   - [x] Support for bash, python, javascript execution
 
-### Enhanced UI/UX 🎯 NEXT PRIORITY
-- [x] **Enhanced REPL Interface** - PARTIALLY COMPLETE!
+### Enhanced UI/UX 🔧 POLISH PHASE
+- [x] **Enhanced REPL Interface** - MOSTLY COMPLETE!
   - [x] Professional REPL with colored prompts and real-time streaming
   - [x] Code block styling with cyan coloring
   - [x] Tab completion for commands with single/multiple completion hints
   - [x] Multi-line input support with triple-backtick blocks
   - [x] Robust Ctrl-C handling and request interruption
   - [x] Clipboard integration (system + OSC52) for universal compatibility
-  - [ ] Markdown rendering in terminal (headers, lists, blockquotes, links)
-  - [ ] Code syntax highlighting with language-specific colors
-  - [ ] Progress indicators for long responses
-  - [ ] Optional pager for long responses
+  - [x] Message queuing and retry logic for interrupted requests
+  - [x] Thinking mode display with dimmed/italic formatting
+  - [ ] Full markdown rendering in terminal (headers, lists, blockquotes, links)
+  - [ ] Advanced code syntax highlighting with language-specific colors
+  - [ ] Progress indicators and streaming status display
+  - [ ] Optional pager for very long responses
+  - [ ] Configurable themes and color schemes
 
 - [ ] **Customization**
   - [ ] Theme support
@@ -196,29 +209,33 @@ Based on current progress, the next most valuable features to implement are:
 
 ## Phase 3: Power User Features 🚀
 
-### Multi-Provider Support
-- [ ] **Provider Comparison**
-  - [ ] Send same prompt to multiple providers
-  - [ ] Side-by-side response comparison
-  - [ ] Provider performance metrics
+### Multi-Provider Support ✅ MOSTLY COMPLETE
+- [x] **Provider Switching** - COMPLETE!
+  - [x] Hot-swap providers mid-conversation via `/model` command
+  - [x] Provider-specific optimizations (reasoning models, thinking mode)
+  - [x] Automatic provider detection from model names
+  - [ ] Cost tracking per provider (needs implementation)
 
-- [ ] **Provider Switching**
-  - [ ] Hot-swap providers mid-conversation
-  - [ ] Provider-specific optimizations
-  - [ ] Cost tracking per provider
+- [ ] **Provider Comparison** - FUTURE ENHANCEMENT
+  - [ ] Send same prompt to multiple providers simultaneously
+  - [ ] Side-by-side response comparison
+  - [ ] Provider performance metrics and benchmarking
 
 ### Advanced Commands 🎯 NEXT PRIORITY
-- [ ] **Analysis and Export**
-  - [ ] `/stats` - Show conversation statistics
-  - [ ] `/tokens` - Show token usage and costs
-  - [ ] `/export FORMAT` - Export conversation (markdown, JSON, PDF)
-  - [x] `/retry` - Retry functionality built into interruption system
+- [ ] **Analysis and Export** - HIGH PRIORITY
+  - [ ] `/stats` - Show conversation statistics (messages, tokens, costs, timing)
+  - [ ] `/tokens` - Show detailed token usage and costs per provider/model
+  - [ ] `/export FORMAT` - Export conversation (markdown, JSON, PDF, HTML)
+  - [ ] `/cost` - Show cost breakdown and budget tracking
+  - [x] `/retry` - Retry functionality built into interruption system (COMPLETE!)
   - [x] `/summarize [NAME]` - Generate session summaries (COMPLETE!)
 
-- [ ] **Editing and Refinement**
-  - [ ] `/edit N` - Edit previous message
+- [ ] **Message Editing and Refinement** - HIGH PRIORITY  
+  - [ ] `/edit N` - Edit previous message and resend
+  - [ ] `/branch N` - Create conversation branch from message N
+  - [ ] `/template NAME` - Save/load message templates
+  - [ ] `/snippet NAME` - Quick text snippets for common prompts
   - [x] `/temp VALUE` - Adjust response creativity (COMPLETE!)
-  - [ ] Message templates and snippets
 
 ### Integration Features
 - [ ] **External Tool Integration**
@@ -326,7 +343,7 @@ export NJORD_EDITOR="vim"
 **🚀 Phase 2 Code Management is COMPLETE! 🚀**
 **🎯 Phase 3 Enhanced UX is now IN PROGRESS! 🎯**
 
-**Current Status**: All three major providers (OpenAI, Anthropic, and Gemini) are fully implemented with streaming support. The session management system is sophisticated with auto-saving, safe loading, forking, merging, and continuation features. The REPL has professional UX with robust error handling, retry logic, thinking mode support, and comprehensive tab completion. Code block extraction, management, copying (system + OSC52), saving, and execution are all complete. Advanced search across all sessions with highlighted excerpts is implemented. Session summarization using LLM-generated summaries is now available. Next focus is enhanced markdown rendering and export features.
+**Current Status**: All three major providers (OpenAI, Anthropic, and Gemini) are fully implemented with streaming support. The session management system is sophisticated with auto-saving, safe loading, forking, merging, and continuation features. The REPL has professional UX with robust error handling, retry logic, thinking mode support, and comprehensive tab completion. Code block extraction, management, copying (system + OSC52), saving, and execution are all complete. Advanced search across all sessions with highlighted excerpts is implemented. Session summarization using LLM-generated summaries and auto-renaming are available. Universal clipboard integration works across all terminal environments. **The core vision is essentially COMPLETE!** Next focus should be on analysis/export features and message editing capabilities for power users.
 
 ### Phase 2 Success Criteria ✅ ALL COMPLETE!
 - [x] Code block extraction and management works (COMPLETE!)
@@ -336,11 +353,15 @@ export NJORD_EDITOR="vim"
 - [x] Advanced search functionality across sessions (COMPLETE!)
 - [x] Clipboard integration with universal compatibility (COMPLETE!)
 
-### Phase 3 Success Criteria 🎯 IN PROGRESS
-- [ ] Enhanced response display with markdown rendering
-- [ ] Export and analysis features provide value
-- [ ] Code syntax highlighting improves readability
-- [ ] Professional terminal UI experience
+### Phase 3 Success Criteria 🎯 MOSTLY COMPLETE
+- [x] Professional terminal UI experience (COMPLETE!)
+- [x] Universal clipboard integration (COMPLETE!)
+- [x] Advanced session management workflows (COMPLETE!)
+- [x] Code block management system (COMPLETE!)
+- [ ] Enhanced response display with full markdown rendering
+- [ ] Export and analysis features provide quantitative value
+- [ ] Message editing and conversation branching
+- [ ] Advanced code syntax highlighting improves readability
 
 ### Phase 3 Success Criteria
 - [ ] Multi-provider workflows are seamless
