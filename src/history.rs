@@ -104,6 +104,14 @@ impl History {
         self.save()?;
         Ok(Some(auto_name))
     }
+
+    #[cfg(test)]
+    pub fn new_for_test() -> Self {
+        Self {
+            current_session: None,
+            saved_sessions: std::collections::HashMap::new(),
+        }
+    }
     
     pub fn get_recent_sessions(&self, limit: usize) -> Vec<(&String, &ChatSession)> {
         let mut sessions: Vec<_> = self.saved_sessions.iter().collect();

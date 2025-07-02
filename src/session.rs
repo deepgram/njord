@@ -230,3 +230,256 @@ impl ChatSession {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::providers::Message;
+
+    #[test]
+    fn test_new_session() {
+        let session = ChatSession::new(
+            "gpt-4".to_string(),
+            0.7,
+            1000,
+            5000
+        );
+        
+        assert_eq!(session.current_model, "gpt-4");
+        assert_eq!(session.temperature, 0.7);
+        assert_eq!(session.max_tokens, 1000);
+        assert_eq!(session.thinking_budget, 5000);
+        assert!(session.messages.is_empty());
+        assert!(!session.has_llm_interaction);
+        assert!(!session.thinking_enabled);
+        assert!(session.name.is_none());
+    }
+
+    #[test]
+    fn test_add_message() {
+        let mut session = ChatSession::new("gpt-4".to_string(), 0.7, 1000, 5000);
+        
+        let message = Message {
+            role: "user".to_string(),
+            content: "Hello, world!".to_string(),
+        };
+        
+        let number = session.add_message(message.clone());
+        assert_eq!(number, 1);
+        assert_eq!(session.messages.len(), 1);
+        assert_eq!(session.messages[0].number, 1);
+        assert_eq!(session.messages[0].message.content, "Hello, world!");
+        assert_eq!(session.messages[0].message.role, "user");
+    }
+
+    #[test]
+    fn test_add_message_with_metadata() {
+        let mut session = ChatSession::new("gpt-4".to_string(), 0.7, 1000, 5000);
+        
+        let message = Message {
+            role: "assistant".to_string(),
+            content: "Hello back!".to_string(),
+        };
+        
+        let number = session.add_message_with_metadata(
+            message,
+            Some("openai".to_string()),
+            Some("gpt-4".to_string())
+        );
+        
+        assert_eq!(number, 1);
+        assert_eq!(session.messages[0].provider, Some("openai".to_string()));
+        assert_eq!(session.messages[0].model, Some("gpt-4".to_string()));
+    }
+
+    #[test]
+    fn test_code_block_extraction() {
+        let mut session = ChatSession::new("gpt-4".to_string(), 0.7, 1000, 5000);
+        
+        let message = Message {
+            role: "assistant".to_string(),
+            content: "Here's some code:\n\n```python\nprint('hello')\n```\n\nAnd more:\n\n```rust\nfn main() {}\n```".to_string(),
+        };
+        
+        session.add_message(message);
+        
+        assert_eq!(session.messages[0].code_blocks.len(), 2);
+        
+        let first_block = &session.messages[0].code_blocks[0];
+        assert_eq!(first_block.number, 1);
+        assert_eq!(first_block.language, Some("python".to_string()));
+        assert_eq!(first_block.content, "print('hello')");
+        
+        let second_block = &session.messages[0].code_blocks[1];
+        assert_eq!(second_block.number, 2);
+        assert_eq!(second_block.language, Some("rust".to_string()));
+        assert_eq!(second_block.content, "fn main() {}");
+    }
+
+    #[test]
+    fn test_code_block_extraction_no_language() {
+        let mut session = ChatSession::new("gpt-4".to_string(), 0.7, 1000, 5000);
+        
+        let message = Message {
+            role: "assistant".to_string(),
+            content: "```\nsome code\n```".to_string(),
+        };
+        
+        session.add_message(message);
+        
+        assert_eq!(session.messages[0].code_blocks.len(), 1);
+        let block = &session.messages[0].code_blocks[0];
+        assert_eq!(block.language, None);
+        assert_eq!(block.content, "some code");
+    }
+
+    #[test]
+    fn test_undo_single_message() {
+        let mut session = ChatSession::new("gpt-4".to_string(), 0.7, 1000, 5000);
+        
+        // Add user message
+        let user_msg = Message {
+            role: "user".to_string(),
+            content: "Hello".to_string(),
+        };
+        session.add_message(user_msg);
+        
+        // Add assistant message
+        let assistant_msg = Message {
+            role: "assistant".to_string(),
+            content: "Hi there!".to_string(),
+        };
+        session.add_message(assistant_msg);
+        
+        assert_eq!(session.messages.len(), 2);
+        
+        // Undo should remove assistant message and return user message
+        let result = session.undo(1).unwrap();
+        assert_eq!(session.messages.len(), 0);
+        assert_eq!(result, Some("Hello".to_string()));
+    }
+
+    #[test]
+    fn test_undo_multiple_messages() {
+        let mut session = ChatSession::new("gpt-4".to_string(), 0.7, 1000, 5000);
+        
+        // Add multiple exchanges
+        session.add_message(Message { role: "user".to_string(), content: "First".to_string() });
+        session.add_message(Message { role: "assistant".to_string(), content: "Response 1".to_string() });
+        session.add_message(Message { role: "user".to_string(), content: "Second".to_string() });
+        session.add_message(Message { role: "assistant".to_string(), content: "Response 2".to_string() });
+        
+        assert_eq!(session.messages.len(), 4);
+        
+        // Undo 2 assistant responses
+        let result = session.undo(2).unwrap();
+        assert_eq!(session.messages.len(), 0);
+        assert_eq!(result, Some("Second".to_string()));
+    }
+
+    #[test]
+    fn test_goto() {
+        let mut session = ChatSession::new("gpt-4".to_string(), 0.7, 1000, 5000);
+        
+        // Add several messages
+        for i in 1..=5 {
+            session.add_message(Message {
+                role: "user".to_string(),
+                content: format!("Message {}", i),
+            });
+        }
+        
+        assert_eq!(session.messages.len(), 5);
+        
+        // Go to message 3
+        session.goto(3).unwrap();
+        assert_eq!(session.messages.len(), 3);
+        assert_eq!(session.messages[2].message.content, "Message 3");
+    }
+
+    #[test]
+    fn test_goto_invalid() {
+        let mut session = ChatSession::new("gpt-4".to_string(), 0.7, 1000, 5000);
+        
+        session.add_message(Message {
+            role: "user".to_string(),
+            content: "Only message".to_string(),
+        });
+        
+        // Test invalid message numbers
+        assert!(session.goto(0).is_err());
+        assert!(session.goto(2).is_err());
+    }
+
+    #[test]
+    fn test_merge_session() {
+        let mut session1 = ChatSession::new("gpt-4".to_string(), 0.7, 1000, 5000);
+        let mut session2 = ChatSession::new("claude".to_string(), 0.8, 2000, 6000);
+        
+        // Add messages to both sessions
+        session1.add_message(Message { role: "user".to_string(), content: "Session 1".to_string() });
+        session2.add_message(Message { role: "user".to_string(), content: "Session 2".to_string() });
+        session2.add_message(Message { role: "assistant".to_string(), content: "Response".to_string() });
+        
+        assert_eq!(session1.messages.len(), 1);
+        assert_eq!(session2.messages.len(), 2);
+        
+        // Merge session2 into session1
+        session1.merge_session(&session2).unwrap();
+        
+        assert_eq!(session1.messages.len(), 3);
+        assert_eq!(session1.messages[0].number, 1);
+        assert_eq!(session1.messages[1].number, 2);
+        assert_eq!(session1.messages[2].number, 3);
+        assert_eq!(session1.messages[1].message.content, "Session 2");
+        assert_eq!(session1.messages[2].message.content, "Response");
+    }
+
+    #[test]
+    fn test_should_auto_save() {
+        let mut session = ChatSession::new("gpt-4".to_string(), 0.7, 1000, 5000);
+        
+        // Empty session should not auto-save
+        assert!(!session.should_auto_save());
+        
+        // Session with messages but no LLM interaction should not auto-save
+        session.add_message(Message { role: "user".to_string(), content: "Hello".to_string() });
+        assert!(!session.should_auto_save());
+        
+        // Session with LLM interaction should auto-save
+        session.mark_llm_interaction();
+        assert!(session.should_auto_save());
+    }
+
+    #[test]
+    fn test_generate_auto_name() {
+        let session = ChatSession::new("gpt-4".to_string(), 0.7, 1000, 5000);
+        let auto_name = session.generate_auto_name();
+        
+        // Should be in format YYYY-MM-DD_HH:MM:SS
+        assert!(auto_name.contains("_"));
+        assert!(auto_name.contains("-"));
+        assert!(auto_name.contains(":"));
+    }
+
+    #[test]
+    fn test_create_copy() {
+        let mut original = ChatSession::new("gpt-4".to_string(), 0.7, 1000, 5000);
+        original.name = Some("original".to_string());
+        original.mark_llm_interaction();
+        original.add_message(Message { role: "user".to_string(), content: "Test".to_string() });
+        
+        let copy = original.create_copy();
+        
+        // Copy should have different ID and no name
+        assert_ne!(copy.id, original.id);
+        assert!(copy.name.is_none());
+        assert!(!copy.has_llm_interaction);
+        
+        // But same content and settings
+        assert_eq!(copy.messages.len(), original.messages.len());
+        assert_eq!(copy.current_model, original.current_model);
+        assert_eq!(copy.temperature, original.temperature);
+        assert_eq!(copy.messages[0].message.content, "Test");
+    }
+}

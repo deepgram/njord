@@ -1,6 +1,9 @@
 use anyhow::Result;
 use regex::Regex;
 
+#[cfg(test)]
+use std::collections::HashMap;
+
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub enum Command {
@@ -289,6 +292,263 @@ impl CommandParser {
                     None
                 }
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn create_parser() -> CommandParser {
+        CommandParser::new().unwrap()
+    }
+
+    #[test]
+    fn test_basic_commands() {
+        let parser = create_parser();
+        
+        assert!(matches!(parser.parse("/help"), Some(Command::Help)));
+        assert!(matches!(parser.parse("/models"), Some(Command::Models)));
+        assert!(matches!(parser.parse("/quit"), Some(Command::Quit)));
+        assert!(matches!(parser.parse("/clear"), Some(Command::Clear)));
+        assert!(matches!(parser.parse("/status"), Some(Command::Status)));
+        assert!(matches!(parser.parse("/history"), Some(Command::History)));
+        assert!(matches!(parser.parse("/blocks"), Some(Command::Blocks)));
+    }
+
+    #[test]
+    fn test_model_command() {
+        let parser = create_parser();
+        
+        if let Some(Command::Model(model)) = parser.parse("/model gpt-4") {
+            assert_eq!(model, "gpt-4");
+        } else {
+            panic!("Expected Model command");
+        }
+        
+        if let Some(Command::Model(model)) = parser.parse("/model claude-sonnet-4-20250514") {
+            assert_eq!(model, "claude-sonnet-4-20250514");
+        } else {
+            panic!("Expected Model command");
+        }
+    }
+
+    #[test]
+    fn test_temperature_command() {
+        let parser = create_parser();
+        
+        if let Some(Command::Temperature(temp)) = parser.parse("/temp 0.7") {
+            assert_eq!(temp, 0.7);
+        } else {
+            panic!("Expected Temperature command");
+        }
+        
+        if let Some(Command::Temperature(temp)) = parser.parse("/temp 1.5") {
+            assert_eq!(temp, 1.5);
+        } else {
+            panic!("Expected Temperature command");
+        }
+    }
+
+    #[test]
+    fn test_undo_command() {
+        let parser = create_parser();
+        
+        // Test undo without count
+        if let Some(Command::Undo(count)) = parser.parse("/undo") {
+            assert_eq!(count, None);
+        } else {
+            panic!("Expected Undo command");
+        }
+        
+        // Test undo with count
+        if let Some(Command::Undo(count)) = parser.parse("/undo 3") {
+            assert_eq!(count, Some(3));
+        } else {
+            panic!("Expected Undo command");
+        }
+    }
+
+    #[test]
+    fn test_goto_command() {
+        let parser = create_parser();
+        
+        if let Some(Command::Goto(number)) = parser.parse("/goto 5") {
+            assert_eq!(number, 5);
+        } else {
+            panic!("Expected Goto command");
+        }
+    }
+
+    #[test]
+    fn test_search_command() {
+        let parser = create_parser();
+        
+        if let Some(Command::Search(term)) = parser.parse("/search hello world") {
+            assert_eq!(term, "hello world");
+        } else {
+            panic!("Expected Search command");
+        }
+    }
+
+    #[test]
+    fn test_copy_commands() {
+        let parser = create_parser();
+        
+        // Test basic copy
+        if let Some(Command::Copy(copy_type, number)) = parser.parse("/copy") {
+            assert!(matches!(copy_type, CopyType::Agent));
+            assert_eq!(number, None);
+        } else {
+            panic!("Expected Copy command");
+        }
+        
+        // Test copy with number
+        if let Some(Command::Copy(copy_type, number)) = parser.parse("/copy 2") {
+            assert!(matches!(copy_type, CopyType::Agent));
+            assert_eq!(number, Some(2));
+        } else {
+            panic!("Expected Copy command");
+        }
+        
+        // Test typed copy
+        if let Some(Command::Copy(copy_type, number)) = parser.parse("/copy user 3") {
+            assert!(matches!(copy_type, CopyType::User));
+            assert_eq!(number, Some(3));
+        } else {
+            panic!("Expected Copy command");
+        }
+        
+        if let Some(Command::Copy(copy_type, number)) = parser.parse("/copy block 1") {
+            assert!(matches!(copy_type, CopyType::Block));
+            assert_eq!(number, Some(1));
+        } else {
+            panic!("Expected Copy command");
+        }
+    }
+
+    #[test]
+    fn test_session_references() {
+        // Test named reference
+        let named_ref = CommandParser::parse_session_reference("my-session");
+        if let SessionReference::Named(name) = named_ref {
+            assert_eq!(name, "my-session");
+        } else {
+            panic!("Expected Named reference");
+        }
+        
+        // Test ephemeral reference
+        let ephemeral_ref = CommandParser::parse_session_reference("#5");
+        if let SessionReference::Ephemeral(number) = ephemeral_ref {
+            assert_eq!(number, 5);
+        } else {
+            panic!("Expected Ephemeral reference");
+        }
+        
+        // Test quoted reference
+        let quoted_ref = CommandParser::parse_session_reference("\"session with spaces\"");
+        if let SessionReference::Named(name) = quoted_ref {
+            assert_eq!(name, "session with spaces");
+        } else {
+            panic!("Expected Named reference");
+        }
+        
+        // Test quoted reference with hash
+        let quoted_hash_ref = CommandParser::parse_session_reference("\"#special-session\"");
+        if let SessionReference::Named(name) = quoted_hash_ref {
+            assert_eq!(name, "#special-session");
+        } else {
+            panic!("Expected Named reference");
+        }
+    }
+
+    #[test]
+    fn test_chat_commands() {
+        let parser = create_parser();
+        
+        // Test chat save
+        if let Some(Command::ChatSave(name)) = parser.parse("/chat save my-session") {
+            assert_eq!(name, "my-session");
+        } else {
+            panic!("Expected ChatSave command");
+        }
+        
+        // Test chat load with named reference
+        if let Some(Command::ChatLoad(session_ref)) = parser.parse("/chat load my-session") {
+            if let SessionReference::Named(name) = session_ref {
+                assert_eq!(name, "my-session");
+            } else {
+                panic!("Expected Named reference");
+            }
+        } else {
+            panic!("Expected ChatLoad command");
+        }
+        
+        // Test chat load with ephemeral reference
+        if let Some(Command::ChatLoad(session_ref)) = parser.parse("/chat load #3") {
+            if let SessionReference::Ephemeral(number) = session_ref {
+                assert_eq!(number, 3);
+            } else {
+                panic!("Expected Ephemeral reference");
+            }
+        } else {
+            panic!("Expected ChatLoad command");
+        }
+    }
+
+    #[test]
+    fn test_thinking_command() {
+        let parser = create_parser();
+        
+        if let Some(Command::Thinking(enabled)) = parser.parse("/thinking on") {
+            assert!(enabled);
+        } else {
+            panic!("Expected Thinking command");
+        }
+        
+        if let Some(Command::Thinking(enabled)) = parser.parse("/thinking off") {
+            assert!(!enabled);
+        } else {
+            panic!("Expected Thinking command");
+        }
+        
+        if let Some(Command::Thinking(enabled)) = parser.parse("/thinking true") {
+            assert!(enabled);
+        } else {
+            panic!("Expected Thinking command");
+        }
+        
+        if let Some(Command::Thinking(enabled)) = parser.parse("/thinking false") {
+            assert!(!enabled);
+        } else {
+            panic!("Expected Thinking command");
+        }
+    }
+
+    #[test]
+    fn test_invalid_commands() {
+        let parser = create_parser();
+        
+        assert!(parser.parse("hello").is_none());
+        assert!(parser.parse("/invalid").is_none());
+        assert!(parser.parse("/model").is_none()); // Missing argument
+        assert!(parser.parse("/temp").is_none()); // Missing argument
+        assert!(parser.parse("/goto").is_none()); // Missing argument
+    }
+
+    #[test]
+    fn test_whitespace_handling() {
+        let parser = create_parser();
+        
+        // Test commands with extra whitespace
+        assert!(matches!(parser.parse("  /help  "), Some(Command::Help)));
+        assert!(matches!(parser.parse("/models   "), Some(Command::Models)));
+        
+        if let Some(Command::Model(model)) = parser.parse("/model   gpt-4   ") {
+            assert_eq!(model, "gpt-4");
+        } else {
+            panic!("Expected Model command");
         }
     }
 }
