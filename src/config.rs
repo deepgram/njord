@@ -17,24 +17,38 @@ pub struct Config {
 
 impl Config {
     pub fn from_args(args: &Args) -> Result<Self> {
+        // Read environment variables once
+        let env_openai = std::env::var("OPENAI_API_KEY").ok();
+        let env_anthropic = std::env::var("ANTHROPIC_API_KEY").ok();
+        let env_gemini = std::env::var("GEMINI_API_KEY").ok();
+        
+        Self::from_args_and_env(args, env_openai, env_anthropic, env_gemini)
+    }
+    
+    pub fn from_args_and_env(
+        args: &Args,
+        env_openai: Option<String>,
+        env_anthropic: Option<String>,
+        env_gemini: Option<String>,
+    ) -> Result<Self> {
         let mut api_keys = HashMap::new();
         
         // Check CLI args first, then environment variables
         if let Some(key) = &args.openai_key {
             api_keys.insert("openai".to_string(), key.clone());
-        } else if let Ok(key) = std::env::var("OPENAI_API_KEY") {
+        } else if let Some(key) = env_openai {
             api_keys.insert("openai".to_string(), key);
         }
         
         if let Some(key) = &args.anthropic_key {
             api_keys.insert("anthropic".to_string(), key.clone());
-        } else if let Ok(key) = std::env::var("ANTHROPIC_API_KEY") {
+        } else if let Some(key) = env_anthropic {
             api_keys.insert("anthropic".to_string(), key);
         }
         
         if let Some(key) = &args.gemini_key {
             api_keys.insert("gemini".to_string(), key.clone());
-        } else if let Ok(key) = std::env::var("GEMINI_API_KEY") {
+        } else if let Some(key) = env_gemini {
             api_keys.insert("gemini".to_string(), key);
         }
         
@@ -94,16 +108,6 @@ mod tests {
 
     #[test]
     fn test_config_default_model_selection() {
-        // Store original values to restore later
-        let original_openai = std::env::var("OPENAI_API_KEY").ok();
-        let original_anthropic = std::env::var("ANTHROPIC_API_KEY").ok();
-        let original_gemini = std::env::var("GEMINI_API_KEY").ok();
-        
-        // Clear environment variables to ensure clean test
-        std::env::remove_var("OPENAI_API_KEY");
-        std::env::remove_var("ANTHROPIC_API_KEY");
-        std::env::remove_var("GEMINI_API_KEY");
-        
         // Test with Anthropic key - should default to Claude
         let args_anthropic = Args {
             openai_key: None,
@@ -117,7 +121,7 @@ mod tests {
             new_session: false,
         };
         
-        let config = Config::from_args(&args_anthropic).unwrap();
+        let config = Config::from_args_and_env(&args_anthropic, None, None, None).unwrap();
         assert_eq!(config.default_model, "claude-sonnet-4-20250514");
         
         // Test with OpenAI key - should default to o3-pro
@@ -133,7 +137,7 @@ mod tests {
             new_session: false,
         };
         
-        let config = Config::from_args(&args_openai).unwrap();
+        let config = Config::from_args_and_env(&args_openai, None, None, None).unwrap();
         assert_eq!(config.default_model, "o3-pro");
         
         // Test with Gemini key - should default to gemini-2.5-pro
@@ -149,33 +153,12 @@ mod tests {
             new_session: false,
         };
         
-        let config = Config::from_args(&args_gemini).unwrap();
+        let config = Config::from_args_and_env(&args_gemini, None, None, None).unwrap();
         assert_eq!(config.default_model, "gemini-2.5-pro");
-        
-        // Restore original environment variables
-        if let Some(key) = original_openai {
-            std::env::set_var("OPENAI_API_KEY", key);
-        }
-        if let Some(key) = original_anthropic {
-            std::env::set_var("ANTHROPIC_API_KEY", key);
-        }
-        if let Some(key) = original_gemini {
-            std::env::set_var("GEMINI_API_KEY", key);
-        }
     }
 
     #[test]
     fn test_config_no_api_keys() {
-        // Store original values to restore later
-        let original_openai = std::env::var("OPENAI_API_KEY").ok();
-        let original_anthropic = std::env::var("ANTHROPIC_API_KEY").ok();
-        let original_gemini = std::env::var("GEMINI_API_KEY").ok();
-        
-        // Clear any environment variables that might interfere
-        std::env::remove_var("OPENAI_API_KEY");
-        std::env::remove_var("ANTHROPIC_API_KEY");
-        std::env::remove_var("GEMINI_API_KEY");
-        
         let args = Args {
             openai_key: None,
             anthropic_key: None,
@@ -188,32 +171,13 @@ mod tests {
             new_session: false,
         };
         
-        let config = Config::from_args(&args).unwrap();
+        let config = Config::from_args_and_env(&args, None, None, None).unwrap();
         assert!(config.api_keys.is_empty());
         assert_eq!(config.default_model, "gpt-4"); // Falls back to CLI arg
-        
-        // Restore original environment variables
-        if let Some(key) = original_openai {
-            std::env::set_var("OPENAI_API_KEY", key);
-        }
-        if let Some(key) = original_anthropic {
-            std::env::set_var("ANTHROPIC_API_KEY", key);
-        }
-        if let Some(key) = original_gemini {
-            std::env::set_var("GEMINI_API_KEY", key);
-        }
     }
 
     #[test]
     fn test_config_precedence() {
-        // Store original values to restore later
-        let original_openai = std::env::var("OPENAI_API_KEY").ok();
-        let original_anthropic = std::env::var("ANTHROPIC_API_KEY").ok();
-        
-        // Set environment variables
-        std::env::set_var("OPENAI_API_KEY", "env-openai-key");
-        std::env::set_var("ANTHROPIC_API_KEY", "env-anthropic-key");
-        
         // CLI args should take precedence
         let args = Args {
             openai_key: Some("cli-openai-key".to_string()),
@@ -227,20 +191,13 @@ mod tests {
             new_session: false,
         };
         
-        let config = Config::from_args(&args).unwrap();
+        let config = Config::from_args_and_env(
+            &args,
+            Some("env-openai-key".to_string()),
+            Some("env-anthropic-key".to_string()),
+            None,
+        ).unwrap();
         assert_eq!(config.api_keys.get("openai"), Some(&"cli-openai-key".to_string()));
         assert_eq!(config.api_keys.get("anthropic"), Some(&"env-anthropic-key".to_string()));
-        
-        // Restore original environment variables
-        if let Some(key) = original_openai {
-            std::env::set_var("OPENAI_API_KEY", key);
-        } else {
-            std::env::remove_var("OPENAI_API_KEY");
-        }
-        if let Some(key) = original_anthropic {
-            std::env::set_var("ANTHROPIC_API_KEY", key);
-        } else {
-            std::env::remove_var("ANTHROPIC_API_KEY");
-        }
     }
 }
