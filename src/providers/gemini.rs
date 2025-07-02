@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use futures::Stream;
 use reqwest::Client;
 use serde_json::json;
+use tokio::time::{sleep, Duration};
 
 use super::{LLMProvider, ChatRequest, Message};
 
@@ -18,6 +19,54 @@ impl GeminiProvider {
             client: Client::new(),
             api_key: api_key.to_string(),
         })
+    }
+    
+    async fn make_request_with_retry(&self, url: &str, payload: &serde_json::Value) -> Result<reqwest::Response> {
+        const MAX_RETRIES: u32 = 5;
+        const BASE_DELAY_MS: u64 = 500; // 0.5 seconds
+        
+        for attempt in 0..MAX_RETRIES {
+            let response = self.client
+                .post(url)
+                .header("Content-Type", "application/json")
+                .json(payload)
+                .send()
+                .await;
+            
+            match response {
+                Ok(resp) => {
+                    if resp.status().is_success() {
+                        return Ok(resp);
+                    } else if resp.status().is_server_error() || resp.status() == 429 {
+                        // Retry on server errors (5xx) and rate limiting (429)
+                        if attempt < MAX_RETRIES - 1 {
+                            let delay_ms = BASE_DELAY_MS * 2_u64.pow(attempt);
+                            sleep(Duration::from_millis(delay_ms)).await;
+                            continue;
+                        } else {
+                            let error_text = resp.text().await?;
+                            return Err(anyhow::anyhow!("Gemini API error after {} retries: {}", MAX_RETRIES, error_text));
+                        }
+                    } else {
+                        // Don't retry on client errors (4xx except 429)
+                        let error_text = resp.text().await?;
+                        return Err(anyhow::anyhow!("Gemini API error: {}", error_text));
+                    }
+                }
+                Err(e) => {
+                    // Retry on network errors
+                    if attempt < MAX_RETRIES - 1 {
+                        let delay_ms = BASE_DELAY_MS * 2_u64.pow(attempt);
+                        sleep(Duration::from_millis(delay_ms)).await;
+                        continue;
+                    } else {
+                        return Err(anyhow::anyhow!("Gemini API network error after {} retries: {}", MAX_RETRIES, e));
+                    }
+                }
+            }
+        }
+        
+        unreachable!()
     }
     
     #[allow(dead_code)]
@@ -86,17 +135,7 @@ impl LLMProvider for GeminiProvider {
             }
         });
         
-        let response = self.client
-            .post(&url)
-            .header("Content-Type", "application/json")
-            .json(&payload)
-            .send()
-            .await?;
-        
-        if !response.status().is_success() {
-            let error_text = response.text().await?;
-            return Err(anyhow::anyhow!("Gemini API error: {}", error_text));
-        }
+        let response = self.make_request_with_retry(&url, &payload).await?;
         
         if request.stream {
             // Handle streaming response with proper SSE parsing
