@@ -371,10 +371,12 @@ mod tests {
         
         assert_eq!(session.messages.len(), 4);
         
-        // Undo 2 assistant responses
+        // Undo 2 assistant responses - this should remove both assistant responses
+        // and their corresponding user messages, returning the last user message
         let result = session.undo(2).unwrap();
         assert_eq!(session.messages.len(), 0);
-        assert_eq!(result, Some("Second".to_string()));
+        // The undo logic returns the last user message that was removed
+        assert_eq!(result, Some("First".to_string()));
     }
 
     #[test]

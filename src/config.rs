@@ -145,6 +145,11 @@ mod tests {
 
     #[test]
     fn test_config_no_api_keys() {
+        // Clear any environment variables that might interfere
+        std::env::remove_var("OPENAI_API_KEY");
+        std::env::remove_var("ANTHROPIC_API_KEY");
+        std::env::remove_var("GEMINI_API_KEY");
+        
         let args = Args {
             openai_key: None,
             anthropic_key: None,

@@ -1,9 +1,6 @@
 use anyhow::Result;
 use regex::Regex;
 
-#[cfg(test)]
-use std::collections::HashMap;
-
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub enum Command {
