@@ -70,6 +70,24 @@ cargo build --release
 # The binary will be at target/release/njord
 ```
 
+#### Option 3: Install with Cargo
+
+If you have Rust/Cargo installed, you can build and install directly to your PATH:
+
+```bash
+# Clone and install in one step
+git clone https://github.com/yourusername/njord.git
+cd njord
+cargo install --path .
+
+# Or for a static binary (requires musl tools on Linux)
+rustup target add x86_64-unknown-linux-musl
+cargo install --path . --target x86_64-unknown-linux-musl
+
+# Now njord should be available in your PATH
+njord --help
+```
+
 ### Setup
 
 Set your API keys as environment variables:
