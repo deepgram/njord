@@ -335,6 +335,13 @@ This project is licensed under the ISC License - see the [LICENSE](LICENSE) file
 - Universal clipboard support via [arboard](https://github.com/1Password/arboard) and OSC52 escape sequences
 - Developed with [Aider](https://aider.chat/) - the entire project was collaboratively built using Aider and Claude-4-Sonnet
 
+## What's New in v0.3.0
+
+- **Enhanced Retry Logic**: Exponential backoff retry system with 5 attempts (0.5s to 16s backoff)
+- **Improved Test Isolation**: Environment variable handling refactored for reliable testing
+- **Docker Support**: Multi-stage Dockerfile with cargo-chef for efficient builds and static linking
+- **Rust Toolchain**: Pinned to Rust 1.85.1 for consistent builds across environments
+
 ## What's New in v0.2.0
 
 - **Complete Code Management System**: Extract, view, copy, save, and execute code blocks
