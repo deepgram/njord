@@ -434,21 +434,17 @@ impl Completer for NjordCompleter {
                     }
                 }
                 
-                // If we have a meaningful common prefix beyond the current word
+                // Only complete if we have a meaningful common prefix beyond the current word
                 if common_prefix.len() > unquoted_current.len() {
-                    let quoted_prefix = format!("\"{}\"", common_prefix);
-                    return Ok((start_pos, vec![Pair {
-                        display: quoted_prefix.clone(),
-                        replacement: quoted_prefix,
-                    }]));
-                } else if !unquoted_current.is_empty() {
-                    // At least add the opening quote
-                    let quoted_current = format!("\"{}\"", unquoted_current);
-                    return Ok((start_pos, vec![Pair {
-                        display: quoted_current.clone(),
-                        replacement: quoted_current,
+                    // Calculate what needs to be added: quote + additional characters
+                    let additional_chars = &common_prefix[unquoted_current.len()..];
+                    let replacement = format!("\"{}\"", additional_chars);
+                    return Ok((pos, vec![Pair {
+                        display: format!("\"{}\"", common_prefix),
+                        replacement,
                     }]));
                 }
+                // If no meaningful extension, fall through to show no completion
             }
         }
         
