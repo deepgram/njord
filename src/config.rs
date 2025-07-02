@@ -145,6 +145,11 @@ mod tests {
 
     #[test]
     fn test_config_no_api_keys() {
+        // Store original values to restore later
+        let original_openai = std::env::var("OPENAI_API_KEY").ok();
+        let original_anthropic = std::env::var("ANTHROPIC_API_KEY").ok();
+        let original_gemini = std::env::var("GEMINI_API_KEY").ok();
+        
         // Clear any environment variables that might interfere
         std::env::remove_var("OPENAI_API_KEY");
         std::env::remove_var("ANTHROPIC_API_KEY");
@@ -165,10 +170,25 @@ mod tests {
         let config = Config::from_args(&args).unwrap();
         assert!(config.api_keys.is_empty());
         assert_eq!(config.default_model, "gpt-4"); // Falls back to CLI arg
+        
+        // Restore original environment variables
+        if let Some(key) = original_openai {
+            std::env::set_var("OPENAI_API_KEY", key);
+        }
+        if let Some(key) = original_anthropic {
+            std::env::set_var("ANTHROPIC_API_KEY", key);
+        }
+        if let Some(key) = original_gemini {
+            std::env::set_var("GEMINI_API_KEY", key);
+        }
     }
 
     #[test]
     fn test_config_precedence() {
+        // Store original values to restore later
+        let original_openai = std::env::var("OPENAI_API_KEY").ok();
+        let original_anthropic = std::env::var("ANTHROPIC_API_KEY").ok();
+        
         // Set environment variables
         std::env::set_var("OPENAI_API_KEY", "env-openai-key");
         std::env::set_var("ANTHROPIC_API_KEY", "env-anthropic-key");
@@ -190,8 +210,16 @@ mod tests {
         assert_eq!(config.api_keys.get("openai"), Some(&"cli-openai-key".to_string()));
         assert_eq!(config.api_keys.get("anthropic"), Some(&"env-anthropic-key".to_string()));
         
-        // Clean up
-        std::env::remove_var("OPENAI_API_KEY");
-        std::env::remove_var("ANTHROPIC_API_KEY");
+        // Restore original environment variables
+        if let Some(key) = original_openai {
+            std::env::set_var("OPENAI_API_KEY", key);
+        } else {
+            std::env::remove_var("OPENAI_API_KEY");
+        }
+        if let Some(key) = original_anthropic {
+            std::env::set_var("ANTHROPIC_API_KEY", key);
+        } else {
+            std::env::remove_var("ANTHROPIC_API_KEY");
+        }
     }
 }
