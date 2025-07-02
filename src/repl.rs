@@ -1058,51 +1058,89 @@ impl Repl {
                 }
             }
             Command::ChatDelete(session_ref_opt) => {
-                let target_name = if let Some(session_ref) = session_ref_opt {
+                if let Some(session_ref) = session_ref_opt {
                     // Delete specific session by reference
-                    match self.resolve_session_reference(&session_ref) {
+                    let target_name = match self.resolve_session_reference(&session_ref) {
                         Ok(name) => name,
                         Err(e) => {
                             self.ui.print_error(&e.to_string());
                             return Ok(true);
                         }
+                    };
+                    
+                    match self.history.delete_session(&target_name) {
+                        Ok(true) => {
+                            self.ui.print_info(&format!("Session '{}' deleted", target_name));
+                            
+                            // Check if we deleted the current session
+                            if self.session.name.as_ref() == Some(&target_name) {
+                                // Reset to a new anonymous session
+                                self.session = ChatSession::new(
+                                    self.config.default_model.clone(), 
+                                    self.config.temperature, 
+                                    self.config.max_tokens, 
+                                    self.config.thinking_budget
+                                );
+                                self.session.current_provider = get_provider_for_model(&self.session.current_model).map(|s| s.to_string());
+                                self.ui.print_info("Current session was deleted - started new anonymous session");
+                            }
+                            
+                            // Update completion context and session list after deletion
+                            let _ = self.update_completion_context();
+                            self.update_session_list();
+                        }
+                        Ok(false) => {
+                            self.ui.print_error(&format!("Session '{}' not found", target_name));
+                        }
+                        Err(e) => {
+                            self.ui.print_error(&format!("Failed to delete session: {}", e));
+                        }
                     }
                 } else {
-                    // Delete current session - it must be saved first
+                    // Delete current session (no session reference provided)
                     if let Some(ref current_name) = self.session.name {
-                        current_name.clone()
-                    } else {
-                        self.ui.print_error("Current session has no name. Save it first with /chat save NAME, or specify a session name to delete");
-                        return Ok(true);
-                    }
-                };
-                
-                match self.history.delete_session(&target_name) {
-                    Ok(true) => {
-                        self.ui.print_info(&format!("Session '{}' deleted", target_name));
-                        
-                        // Check if we deleted the current session
-                        if self.session.name.as_ref() == Some(&target_name) {
-                            // Reset to a new anonymous session
-                            self.session = ChatSession::new(
-                                self.config.default_model.clone(), 
-                                self.config.temperature, 
-                                self.config.max_tokens, 
-                                self.config.thinking_budget
-                            );
-                            self.session.current_provider = get_provider_for_model(&self.session.current_model).map(|s| s.to_string());
-                            self.ui.print_info("Current session was deleted - started new anonymous session");
+                        // Current session has a name - delete it from history
+                        match self.history.delete_session(current_name) {
+                            Ok(true) => {
+                                self.ui.print_info(&format!("Session '{}' deleted", current_name));
+                                
+                                // Reset to a new anonymous session
+                                self.session = ChatSession::new(
+                                    self.config.default_model.clone(), 
+                                    self.config.temperature, 
+                                    self.config.max_tokens, 
+                                    self.config.thinking_budget
+                                );
+                                self.session.current_provider = get_provider_for_model(&self.session.current_model).map(|s| s.to_string());
+                                self.ui.print_info("Started new anonymous session");
+                                
+                                // Update completion context and session list after deletion
+                                let _ = self.update_completion_context();
+                                self.update_session_list();
+                            }
+                            Ok(false) => {
+                                self.ui.print_error(&format!("Session '{}' not found", current_name));
+                            }
+                            Err(e) => {
+                                self.ui.print_error(&format!("Failed to delete session: {}", e));
+                            }
                         }
+                    } else {
+                        // Current session is anonymous - just clear it and start fresh
+                        let message_count = self.session.messages.len();
+                        self.session = ChatSession::new(
+                            self.config.default_model.clone(), 
+                            self.config.temperature, 
+                            self.config.max_tokens, 
+                            self.config.thinking_budget
+                        );
+                        self.session.current_provider = get_provider_for_model(&self.session.current_model).map(|s| s.to_string());
                         
-                        // Update completion context and session list after deletion
-                        let _ = self.update_completion_context();
-                        self.update_session_list();
-                    }
-                    Ok(false) => {
-                        self.ui.print_error(&format!("Session '{}' not found", target_name));
-                    }
-                    Err(e) => {
-                        self.ui.print_error(&format!("Failed to delete session: {}", e));
+                        if message_count > 0 {
+                            self.ui.print_info(&format!("Current session cleared ({} messages discarded) - started new session", message_count));
+                        } else {
+                            self.ui.print_info("Started new session");
+                        }
                     }
                 }
             }
