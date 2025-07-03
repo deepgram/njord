@@ -95,7 +95,6 @@ mod tests {
             load_session: Some("test-session".to_string()),
             new_session: true,
             history_file: ".njord".to_string(),
-            history_file: ".njord".to_string(),
         };
         
         let config = Config::from_args(&args).unwrap();
