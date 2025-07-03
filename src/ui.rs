@@ -153,35 +153,36 @@ impl NjordCompleter {
     }
     
     fn unquote_for_matching(&self, word: &str) -> String {
-        let trimmed = word.trim();
-        if trimmed.is_empty() {
-            return trimmed.to_string();
+        // Don't trim the word - we need to preserve trailing spaces for matching
+        if word.is_empty() {
+            return word.to_string();
         }
         
-        if trimmed.starts_with('"') {
-            if trimmed.len() == 1 {
+        if word.starts_with('"') {
+            if word.len() == 1 {
                 // Just a quote - return empty string for matching
                 String::new()
-            } else if trimmed.ends_with('"') && trimmed.len() > 1 {
-                // Fully quoted - remove quotes for matching
-                trimmed[1..trimmed.len()-1].to_string()
+            } else if word.ends_with('"') && word.len() > 1 {
+                // Fully quoted - remove quotes for matching, preserving internal spaces
+                word[1..word.len()-1].to_string()
             } else {
-                // Partial quote - remove opening quote for matching
-                trimmed[1..].to_string()
+                // Partial quote - remove opening quote for matching, preserving trailing spaces
+                word[1..].to_string()
             }
-        } else if trimmed.starts_with('\'') {
-            if trimmed.len() == 1 {
+        } else if word.starts_with('\'') {
+            if word.len() == 1 {
                 // Just a quote - return empty string for matching
                 String::new()
-            } else if trimmed.ends_with('\'') && trimmed.len() > 1 {
-                // Fully quoted - remove quotes for matching
-                trimmed[1..trimmed.len()-1].to_string()
+            } else if word.ends_with('\'') && word.len() > 1 {
+                // Fully quoted - remove quotes for matching, preserving internal spaces
+                word[1..word.len()-1].to_string()
             } else {
-                // Partial quote - remove opening quote for matching
-                trimmed[1..].to_string()
+                // Partial quote - remove opening quote for matching, preserving trailing spaces
+                word[1..].to_string()
             }
         } else {
-            trimmed.to_string()
+            // No quotes - return as-is, preserving any trailing spaces
+            word.to_string()
         }
     }
     
