@@ -40,4 +40,8 @@ pub struct Args {
     /// Start with a new chat session
     #[arg(long)]
     pub new_session: bool,
+    
+    /// Path to the history file (default: .njord)
+    #[arg(long, default_value = ".njord")]
+    pub history_file: String,
 }
