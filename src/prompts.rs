@@ -32,15 +32,6 @@ impl SystemPrompt {
         }
     }
     
-    pub fn with_description(mut self, description: String) -> Self {
-        self.description = Some(description);
-        self
-    }
-    
-    pub fn with_tags(mut self, tags: Vec<String>) -> Self {
-        self.tags = tags;
-        self
-    }
     
     pub fn increment_usage(&mut self) {
         self.usage_count += 1;
@@ -98,9 +89,6 @@ impl PromptLibrary {
         self.prompts.get(name)
     }
     
-    pub fn get_prompt_mut(&mut self, name: &str) -> Option<&mut SystemPrompt> {
-        self.prompts.get_mut(name)
-    }
     
     pub fn apply_prompt(&mut self, name: &str) -> Option<String> {
         if let Some(prompt) = self.prompts.get_mut(name) {
