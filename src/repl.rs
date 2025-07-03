@@ -405,6 +405,7 @@ impl Repl {
             
             println!("  Max tokens: {}", self.session.max_tokens);
             println!("  Thinking budget: {}", self.session.thinking_budget);
+            println!("  History file: {}", self.history.history_file_path);
             
             // Show session info if we have messages
             if !self.session.messages.is_empty() {
