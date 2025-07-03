@@ -105,8 +105,9 @@ impl PromptLibrary {
     pub fn apply_prompt(&mut self, name: &str) -> Option<String> {
         if let Some(prompt) = self.prompts.get_mut(name) {
             prompt.increment_usage();
+            let content = prompt.content.clone();
             let _ = self.save(); // Best effort save
-            Some(prompt.content.clone())
+            Some(content)
         } else {
             None
         }

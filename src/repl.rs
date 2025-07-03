@@ -2500,7 +2500,7 @@ Format your summary in clear, readable paragraphs. Be objective and factual.";
     
     async fn handle_prompt_auto_name(&mut self, name_opt: Option<&String>) -> Result<()> {
         // Determine which prompt to auto-name
-        let (target_prompt, prompt_name) = if let Some(name) = name_opt {
+        let (target_prompt, _prompt_name) = if let Some(name) = name_opt {
             // Auto-name specific prompt
             if let Some(prompt) = self.prompts.get_prompt(name) {
                 (prompt.clone(), name.clone())
