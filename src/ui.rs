@@ -20,6 +20,7 @@ pub struct UI {
 pub struct CompletionContext {
     pub available_models: Vec<String>,
     pub session_names: Vec<String>,
+    pub prompt_names: Vec<String>,
 }
 
 impl CompletionContext {
@@ -27,6 +28,7 @@ impl CompletionContext {
         Self {
             available_models: Vec::new(),
             session_names: Vec::new(),
+            prompt_names: Vec::new(),
         }
     }
 }
@@ -50,7 +52,8 @@ impl NjordCompleter {
             "/help", "/models", "/model", "/status", "/quit", "/clear", "/history",
             "/chat", "/undo", "/goto", "/search", "/system", "/temp", "/max-tokens",
             "/thinking-budget", "/thinking", "/retry", "/stats", "/tokens", "/export",
-            "/block", "/blocks", "/copy", "/save", "/exec", "/edit", "/summarize"
+            "/block", "/blocks", "/copy", "/save", "/exec", "/edit", "/summarize",
+            "/prompts"
         ];
         
         if line[..pos].starts_with('/') && !line[..pos].contains(' ') {
@@ -82,6 +85,8 @@ impl NjordCompleter {
             return self.complete_copy_command(line, pos);
         } else if line[..pos].starts_with("/save ") {
             return self.complete_save_command(line, pos);
+        } else if line[..pos].starts_with("/prompts ") {
+            return self.complete_prompts_command(line, pos);
         }
         
         Vec::new()
@@ -301,6 +306,72 @@ impl NjordCompleter {
             // No further completion for numbers or filenames
             Vec::new()
         }
+    }
+    
+    fn complete_prompts_command(&self, line: &str, pos: usize) -> Vec<Pair> {
+        let start_pos = self.find_completion_start(line, pos);
+        let current_word = &line[start_pos..pos];
+        let input = &line[..pos];
+        let parts: Vec<&str> = input.split_whitespace().collect();
+        
+        if parts.len() == 1 || (parts.len() == 2 && !input.ends_with(' ')) {
+            // Complete prompts subcommand
+            let subcommands = vec![
+                "list", "show", "save", "apply", "delete", "rename", "search", 
+                "auto-name", "edit", "import", "export"
+            ];
+            
+            return subcommands.iter()
+                .filter(|cmd| cmd.starts_with(current_word))
+                .map(|cmd| Pair {
+                    display: cmd.to_string(),
+                    replacement: cmd.to_string(),
+                })
+                .collect();
+        } else if parts.len() >= 2 {
+            // Complete prompt names for commands that need them
+            let subcommand = parts[1];
+            if matches!(subcommand, "show" | "apply" | "delete" | "edit" | "auto-name") {
+                return self.complete_prompt_names(current_word);
+            } else if subcommand == "rename" && parts.len() >= 3 {
+                // For rename command, complete prompt names for both arguments
+                return self.complete_prompt_names(current_word);
+            } else if matches!(subcommand, "save" | "import" | "export") {
+                // These commands take names/filenames, no specific completion
+                return Vec::new();
+            }
+        }
+        
+        Vec::new()
+    }
+    
+    fn complete_prompt_names(&self, current_word: &str) -> Vec<Pair> {
+        // Remove quotes from current_word for matching
+        let unquoted_current = self.unquote_for_matching(current_word);
+        let is_quoted_input = current_word.trim().starts_with('"') || current_word.trim().starts_with('\'');
+        
+        self.context.prompt_names.iter()
+            .filter(|name| name.starts_with(&unquoted_current))
+            .map(|name| {
+                let (display, replacement) = if is_quoted_input {
+                    // User started with quotes, so complete with quotes
+                    let quoted = format!("\"{}\"", name);
+                    (quoted.clone(), quoted)
+                } else if name.contains(' ') {
+                    // Auto-quote prompt names with spaces only if user didn't start with quotes
+                    let quoted = format!("\"{}\"", name);
+                    (quoted.clone(), quoted)
+                } else {
+                    // No quotes needed
+                    (name.clone(), name.clone())
+                };
+                
+                Pair {
+                    display,
+                    replacement,
+                }
+            })
+            .collect()
     }
     
     fn find_completion_start(&self, line: &str, pos: usize) -> usize {

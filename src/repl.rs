@@ -12,6 +12,7 @@ use crate::{
     providers::{create_provider, get_provider_for_model, LLMProvider, Message, ChatRequest},
     session::{ChatSession, CodeBlock},
     ui::{UI, CompletionContext},
+    prompts::{PromptLibrary, PROMPTS_FILE},
 };
 
 #[derive(Debug, Clone)]
@@ -26,6 +27,7 @@ pub struct Repl {
     providers: HashMap<String, Box<dyn LLMProvider>>,
     session: ChatSession,
     history: History,
+    prompts: PromptLibrary,
     command_parser: CommandParser,
     ui: UI,
     queued_message: Option<String>,
@@ -56,6 +58,7 @@ impl Repl {
         }
         
         let history = History::load(config.history_file.clone())?;
+        let prompts = PromptLibrary::load(PROMPTS_FILE.to_string())?;
         
         // Always start with a fresh session unless explicitly loading one
         let mut session = if let Some(session_name) = &config.load_session {
@@ -93,7 +96,7 @@ impl Repl {
         let mut ui = UI::new()?;
         
         // Set up initial completion context
-        let completion_context = Self::build_completion_context(&providers, &history);
+        let completion_context = Self::build_completion_context(&providers, &history, &prompts);
         ui.update_completion_context(completion_context)?;
         
         // Auto-populate ephemeral session list on startup (newest first)
@@ -104,6 +107,7 @@ impl Repl {
             providers,
             session,
             history,
+            prompts,
             command_parser,
             ui,
             queued_message: None,
@@ -131,7 +135,7 @@ impl Repl {
         get_provider_for_model(&self.session.current_model)
     }
     
-    fn build_completion_context(providers: &HashMap<String, Box<dyn LLMProvider>>, history: &History) -> CompletionContext {
+    fn build_completion_context(providers: &HashMap<String, Box<dyn LLMProvider>>, history: &History, prompts: &PromptLibrary) -> CompletionContext {
         let mut available_models = Vec::new();
         
         // Collect all models from all providers
@@ -145,14 +149,18 @@ impl Repl {
         // Get session names
         let session_names = history.list_sessions().into_iter().cloned().collect();
         
+        // Get prompt names
+        let prompt_names = prompts.list_prompts().into_iter().cloned().collect();
+        
         CompletionContext {
             available_models,
             session_names,
+            prompt_names,
         }
     }
     
     fn update_completion_context(&mut self) -> Result<()> {
-        let context = Self::build_completion_context(&self.providers, &self.history);
+        let context = Self::build_completion_context(&self.providers, &self.history, &self.prompts);
         self.ui.update_completion_context(context)
     }
     
@@ -634,6 +642,17 @@ impl Repl {
                 println!("    /save block 3 code.py - Save code block #3");
                 println!("  /exec N - Execute code block N (with confirmation)");
                 println!("  /system [PROMPT] - Set system prompt (empty to view, 'clear' to remove)");
+                println!("  /prompts list - List all saved system prompts");
+                println!("  /prompts show NAME - Display a specific prompt");
+                println!("  /prompts save NAME [CONTENT] - Save current or specified system prompt");
+                println!("  /prompts apply NAME - Apply a saved prompt to current session");
+                println!("  /prompts delete NAME - Remove a saved prompt");
+                println!("  /prompts rename OLD_NAME NEW_NAME - Rename a prompt");
+                println!("  /prompts search TERM - Search prompt names and content");
+                println!("  /prompts auto-name [NAME] - Auto-generate name for prompt");
+                println!("  /prompts edit NAME - Edit an existing prompt");
+                println!("  /prompts import FILE - Import prompts from JSON file");
+                println!("  /prompts export [FILE] - Export prompts to JSON file");
                 println!("  /temp TEMPERATURE - Set temperature (0.0-2.0)");
                 println!("  /max-tokens TOKENS - Set maximum output tokens");
                 println!("  /thinking-budget TOKENS - Set thinking token budget");
@@ -1501,6 +1520,258 @@ impl Repl {
                     self.ui.print_error(&format!("Code block {} not found. Use /blocks to list all code blocks.", block_number));
                 }
             }
+            // Prompt library commands
+            Command::PromptsList => {
+                let prompt_names = self.prompts.list_prompts();
+                if prompt_names.is_empty() {
+                    self.ui.print_info("No saved prompts found");
+                } else {
+                    self.ui.print_info(&format!("Saved prompts ({} total):", prompt_names.len()));
+                    for name in prompt_names {
+                        if let Some(prompt) = self.prompts.get_prompt(name) {
+                            let usage_info = if prompt.usage_count > 0 {
+                                format!(" (used {} times)", prompt.usage_count)
+                            } else {
+                                String::new()
+                            };
+                            
+                            let preview = if prompt.content.len() > 60 {
+                                format!("{}...", &prompt.content[..60].replace('\n', " "))
+                            } else {
+                                prompt.content.replace('\n', " ")
+                            };
+                            
+                            println!("  \"{}\"{}: {}", name, usage_info, preview);
+                        }
+                    }
+                    println!();
+                    self.ui.print_info("Use '/prompts show NAME' to view, '/prompts apply NAME' to use");
+                }
+            }
+            Command::PromptsShow(name) => {
+                if let Some(prompt) = self.prompts.get_prompt(&name) {
+                    self.ui.print_info(&format!("Prompt: \"{}\"", name));
+                    if let Some(ref description) = prompt.description {
+                        println!("Description: {}", description);
+                    }
+                    if !prompt.tags.is_empty() {
+                        println!("Tags: {}", prompt.tags.join(", "));
+                    }
+                    println!("Created: {}", prompt.created_at.format("%Y-%m-%d %H:%M UTC"));
+                    println!("Updated: {}", prompt.updated_at.format("%Y-%m-%d %H:%M UTC"));
+                    println!("Usage count: {}", prompt.usage_count);
+                    println!();
+                    println!("{}", prompt.content);
+                } else {
+                    self.ui.print_error(&format!("Prompt '{}' not found", name));
+                    let available_prompts = self.prompts.list_prompts();
+                    if !available_prompts.is_empty() {
+                        self.ui.print_info("Available prompts:");
+                        for prompt_name in available_prompts.iter().take(5) {
+                            println!("  {}", prompt_name);
+                        }
+                    }
+                }
+            }
+            Command::PromptsSave(name, content_opt) => {
+                let content = if let Some(content) = content_opt {
+                    content
+                } else if let Some(ref current_prompt) = self.session.system_prompt {
+                    current_prompt.clone()
+                } else {
+                    self.ui.print_error("No system prompt is currently set and no content provided");
+                    return Ok(true);
+                };
+                
+                if content.trim().is_empty() {
+                    self.ui.print_error("Cannot save empty prompt");
+                    return Ok(true);
+                }
+                
+                // Ensure unique name
+                let unique_name = self.prompts.ensure_unique_prompt_name(&name);
+                if unique_name != name {
+                    self.ui.print_info(&format!("Name '{}' already exists, using '{}'", name, unique_name));
+                }
+                
+                match self.prompts.save_prompt(unique_name.clone(), content) {
+                    Ok(()) => {
+                        self.ui.print_info(&format!("Prompt saved as '{}'", unique_name));
+                        // Update completion context with new prompt
+                        let _ = self.update_completion_context();
+                    }
+                    Err(e) => {
+                        self.ui.print_error(&format!("Failed to save prompt: {}", e));
+                    }
+                }
+            }
+            Command::PromptsApply(name) => {
+                if let Some(content) = self.prompts.apply_prompt(&name) {
+                    self.session.system_prompt = Some(content.clone());
+                    self.ui.print_info(&format!("Applied prompt '{}' to current session", name));
+                    
+                    // Show a preview of the applied prompt
+                    let preview = if content.len() > 100 {
+                        format!("{}...", &content[..100].replace('\n', " "))
+                    } else {
+                        content.replace('\n', " ")
+                    };
+                    self.ui.print_info(&format!("System prompt: {}", preview));
+                } else {
+                    self.ui.print_error(&format!("Prompt '{}' not found", name));
+                    let available_prompts = self.prompts.list_prompts();
+                    if !available_prompts.is_empty() {
+                        self.ui.print_info("Available prompts:");
+                        for prompt_name in available_prompts.iter().take(5) {
+                            println!("  {}", prompt_name);
+                        }
+                    }
+                }
+            }
+            Command::PromptsDelete(name) => {
+                match self.prompts.delete_prompt(&name) {
+                    Ok(true) => {
+                        self.ui.print_info(&format!("Prompt '{}' deleted", name));
+                        // Update completion context after deletion
+                        let _ = self.update_completion_context();
+                    }
+                    Ok(false) => {
+                        self.ui.print_error(&format!("Prompt '{}' not found", name));
+                    }
+                    Err(e) => {
+                        self.ui.print_error(&format!("Failed to delete prompt: {}", e));
+                    }
+                }
+            }
+            Command::PromptsRename(old_name, new_name) => {
+                if new_name.trim().is_empty() {
+                    self.ui.print_error("New prompt name cannot be empty");
+                } else {
+                    match self.prompts.rename_prompt(&old_name, &new_name) {
+                        Ok(true) => {
+                            self.ui.print_info(&format!("Prompt '{}' renamed to '{}'", old_name, new_name));
+                            // Update completion context with new name
+                            let _ = self.update_completion_context();
+                        }
+                        Ok(false) => {
+                            self.ui.print_error(&format!("Prompt '{}' not found", old_name));
+                        }
+                        Err(e) => {
+                            self.ui.print_error(&format!("Failed to rename prompt: {}", e));
+                        }
+                    }
+                }
+            }
+            Command::PromptsSearch(term) => {
+                if term.trim().is_empty() {
+                    self.ui.print_error("Search term cannot be empty");
+                } else {
+                    let results = self.prompts.search_prompts(&term);
+                    
+                    if results.is_empty() {
+                        self.ui.print_info(&format!("No prompts found matching '{}'", term));
+                    } else {
+                        self.ui.print_info(&format!("Search results for '{}' ({} matches):", term, results.len()));
+                        println!();
+                        
+                        for result in results {
+                            let usage_info = if result.prompt.usage_count > 0 {
+                                format!(" (used {} times)", result.prompt.usage_count)
+                            } else {
+                                String::new()
+                            };
+                            
+                            let preview = if result.prompt.content.len() > 80 {
+                                format!("{}...", &result.prompt.content[..80].replace('\n', " "))
+                            } else {
+                                result.prompt.content.replace('\n', " ")
+                            };
+                            
+                            println!("  \x1b[1;36m\"{}\"\x1b[0m{} [{}]: {}", 
+                                result.name, 
+                                usage_info,
+                                result.matched_fields.join(", "),
+                                preview
+                            );
+                        }
+                        
+                        println!();
+                        self.ui.print_info("Use '/prompts show NAME' to view full prompt");
+                    }
+                }
+            }
+            Command::PromptsAutoName(name_opt) => {
+                match self.handle_prompt_auto_name(name_opt.as_ref()).await {
+                    Ok(()) => {
+                        // Success message already printed in handle_prompt_auto_name
+                    }
+                    Err(e) => {
+                        self.ui.print_error(&format!("Failed to auto-name prompt: {}", e));
+                    }
+                }
+            }
+            Command::PromptsEdit(name) => {
+                if let Some(prompt) = self.prompts.get_prompt(&name) {
+                    self.ui.print_info(&format!("Current content of prompt '{}':", name));
+                    println!();
+                    println!("{}", prompt.content);
+                    println!();
+                    self.ui.print_info("Enter new content (use {{ and }} for multi-line input):");
+                    
+                    if let Some(new_content) = self.ui.read_input(None, None)? {
+                        if !new_content.trim().is_empty() {
+                            match self.prompts.update_prompt_content(&name, new_content) {
+                                Ok(true) => {
+                                    self.ui.print_info(&format!("Prompt '{}' updated", name));
+                                }
+                                Ok(false) => {
+                                    self.ui.print_error(&format!("Prompt '{}' not found", name));
+                                }
+                                Err(e) => {
+                                    self.ui.print_error(&format!("Failed to update prompt: {}", e));
+                                }
+                            }
+                        } else {
+                            self.ui.print_info("Edit cancelled - empty content");
+                        }
+                    }
+                } else {
+                    self.ui.print_error(&format!("Prompt '{}' not found", name));
+                }
+            }
+            Command::PromptsImport(filename) => {
+                match self.prompts.import_prompts(&filename, false) {
+                    Ok(result) => {
+                        self.ui.print_info(&format!("Import complete: {} imported, {} skipped, {} overwritten", 
+                            result.imported_count, result.skipped_count, result.overwritten_count));
+                        
+                        if result.skipped_count > 0 {
+                            self.ui.print_info("Use '/prompts import --overwrite FILE' to overwrite existing prompts");
+                        }
+                        
+                        // Update completion context with new prompts
+                        let _ = self.update_completion_context();
+                    }
+                    Err(e) => {
+                        self.ui.print_error(&format!("Failed to import prompts: {}", e));
+                    }
+                }
+            }
+            Command::PromptsExport(filename_opt) => {
+                match self.prompts.export_prompts(filename_opt.as_deref()) {
+                    Ok(message) => {
+                        if filename_opt.is_some() {
+                            self.ui.print_info(&message);
+                        } else {
+                            // Print to stdout
+                            println!("{}", message);
+                        }
+                    }
+                    Err(e) => {
+                        self.ui.print_error(&format!("Failed to export prompts: {}", e));
+                    }
+                }
+            }
             _ => {
                 self.ui.print_info(&format!("Command not yet implemented: {:?}", command));
             }
@@ -2225,5 +2496,209 @@ Format your summary in clear, readable paragraphs. Be objective and factual.";
             renamed_count, failed_count, skipped_count));
         
         Ok(())
+    }
+    
+    async fn handle_prompt_auto_name(&mut self, name_opt: Option<&String>) -> Result<()> {
+        // Determine which prompt to auto-name
+        let (target_prompt, prompt_name) = if let Some(name) = name_opt {
+            // Auto-name specific prompt
+            if let Some(prompt) = self.prompts.get_prompt(name) {
+                (prompt.clone(), name.clone())
+            } else {
+                return Err(anyhow::anyhow!("Prompt '{}' not found", name));
+            }
+        } else {
+            // Auto-name current system prompt
+            if let Some(ref current_prompt) = self.session.system_prompt {
+                // Create a temporary prompt for naming
+                let temp_prompt = crate::prompts::SystemPrompt::new("temp".to_string(), current_prompt.clone());
+                (temp_prompt, "current system prompt".to_string())
+            } else {
+                return Err(anyhow::anyhow!("No system prompt is currently set"));
+            }
+        };
+        
+        if target_prompt.content.trim().is_empty() {
+            return Err(anyhow::anyhow!("Cannot auto-name empty prompt"));
+        }
+        
+        self.ui.print_info("Generating name for prompt...");
+        
+        // Generate name using LLM
+        let generated_name = self.generate_prompt_name(&target_prompt.content).await?;
+        
+        // Sanitize the name
+        let sanitized_name = self.sanitize_prompt_name(&generated_name);
+        
+        if sanitized_name.is_empty() {
+            return Err(anyhow::anyhow!("Generated name is empty after sanitization"));
+        }
+        
+        // Ensure the name is unique
+        let unique_name = self.prompts.ensure_unique_prompt_name(&sanitized_name);
+        
+        if name_opt.is_some() {
+            // Rename existing prompt
+            let old_name = name_opt.unwrap();
+            match self.prompts.rename_prompt(old_name, &unique_name) {
+                Ok(true) => {
+                    self.ui.print_info(&format!("Prompt \"{}\" auto-renamed to \"{}\"", old_name, unique_name));
+                    // Update completion context with new name
+                    let _ = self.update_completion_context();
+                    Ok(())
+                }
+                Ok(false) => {
+                    Err(anyhow::anyhow!("Prompt '{}' not found", old_name))
+                }
+                Err(e) => {
+                    Err(e)
+                }
+            }
+        } else {
+            // Save current system prompt with generated name
+            match self.prompts.save_prompt(unique_name.clone(), target_prompt.content) {
+                Ok(()) => {
+                    self.ui.print_info(&format!("Current system prompt saved as \"{}\"", unique_name));
+                    // Update completion context with new prompt
+                    let _ = self.update_completion_context();
+                    Ok(())
+                }
+                Err(e) => {
+                    Err(e)
+                }
+            }
+        }
+    }
+    
+    async fn generate_prompt_name(&self, prompt_content: &str) -> Result<String> {
+        // Determine which provider to use (prefer current session's provider)
+        let provider_name = self.get_current_provider()
+            .or_else(|| {
+                // Fallback to any available provider, preferring Anthropic
+                if self.providers.contains_key("anthropic") {
+                    Some("anthropic")
+                } else if self.providers.contains_key("openai") {
+                    Some("openai")
+                } else if self.providers.contains_key("gemini") {
+                    Some("gemini")
+                } else {
+                    None
+                }
+            })
+            .ok_or_else(|| anyhow::anyhow!("No provider available for name generation"))?;
+        
+        let provider = self.providers.get(provider_name)
+            .ok_or_else(|| anyhow::anyhow!("Provider '{}' not available", provider_name))?;
+        
+        // Choose a reliable model for name generation
+        let model = match provider_name {
+            "anthropic" => "claude-3-5-sonnet-20241022",
+            "openai" => "gpt-4o",
+            "gemini" => "gemini-2.5-pro",
+            _ => return Err(anyhow::anyhow!("Unknown provider: {}", provider_name)),
+        };
+        
+        // Create system prompt for name generation
+        let system_prompt = "Generate a concise, descriptive name (2-6 words) for a system prompt based on its content and purpose. The name should clearly indicate what role or task the prompt is designed for. Respond with ONLY the name, no quotes, no explanation, no additional text.";
+        
+        // Create messages for the request
+        let messages = vec![
+            crate::providers::Message {
+                role: "system".to_string(),
+                content: system_prompt.to_string(),
+            },
+            crate::providers::Message {
+                role: "user".to_string(),
+                content: format!("Generate a name for this system prompt:\n\n{}", prompt_content),
+            },
+        ];
+        
+        // Create chat request (non-streaming for simplicity)
+        let chat_request = crate::providers::ChatRequest {
+            messages,
+            model: model.to_string(),
+            temperature: 0.7,
+            max_tokens: 30, // Short response expected
+            thinking_budget: 0, // No thinking needed for name generation
+            stream: false,
+            thinking: false,
+        };
+        
+        // Send request and collect response
+        let mut stream = provider.chat(chat_request).await?;
+        let mut response = String::new();
+        
+        while let Some(chunk_result) = stream.next().await {
+            match chunk_result {
+                Ok(chunk) => {
+                    // Handle both prefixed and non-prefixed content
+                    if chunk.starts_with("content:") {
+                        response.push_str(&chunk[8..]);
+                    } else {
+                        response.push_str(&chunk);
+                    }
+                }
+                Err(e) => {
+                    return Err(anyhow::anyhow!("Error generating name: {}", e));
+                }
+            }
+        }
+        
+        if response.trim().is_empty() {
+            return Err(anyhow::anyhow!("Empty response from LLM"));
+        }
+        
+        Ok(response.trim().to_string())
+    }
+    
+    fn sanitize_prompt_name(&self, name: &str) -> String {
+        let mut sanitized = name.trim().to_string();
+        
+        // Remove surrounding quotes if present
+        if (sanitized.starts_with('"') && sanitized.ends_with('"')) ||
+           (sanitized.starts_with('\'') && sanitized.ends_with('\'')) {
+            sanitized = sanitized[1..sanitized.len()-1].to_string();
+        }
+        
+        // Remove common prefixes that LLMs might add
+        let prefixes_to_remove = [
+            "Name: ",
+            "name: ",
+            "Prompt: ",
+            "prompt: ",
+            "System: ",
+            "system: ",
+        ];
+        
+        for prefix in &prefixes_to_remove {
+            if sanitized.starts_with(prefix) {
+                sanitized = sanitized[prefix.len()..].to_string();
+                break;
+            }
+        }
+        
+        // Limit length (reasonable prompt name length)
+        if sanitized.len() > 60 {
+            sanitized = sanitized[..60].to_string();
+            // Try to break at a word boundary
+            if let Some(last_space) = sanitized.rfind(' ') {
+                if last_space > 20 { // Don't make it too short
+                    sanitized = sanitized[..last_space].to_string();
+                }
+            }
+        }
+        
+        // Replace problematic characters for prompt names
+        sanitized = sanitized
+            .replace('\n', " ")
+            .replace('\r', " ")
+            .replace('\t', " ");
+        
+        // Collapse multiple spaces
+        while sanitized.contains("  ") {
+            sanitized = sanitized.replace("  ", " ");
+        }
+        
+        sanitized.trim().to_string()
     }
 }

@@ -11,6 +11,7 @@ mod repl;
 mod history;
 mod commands;
 mod ui;
+mod prompts;
 
 use cli::Args;
 use config::Config;

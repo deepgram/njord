@@ -42,6 +42,18 @@ pub enum Command {
     Retry,
     Edit(usize),
     Quit,
+    // Prompt library commands
+    PromptsList,
+    PromptsShow(String),
+    PromptsSave(String, Option<String>), // (name, optional_content)
+    PromptsApply(String),
+    PromptsDelete(String),
+    PromptsRename(String, String), // (old_name, new_name)
+    PromptsSearch(String),
+    PromptsAutoName(Option<String>),
+    PromptsEdit(String),
+    PromptsImport(String), // filename
+    PromptsExport(Option<String>), // optional filename
 }
 
 #[derive(Debug, Clone)]
@@ -92,6 +104,17 @@ pub struct CommandParser {
     chat_rename_regex: Regex,
     chat_auto_rename_regex: Regex,
     summarize_regex: Regex,
+    // Prompt library regexes
+    prompts_save_regex: Regex,
+    prompts_show_regex: Regex,
+    prompts_apply_regex: Regex,
+    prompts_delete_regex: Regex,
+    prompts_rename_regex: Regex,
+    prompts_search_regex: Regex,
+    prompts_auto_name_regex: Regex,
+    prompts_edit_regex: Regex,
+    prompts_import_regex: Regex,
+    prompts_export_regex: Regex,
 }
 
 impl CommandParser {
@@ -165,6 +188,17 @@ impl CommandParser {
             chat_rename_regex: Regex::new(r"^/chat\s+rename\s+(.+?)(?:\s+(.+))?$")?,
             chat_auto_rename_regex: Regex::new(r"^/chat\s+auto-rename(?:\s+(.+))?$")?,
             summarize_regex: Regex::new(r"^/summarize(?:\s+(.+))?$")?,
+            // Prompt library regexes
+            prompts_save_regex: Regex::new(r"^/prompts\s+save\s+(.+?)(?:\s+(.+))?$")?,
+            prompts_show_regex: Regex::new(r"^/prompts\s+show\s+(.+)$")?,
+            prompts_apply_regex: Regex::new(r"^/prompts\s+apply\s+(.+)$")?,
+            prompts_delete_regex: Regex::new(r"^/prompts\s+delete\s+(.+)$")?,
+            prompts_rename_regex: Regex::new(r"^/prompts\s+rename\s+(.+?)\s+(.+)$")?,
+            prompts_search_regex: Regex::new(r"^/prompts\s+search\s+(.+)$")?,
+            prompts_auto_name_regex: Regex::new(r"^/prompts\s+auto-name(?:\s+(.+))?$")?,
+            prompts_edit_regex: Regex::new(r"^/prompts\s+edit\s+(.+)$")?,
+            prompts_import_regex: Regex::new(r"^/prompts\s+import\s+(.+)$")?,
+            prompts_export_regex: Regex::new(r"^/prompts\s+export(?:\s+(.+))?$")?,
         })
     }
     
@@ -192,6 +226,9 @@ impl CommandParser {
             "/system" => Some(Command::System(String::new())),
             "/thinking" => Some(Command::Thinking(!true)), // Toggle current state
             "/quit" | "/exit" => Some(Command::Quit),
+            // Prompt library commands
+            "/prompts list" => Some(Command::PromptsList),
+            "/prompts auto-name" => Some(Command::PromptsAutoName(None)),
             _ => {
                 if let Some(caps) = self.model_regex.captures(input) {
                     Some(Command::Model(caps[1].to_string()))
@@ -285,6 +322,36 @@ impl CommandParser {
                 } else if let Some(caps) = self.summarize_regex.captures(input) {
                     let session_ref = caps.get(1).map(|m| Self::parse_session_reference(m.as_str()));
                     Some(Command::Summarize(session_ref))
+                } else if let Some(caps) = self.prompts_save_regex.captures(input) {
+                    let name = Self::unquote_session_name(&caps[1]);
+                    let content = caps.get(2).map(|m| m.as_str().to_string());
+                    Some(Command::PromptsSave(name, content))
+                } else if let Some(caps) = self.prompts_show_regex.captures(input) {
+                    let name = Self::unquote_session_name(&caps[1]);
+                    Some(Command::PromptsShow(name))
+                } else if let Some(caps) = self.prompts_apply_regex.captures(input) {
+                    let name = Self::unquote_session_name(&caps[1]);
+                    Some(Command::PromptsApply(name))
+                } else if let Some(caps) = self.prompts_delete_regex.captures(input) {
+                    let name = Self::unquote_session_name(&caps[1]);
+                    Some(Command::PromptsDelete(name))
+                } else if let Some(caps) = self.prompts_rename_regex.captures(input) {
+                    let old_name = Self::unquote_session_name(&caps[1]);
+                    let new_name = Self::unquote_session_name(&caps[2]);
+                    Some(Command::PromptsRename(old_name, new_name))
+                } else if let Some(caps) = self.prompts_search_regex.captures(input) {
+                    Some(Command::PromptsSearch(caps[1].to_string()))
+                } else if let Some(caps) = self.prompts_auto_name_regex.captures(input) {
+                    let name = caps.get(1).map(|m| Self::unquote_session_name(m.as_str()));
+                    Some(Command::PromptsAutoName(name))
+                } else if let Some(caps) = self.prompts_edit_regex.captures(input) {
+                    let name = Self::unquote_session_name(&caps[1]);
+                    Some(Command::PromptsEdit(name))
+                } else if let Some(caps) = self.prompts_import_regex.captures(input) {
+                    Some(Command::PromptsImport(caps[1].to_string()))
+                } else if let Some(caps) = self.prompts_export_regex.captures(input) {
+                    let filename = caps.get(1).map(|m| m.as_str().to_string());
+                    Some(Command::PromptsExport(filename))
                 } else {
                     None
                 }
