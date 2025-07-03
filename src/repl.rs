@@ -55,7 +55,7 @@ impl Repl {
             return Err(anyhow::anyhow!("No valid API keys provided. Please set at least one API key."));
         }
         
-        let history = History::load()?;
+        let history = History::load(config.history_file.clone())?;
         
         // Always start with a fresh session unless explicitly loading one
         let mut session = if let Some(session_name) = &config.load_session {
