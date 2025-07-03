@@ -13,6 +13,7 @@ pub struct Config {
     pub thinking_budget: u32,
     pub load_session: Option<String>,
     pub new_session: bool,
+    pub history_file: String,
 }
 
 impl Config {
@@ -71,6 +72,7 @@ impl Config {
             thinking_budget: args.thinking_budget,
             load_session: args.load_session.clone(),
             new_session: args.new_session,
+            history_file: args.history_file.clone(),
         })
     }
 }
@@ -92,6 +94,7 @@ mod tests {
             thinking_budget: 10000,
             load_session: Some("test-session".to_string()),
             new_session: true,
+            history_file: ".njord".to_string(),
             history_file: ".njord".to_string(),
         };
         
@@ -120,6 +123,7 @@ mod tests {
             thinking_budget: 20000,
             load_session: None,
             new_session: false,
+            history_file: ".njord".to_string(),
             history_file: ".njord".to_string(),
         };
         
@@ -194,6 +198,7 @@ mod tests {
             thinking_budget: 20000,
             load_session: None,
             new_session: false,
+            history_file: ".njord".to_string(),
         };
         
         let config = Config::from_args_and_env(

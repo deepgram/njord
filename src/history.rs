@@ -12,31 +12,35 @@ const HISTORY_FILE: &str = ".njord";
 pub struct History {
     pub current_session: Option<ChatSession>,
     pub saved_sessions: HashMap<String, ChatSession>,
+    #[serde(skip)]
+    pub history_file_path: String,
 }
 
 impl History {
-    pub fn new() -> Self {
+    pub fn new(history_file_path: String) -> Self {
         Self {
             current_session: None,
             saved_sessions: HashMap::new(),
+            history_file_path,
         }
     }
     
-    pub fn load() -> Result<Self> {
-        let path = PathBuf::from(HISTORY_FILE);
+    pub fn load(history_file_path: String) -> Result<Self> {
+        let path = PathBuf::from(&history_file_path);
         
         if !path.exists() {
-            return Ok(Self::new());
+            return Ok(Self::new(history_file_path));
         }
         
         let content = fs::read_to_string(&path)?;
-        let history: History = serde_json::from_str(&content)?;
+        let mut history: History = serde_json::from_str(&content)?;
+        history.history_file_path = history_file_path;
         Ok(history)
     }
     
     pub fn save(&self) -> Result<()> {
         let content = serde_json::to_string_pretty(self)?;
-        fs::write(HISTORY_FILE, content)?;
+        fs::write(&self.history_file_path, content)?;
         Ok(())
     }
     
