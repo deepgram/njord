@@ -371,7 +371,10 @@ impl NjordCompleter {
                 
                 // Return the quoted common prefix if it's longer than current input
                 if common_prefix.len() > unquoted_current.len() {
-                    return format!("\"{}\"", common_prefix);
+                    // Only add opening quote for partial completions (no closing quote)
+                    let mut result = String::from("\"");
+                    result.push_str(&common_prefix);
+                    return result;
                 }
             }
             
