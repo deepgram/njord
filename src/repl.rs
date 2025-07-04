@@ -756,7 +756,8 @@ impl Repl {
                     self.session.current_provider = get_provider_for_model(&self.session.current_model).map(|s| s.to_string());
                             
                     // Restore session variables
-                    self.restore_session_variables(&self.session);
+                    let session_clone = self.session.clone();
+                    self.restore_session_variables(&session_clone);
                             
                     // Enhanced feedback with full context
                     let auto_name = self.session.generate_auto_name();
@@ -1046,7 +1047,8 @@ impl Repl {
                             self.session.current_provider = get_provider_for_model(&self.session.current_model).map(|s| s.to_string());
                             
                             // Restore session variables
-                            self.restore_session_variables(&self.session);
+                            let session_clone = self.session.clone();
+                            self.restore_session_variables(&session_clone);
                             
                             // Enhanced feedback with full context
                             let created = self.session.created_at.format("%Y-%m-%d %H:%M");
