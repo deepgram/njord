@@ -49,7 +49,7 @@ impl NjordCompleter {
     
     fn complete_command(&self, line: &str, pos: usize) -> Vec<Pair> {
         let start_pos = self.find_completion_start(line, pos);
-        let _current_word = &line[start_pos..pos];
+        let current_word = &line[start_pos..pos];
         
         // Basic commands
         let commands = vec![
@@ -503,7 +503,7 @@ impl NjordCompleter {
     
     fn complete_load_command(&self, line: &str, pos: usize) -> Vec<Pair> {
         let start_pos = self.find_completion_start(line, pos);
-        let current_word = &line[start_pos..pos];
+        let _current_word = &line[start_pos..pos];
         let input = &line[..pos];
         let parts: Vec<&str> = input.split_whitespace().collect();
         
