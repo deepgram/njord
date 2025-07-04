@@ -622,47 +622,76 @@ impl Repl {
             Command::Quit => return Ok(false),
             Command::Help => {
                 self.ui.print_info("Available commands:");
-                println!("  /model MODEL - Switch to a different model (auto-detects provider)");
+                println!();
+                
+                // Basic Commands
+                println!("\x1b[1;36mBasic Commands:\x1b[0m");
+                println!("  /help - Show all commands");
+                println!("  /status - Show current configuration");
                 println!("  /models - List available models across all providers");
-                println!("  /status - Show current provider and model");
+                println!("  /quit - Exit Njord");
+                println!();
+                
+                // Session Management
+                println!("\x1b[1;36mSession Management:\x1b[0m");
                 println!("  /chat new - Start a new chat session");
                 println!("  /chat save NAME - Save current session with given name");
                 println!("  /chat load NAME|#N - Load a previously saved session");
+                println!("  /chat continue [NAME|#N] - Continue most recent or specified session");
                 println!("  /chat list - List all saved sessions with ephemeral numbers");
-                println!("  /chat delete [NAME|#N] - Delete a saved session (defaults to current)");
-                println!("  /chat continue [NAME|#N] - Continue the most recent session or specified session");
                 println!("  /chat recent - Show recent sessions");
+                println!("  /chat delete [NAME|#N] - Delete a saved session (defaults to current)");
                 println!("  /chat fork NAME - Save current session and start fresh");
                 println!("  /chat merge NAME - Merge another session into current");
-                println!("  /chat rename NEW_NAME [OLD_NAME] - Rename a session (defaults to current)");
-                println!("  /chat auto-rename [NAME] - Auto-generate title for session (defaults to current)");
+                println!("  /chat rename NEW_NAME [OLD_NAME] - Rename a session");
+                println!("  /chat auto-rename [NAME] - Auto-generate title for session");
                 println!("  /chat auto-rename-all - Auto-generate titles for all anonymous sessions");
-                println!("  /summarize [NAME] - Generate summary of session (defaults to current)");
-                println!("  /undo [N] - Undo last N agent responses (default 1), restores user message for editing");
-                println!("  /goto N - Jump back to Agent N (removes later messages)");
+                println!("  /summarize [NAME] - Generate summary of session");
+                println!();
+                
+                // Message Navigation
+                println!("\x1b[1;36mMessage Navigation:\x1b[0m");
                 println!("  /history - Show conversation history");
+                println!("  /undo [N] - Undo last N agent responses (restores user message for editing)");
+                println!("  /goto N - Jump back to Agent N (removes later messages)");
+                println!("  /search TERM - Search through chat history");
+                println!("  /retry - Regenerate last response");
+                println!("  /edit N - Edit and resend message N");
+                println!();
+                
+                // Content Management
+                println!("\x1b[1;36mContent Management:\x1b[0m");
                 println!("  /blocks - List all code blocks in session");
                 println!("  /block N - Display code block N");
                 println!("  /copy [TYPE] [N] - Copy message/block to clipboard");
                 println!("    /copy - Copy most recent agent response");
-                println!("    /copy 2 - Copy Agent #2 response");
+                println!("    /copy agent 2 - Copy Agent #2 response");
                 println!("    /copy user 1 - Copy User #1 message");
                 println!("    /copy block 3 - Copy code block #3");
                 println!("  /save [TYPE] [N] FILE - Save message/block to file");
-                println!("    /save auth.md - Save most recent agent response");
-                println!("    /save agent 2 response.md - Save Agent #2 response");
+                println!("    /save response.md - Save most recent agent response");
+                println!("    /save agent 2 analysis.md - Save Agent #2 response");
                 println!("    /save user 1 question.txt - Save User #1 message");
                 println!("    /save block 3 code.py - Save code block #3");
                 println!("  /exec N - Execute code block N (with confirmation)");
+                println!("  /export FORMAT - Export chat (markdown, json, txt)");
+                println!();
+                
+                // File & Variable Operations
+                println!("\x1b[1;36mFile & Variable Operations:\x1b[0m");
                 println!("  /load FILE [VAR] - Load file content into variable");
-                println!("    /load config.json - Load as {{config_json}}");
-                println!("    /load data.txt mydata - Load as {{mydata}}");
+                println!("    /load config.json - Load as {{{{config_json}}}}");
+                println!("    /load data.txt mydata - Load as {{{{mydata}}}}");
                 println!("  /variables - List all loaded variables");
                 println!("  /var show VAR - Show variable content");
                 println!("  /var delete VAR - Delete a variable");
                 println!("  /var reload [VAR] - Reload variable(s) from file(s)");
                 println!("    /var reload - Reload all variables");
                 println!("    /var reload myvar - Reload specific variable");
+                println!();
+                
+                // System Prompts & Library
+                println!("\x1b[1;36mSystem Prompts & Library:\x1b[0m");
                 println!("  /system [PROMPT] - Set system prompt (empty to view, 'clear' to remove)");
                 println!("  /prompts list - List all saved system prompts");
                 println!("  /prompts show NAME - Display a specific prompt");
@@ -675,19 +704,33 @@ impl Repl {
                 println!("  /prompts edit NAME - Edit an existing prompt");
                 println!("  /prompts import FILE - Import prompts from JSON file");
                 println!("  /prompts export [FILE] - Export prompts to JSON file");
+                println!();
+                
+                // Model & Settings
+                println!("\x1b[1;36mModel & Settings:\x1b[0m");
+                println!("  /model MODEL - Switch to a different model (auto-detects provider)");
+                println!("  /temp TEMPERATURE - Set temperature (0.0-2.0)");
+                println!("  /max-tokens TOKENS - Set maximum output tokens");
+                println!("  /thinking on|off - Enable/disable thinking for supported models");
+                println!("  /thinking-budget TOKENS - Set thinking token budget");
+                println!("  /tokens - Show token usage stats");
+                println!("  /stats - Show session statistics");
+                println!("  /clear - Clear terminal display (keep history)");
+                println!();
+                
+                // Input History
+                println!("\x1b[1;36mInput History:\x1b[0m");
                 println!("  /input-history - Show input history information");
                 println!("  /input-history clear - Clear all input history");
                 println!("  /input-history stats - Show detailed input history statistics");
-                println!("  /temp TEMPERATURE - Set temperature (0.0-2.0)");
-                println!("  /max-tokens TOKENS - Set maximum output tokens");
-                println!("  /thinking-budget TOKENS - Set thinking token budget");
-                println!("  /thinking on|off - Enable/disable thinking for supported models");
-                println!("  /quit - Exit Njord");
                 println!();
-                println!("Input tips:");
-                println!("  Start with {{ for multi-line input (end with }} on its own line)");
-                println!("  Use this for code, long prompts, or formatted text");
-                println!("  Reference loaded files with {{VARIABLE_NAME}} in your messages");
+                
+                // Usage Tips
+                println!("\x1b[1;36mUsage Tips:\x1b[0m");
+                println!("  • Start with {{ for multi-line input (end with }} on its own line)");
+                println!("  • Use {{{{VARIABLE_NAME}}}} in messages to reference loaded file content");
+                println!("  • Use #N for ephemeral session references (e.g., /chat load #1)");
+                println!("  • Quote session names with spaces (e.g., /chat load \"My Session\")");
             }
             Command::Models => {
                 self.ui.print_info("Available models:");
