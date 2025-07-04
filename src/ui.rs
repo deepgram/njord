@@ -1075,7 +1075,7 @@ pub struct SpinnerHandle {
 }
 
 impl SpinnerHandle {
-    pub async fn stop(self) {
+    pub async fn stop(mut self) {
         self.spinner_active.store(false, Ordering::Relaxed);
         let _ = self.handle.await;
     }
