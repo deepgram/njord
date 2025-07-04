@@ -639,6 +639,58 @@ mod tests {
     }
 
     #[test]
+    fn test_load_commands() {
+        let parser = create_parser();
+        
+        // Test basic load
+        if let Some(Command::Load(filename, var_name)) = parser.parse("/load config.json") {
+            assert_eq!(filename, "config.json");
+            assert_eq!(var_name, None);
+        } else {
+            panic!("Expected Load command");
+        }
+        
+        // Test load with variable name
+        if let Some(Command::Load(filename, var_name)) = parser.parse("/load data.txt mydata") {
+            assert_eq!(filename, "data.txt");
+            assert_eq!(var_name, Some("mydata".to_string()));
+        } else {
+            panic!("Expected Load command");
+        }
+        
+        // Test load with quoted filename
+        if let Some(Command::Load(filename, var_name)) = parser.parse("/load \"my file.txt\" myvar") {
+            assert_eq!(filename, "my file.txt");
+            assert_eq!(var_name, Some("myvar".to_string()));
+        } else {
+            panic!("Expected Load command");
+        }
+    }
+
+    #[test]
+    fn test_variable_commands() {
+        let parser = create_parser();
+        
+        // Test variables list
+        assert!(matches!(parser.parse("/variables"), Some(Command::Variables)));
+        assert!(matches!(parser.parse("/vars"), Some(Command::Variables)));
+        
+        // Test variable show
+        if let Some(Command::VariableShow(name)) = parser.parse("/var show myvar") {
+            assert_eq!(name, "myvar");
+        } else {
+            panic!("Expected VariableShow command");
+        }
+        
+        // Test variable delete
+        if let Some(Command::VariableDelete(name)) = parser.parse("/var delete myvar") {
+            assert_eq!(name, "myvar");
+        } else {
+            panic!("Expected VariableDelete command");
+        }
+    }
+
+    #[test]
     fn test_whitespace_handling() {
         let parser = create_parser();
         

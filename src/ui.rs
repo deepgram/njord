@@ -55,7 +55,7 @@ impl NjordCompleter {
             "/chat", "/undo", "/goto", "/search", "/system", "/temp", "/max-tokens",
             "/thinking-budget", "/thinking", "/retry", "/stats", "/tokens", "/export",
             "/block", "/blocks", "/copy", "/save", "/exec", "/edit", "/summarize",
-            "/prompts"
+            "/prompts", "/load", "/variables", "/var"
         ];
         
         if line[..pos].starts_with('/') && !line[..pos].contains(' ') {

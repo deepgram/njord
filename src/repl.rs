@@ -4,6 +4,7 @@ use futures::StreamExt;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 use chrono::Utc;
+use std::path::Path;
 
 use crate::{
     commands::{Command, CommandParser, CopyType, SaveType, SessionReference},
