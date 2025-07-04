@@ -136,7 +136,7 @@ mod tests {
             thinking_budget: 20000,
             load_session: None,
             new_session: false,
-            history_file: crate::history::HISTORY_FILE.to_string(),
+            state_directory: ".".to_string(),
         };
         
         let config = Config::from_args_and_env(&args_anthropic, None, None, None).unwrap();
@@ -153,7 +153,7 @@ mod tests {
             thinking_budget: 20000,
             load_session: None,
             new_session: false,
-            history_file: crate::history::HISTORY_FILE.to_string(),
+            state_directory: ".".to_string(),
         };
         
         let config = Config::from_args_and_env(&args_openai, None, None, None).unwrap();
@@ -170,7 +170,7 @@ mod tests {
             thinking_budget: 20000,
             load_session: None,
             new_session: false,
-            history_file: crate::history::HISTORY_FILE.to_string(),
+            state_directory: ".".to_string(),
         };
         
         let config = Config::from_args_and_env(&args_gemini, None, None, None).unwrap();
@@ -189,7 +189,7 @@ mod tests {
             thinking_budget: 20000,
             load_session: None,
             new_session: false,
-            history_file: crate::history::HISTORY_FILE.to_string(),
+            state_directory: ".".to_string(),
         };
         
         let config = Config::from_args_and_env(&args, None, None, None).unwrap();
@@ -210,7 +210,7 @@ mod tests {
             thinking_budget: 20000,
             load_session: None,
             new_session: false,
-            history_file: crate::history::HISTORY_FILE.to_string(),
+            state_directory: ".".to_string(),
         };
         
         let config = Config::from_args_and_env(

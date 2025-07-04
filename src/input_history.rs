@@ -102,11 +102,11 @@ mod tests {
         let mut history = InputHistory::new("test.json".to_string());
         
         assert_eq!(history.len(), 0);
-        assert!(history.is_empty());
+        assert_eq!(history.len(), 0);
         
         history.add_entry("test command".to_string());
         assert_eq!(history.len(), 1);
-        assert!(!history.is_empty());
+        assert!(history.len() > 0);
         
         let entries = history.get_entries();
         assert_eq!(entries.len(), 1);
