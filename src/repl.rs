@@ -1897,9 +1897,9 @@ impl Repl {
                         };
                         
                         if let Some(filename) = var_to_file.get(name) {
-                            println!("  {{{}}} (from '{}'): {} chars - {}", name, filename, content.len(), preview);
+                            println!("  {{{{{}}}}} (from '{}'): {} chars - {}", name, filename, content.len(), preview);
                         } else {
-                            println!("  {{{}}}: {} chars - {}", name, content.len(), preview);
+                            println!("  {{{{{}}}}}: {} chars - {}", name, content.len(), preview);
                         }
                     }
                     println!();
