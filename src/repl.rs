@@ -664,15 +664,15 @@ impl Repl {
                 println!("  /blocks - List all code blocks in session");
                 println!("  /block N - Display code block N");
                 println!("  /copy [TYPE] [N] - Copy message/block to clipboard");
-                println!("    /copy - Copy most recent agent response");
-                println!("    /copy agent 2 - Copy Agent #2 response");
-                println!("    /copy user 1 - Copy User #1 message");
-                println!("    /copy block 3 - Copy code block #3");
+                println!("    \x1b[1;32mEx:\x1b[0m /copy - Copy most recent agent response");
+                println!("    \x1b[1;32mEx:\x1b[0m /copy agent 2 - Copy Agent #2 response");
+                println!("    \x1b[1;32mEx:\x1b[0m /copy user 1 - Copy User #1 message");
+                println!("    \x1b[1;32mEx:\x1b[0m /copy block 3 - Copy code block #3");
                 println!("  /save [TYPE] [N] FILE - Save message/block to file");
-                println!("    /save response.md - Save most recent agent response");
-                println!("    /save agent 2 analysis.md - Save Agent #2 response");
-                println!("    /save user 1 question.txt - Save User #1 message");
-                println!("    /save block 3 code.py - Save code block #3");
+                println!("    \x1b[1;32mEx:\x1b[0m /save response.md - Save most recent agent response");
+                println!("    \x1b[1;32mEx:\x1b[0m /save agent 2 analysis.md - Save Agent #2 response");
+                println!("    \x1b[1;32mEx:\x1b[0m /save user 1 question.txt - Save User #1 message");
+                println!("    \x1b[1;32mEx:\x1b[0m /save block 3 code.py - Save code block #3");
                 println!("  /exec N - Execute code block N (with confirmation)");
                 println!("  /export FORMAT - Export chat (markdown, json, txt)");
                 println!();
@@ -680,14 +680,14 @@ impl Repl {
                 // File & Variable Operations
                 println!("\x1b[1;36mFile & Variable Operations:\x1b[0m");
                 println!("  /load FILE [VAR] - Load file content into variable");
-                println!("    /load config.json - Load as {{{{config_json}}}}");
-                println!("    /load data.txt mydata - Load as {{{{mydata}}}}");
+                println!("    \x1b[1;32mEx:\x1b[0m /load config.json - Load as {{{{config_json}}}}");
+                println!("    \x1b[1;32mEx:\x1b[0m /load data.txt mydata - Load as {{{{mydata}}}}");
                 println!("  /variables - List all loaded variables");
                 println!("  /var show VAR - Show variable content");
                 println!("  /var delete VAR - Delete a variable");
                 println!("  /var reload [VAR] - Reload variable(s) from file(s)");
-                println!("    /var reload - Reload all variables");
-                println!("    /var reload myvar - Reload specific variable");
+                println!("    \x1b[1;32mEx:\x1b[0m /var reload - Reload all variables");
+                println!("    \x1b[1;32mEx:\x1b[0m /var reload myvar - Reload specific variable");
                 println!();
                 
                 // System Prompts & Library
