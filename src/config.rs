@@ -13,7 +13,21 @@ pub struct Config {
     pub thinking_budget: u32,
     pub load_session: Option<String>,
     pub new_session: bool,
-    pub history_file: String,
+    pub state_directory: String,
+}
+
+impl Config {
+    pub fn sessions_file(&self) -> String {
+        format!("{}/.njord.sessions", self.state_directory)
+    }
+    
+    pub fn prompts_file(&self) -> String {
+        format!("{}/.njord.prompts", self.state_directory)
+    }
+    
+    pub fn inputs_file(&self) -> String {
+        format!("{}/.njord.inputs", self.state_directory)
+    }
 }
 
 impl Config {
@@ -72,7 +86,7 @@ impl Config {
             thinking_budget: args.thinking_budget,
             load_session: args.load_session.clone(),
             new_session: args.new_session,
-            history_file: args.history_file.clone(),
+            state_directory: args.state_directory.clone(),
         })
     }
 }
@@ -94,7 +108,7 @@ mod tests {
             thinking_budget: 10000,
             load_session: Some("test-session".to_string()),
             new_session: true,
-            history_file: crate::history::HISTORY_FILE.to_string(),
+            state_directory: ".".to_string(),
         };
         
         let config = Config::from_args(&args).unwrap();

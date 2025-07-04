@@ -5,7 +5,6 @@ use std::fs;
 use std::path::PathBuf;
 use chrono::{DateTime, Utc};
 
-pub const PROMPTS_FILE: &str = ".njord-prompts";
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SystemPrompt {

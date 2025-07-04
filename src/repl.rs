@@ -12,7 +12,7 @@ use crate::{
     providers::{create_provider, get_provider_for_model, LLMProvider, Message, ChatRequest},
     session::{ChatSession, CodeBlock},
     ui::{UI, CompletionContext},
-    prompts::{PromptLibrary, PROMPTS_FILE},
+    prompts::PromptLibrary,
 };
 
 #[derive(Debug, Clone)]
@@ -57,8 +57,8 @@ impl Repl {
             return Err(anyhow::anyhow!("No valid API keys provided. Please set at least one API key."));
         }
         
-        let history = History::load(config.history_file.clone())?;
-        let prompts = PromptLibrary::load(PROMPTS_FILE.to_string())?;
+        let history = History::load(config.sessions_file())?;
+        let prompts = PromptLibrary::load(config.prompts_file())?;
         
         // Always start with a fresh session unless explicitly loading one
         let mut session = if let Some(session_name) = &config.load_session {
@@ -93,8 +93,7 @@ impl Repl {
         }
         
         let command_parser = CommandParser::new()?;
-        let input_history_file = format!("{}.input_history", config.history_file);
-        let mut ui = UI::with_input_history_file(input_history_file)?;
+        let mut ui = UI::with_input_history_file(config.inputs_file())?;
         
         // Set up initial completion context
         let completion_context = Self::build_completion_context(&providers, &history, &prompts);
@@ -425,7 +424,7 @@ impl Repl {
             
             println!("  Max tokens: {}", self.session.max_tokens);
             println!("  Thinking budget: {}", self.session.thinking_budget);
-            println!("  History file: {}", self.history.history_file_path);
+            println!("  State directory: {}", self.config.state_directory);
             
             // Show session info if we have messages
             if !self.session.messages.is_empty() {

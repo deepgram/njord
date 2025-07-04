@@ -41,7 +41,7 @@ pub struct Args {
     #[arg(long)]
     pub new_session: bool,
     
-    /// Path to the history file (default: .njord)
-    #[arg(long, default_value = crate::history::HISTORY_FILE)]
-    pub history_file: String,
+    /// State directory containing .njord.* files
+    #[arg(long, default_value = ".")]
+    pub state_directory: String,
 }
