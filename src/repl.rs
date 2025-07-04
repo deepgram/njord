@@ -754,7 +754,10 @@ impl Repl {
                     self.session = target_session;
                     // Update current provider based on session's model
                     self.session.current_provider = get_provider_for_model(&self.session.current_model).map(|s| s.to_string());
-                    
+                            
+                    // Restore session variables
+                    self.restore_session_variables(&self.session);
+                            
                     // Enhanced feedback with full context
                     let auto_name = self.session.generate_auto_name();
                     let session_name = self.session.name.as_ref().unwrap_or(&auto_name);
@@ -1041,6 +1044,9 @@ impl Repl {
                             
                             // Update current provider based on session's model
                             self.session.current_provider = get_provider_for_model(&self.session.current_model).map(|s| s.to_string());
+                            
+                            // Restore session variables
+                            self.restore_session_variables(&self.session);
                             
                             // Enhanced feedback with full context
                             let created = self.session.created_at.format("%Y-%m-%d %H:%M");
@@ -1849,6 +1855,9 @@ impl Repl {
                         
                         self.variables.insert(variable_name.clone(), content.clone());
                         
+                        // Store the binding in the session for persistence
+                        self.session.variable_bindings.insert(filename.clone(), variable_name.clone());
+                        
                         let preview = if content.len() > 100 {
                             format!("{}...", &content[..100].replace('\n', " "))
                         } else {
@@ -1871,13 +1880,25 @@ impl Repl {
                     self.ui.print_info("No variables loaded");
                 } else {
                     self.ui.print_info(&format!("Loaded variables ({} total):", self.variables.len()));
+                    
+                    // Create reverse mapping from variable name to filename
+                    let mut var_to_file: HashMap<String, String> = HashMap::new();
+                    for (filename, var_name) in &self.session.variable_bindings {
+                        var_to_file.insert(var_name.clone(), filename.clone());
+                    }
+                    
                     for (name, content) in &self.variables {
                         let preview = if content.len() > 80 {
                             format!("{}...", &content[..80].replace('\n', " "))
                         } else {
                             content.replace('\n', " ")
                         };
-                        println!("  {{{}}}: {} chars - {}", name, content.len(), preview);
+                        
+                        if let Some(filename) = var_to_file.get(name) {
+                            println!("  {{{}}} (from '{}'): {} chars - {}", name, filename, content.len(), preview);
+                        } else {
+                            println!("  {{{}}}: {} chars - {}", name, content.len(), preview);
+                        }
                     }
                     println!();
                     self.ui.print_info("Use {{VARIABLE_NAME}} in your messages to reference content");
@@ -1900,6 +1921,9 @@ impl Repl {
             }
             Command::VariableDelete(name) => {
                 if self.variables.remove(&name).is_some() {
+                    // Also remove from session bindings
+                    self.session.variable_bindings.retain(|_, var_name| var_name != &name);
+                    
                     self.ui.print_info(&format!("Variable '{}' deleted", name));
                     // Update completion context after deletion
                     let _ = self.update_completion_context();
@@ -2896,5 +2920,26 @@ Format your summary in clear, readable paragraphs. Be objective and factual.";
         }
         
         result
+    }
+    
+    fn restore_session_variables(&mut self, session: &ChatSession) {
+        // Clear current variables
+        self.variables.clear();
+        
+        // Restore variables from session bindings
+        for (filename, variable_name) in &session.variable_bindings {
+            match std::fs::read_to_string(filename) {
+                Ok(content) => {
+                    self.variables.insert(variable_name.clone(), content);
+                }
+                Err(_) => {
+                    // File no longer exists, but we'll keep the binding in case it comes back
+                    self.ui.print_info(&format!("Warning: File '{}' for variable '{}' not found", filename, variable_name));
+                }
+            }
+        }
+        
+        // Update completion context with restored variables
+        let _ = self.update_completion_context();
     }
 }

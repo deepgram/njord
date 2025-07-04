@@ -30,6 +30,8 @@ pub struct ChatSession {
     pub thinking_enabled: bool,
     #[serde(default)]
     pub has_llm_interaction: bool,
+    #[serde(default)]
+    pub variable_bindings: std::collections::HashMap<String, String>, // filename -> variable_name
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -67,6 +69,7 @@ impl ChatSession {
             system_prompt: None,
             thinking_enabled: false,
             has_llm_interaction: false,
+            variable_bindings: std::collections::HashMap::new(),
         }
     }
     
