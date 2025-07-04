@@ -660,6 +660,9 @@ impl Repl {
                 println!("  /variables - List all loaded variables");
                 println!("  /var show VAR - Show variable content");
                 println!("  /var delete VAR - Delete a variable");
+                println!("  /var reload [VAR] - Reload variable(s) from file(s)");
+                println!("    /var reload - Reload all variables");
+                println!("    /var reload myvar - Reload specific variable");
                 println!("  /system [PROMPT] - Set system prompt (empty to view, 'clear' to remove)");
                 println!("  /prompts list - List all saved system prompts");
                 println!("  /prompts show NAME - Display a specific prompt");
@@ -1933,6 +1936,15 @@ impl Repl {
                     self.ui.print_error(&format!("Variable '{}' not found", name));
                 }
             }
+            Command::VariableReload(name_opt) => {
+                if let Some(name) = name_opt {
+                    // Reload specific variable
+                    self.reload_specific_variable(&name);
+                } else {
+                    // Reload all variables
+                    self.reload_all_variables();
+                }
+            }
             _ => {
                 self.ui.print_info(&format!("Command not yet implemented: {:?}", command));
             }
@@ -2942,6 +2954,94 @@ Format your summary in clear, readable paragraphs. Be objective and factual.";
         }
         
         // Update completion context with restored variables
+        let _ = self.update_completion_context();
+    }
+    
+    fn reload_specific_variable(&mut self, var_name: &str) {
+        // Find the filename for this variable
+        let filename = self.session.variable_bindings.iter()
+            .find(|(_, v)| v == &var_name)
+            .map(|(f, _)| f.clone());
+        
+        if let Some(filename) = filename {
+            match std::fs::read_to_string(&filename) {
+                Ok(content) => {
+                    let old_size = self.variables.get(var_name).map(|c| c.len()).unwrap_or(0);
+                    self.variables.insert(var_name.to_string(), content.clone());
+                    
+                    let preview = if content.len() > 100 {
+                        format!("{}...", &content[..100].replace('\n', " "))
+                    } else {
+                        content.replace('\n', " ")
+                    };
+                    
+                    self.ui.print_info(&format!("Reloaded variable '{{{}}}' from '{}' ({} → {} chars): {}", 
+                        var_name, filename, old_size, content.len(), preview));
+                }
+                Err(e) => {
+                    // Remove the variable since file is not accessible
+                    self.variables.remove(var_name);
+                    self.ui.print_error(&format!("Failed to reload variable '{}' from '{}': {}", var_name, filename, e));
+                    self.ui.print_info(&format!("Variable '{}' removed from active variables", var_name));
+                }
+            }
+        } else {
+            self.ui.print_error(&format!("Variable '{}' not found or has no associated file", var_name));
+            if !self.variables.is_empty() {
+                self.ui.print_info("Available variables:");
+                for var_name in self.variables.keys() {
+                    println!("  {}", var_name);
+                }
+            }
+        }
+        
+        // Update completion context
+        let _ = self.update_completion_context();
+    }
+    
+    fn reload_all_variables(&mut self) {
+        if self.session.variable_bindings.is_empty() {
+            self.ui.print_info("No variables to reload");
+            return;
+        }
+        
+        let mut reloaded_count = 0;
+        let mut failed_count = 0;
+        let mut removed_count = 0;
+        
+        // Collect bindings to avoid borrow checker issues
+        let bindings: Vec<(String, String)> = self.session.variable_bindings.iter()
+            .map(|(f, v)| (f.clone(), v.clone()))
+            .collect();
+        
+        for (filename, var_name) in bindings {
+            match std::fs::read_to_string(&filename) {
+                Ok(content) => {
+                    let old_size = self.variables.get(&var_name).map(|c| c.len()).unwrap_or(0);
+                    self.variables.insert(var_name.clone(), content.clone());
+                    
+                    if old_size != content.len() {
+                        self.ui.print_info(&format!("Reloaded '{{{}}}' from '{}' ({} → {} chars)", 
+                            var_name, filename, old_size, content.len()));
+                    }
+                    reloaded_count += 1;
+                }
+                Err(_) => {
+                    // Remove the variable since file is not accessible
+                    if self.variables.remove(&var_name).is_some() {
+                        removed_count += 1;
+                        self.ui.print_info(&format!("Removed variable '{{{}}}' (file '{}' not found)", var_name, filename));
+                    } else {
+                        failed_count += 1;
+                    }
+                }
+            }
+        }
+        
+        self.ui.print_info(&format!("Variable reload complete: {} reloaded, {} removed, {} failed", 
+            reloaded_count, removed_count, failed_count));
+        
+        // Update completion context
         let _ = self.update_completion_context();
     }
 }

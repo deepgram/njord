@@ -47,6 +47,7 @@ pub enum Command {
     Variables,
     VariableShow(String),
     VariableDelete(String),
+    VariableReload(Option<String>), // (optional_variable_name) - reload specific var or all vars
     // Prompt library commands
     PromptsList,
     PromptsShow(String),
@@ -117,6 +118,7 @@ pub struct CommandParser {
     load_regex: Regex,
     variable_show_regex: Regex,
     variable_delete_regex: Regex,
+    variable_reload_regex: Regex,
     // Prompt library regexes
     prompts_save_regex: Regex,
     prompts_show_regex: Regex,
@@ -201,6 +203,7 @@ impl CommandParser {
             load_regex: Regex::new(r"^/load\s+(.+?)(?:\s+(.+))?$")?,
             variable_show_regex: Regex::new(r"^/var\s+show\s+(.+)$")?,
             variable_delete_regex: Regex::new(r"^/var\s+delete\s+(.+)$")?,
+            variable_reload_regex: Regex::new(r"^/var\s+reload(?:\s+(.+))?$")?,
             // Prompt library regexes
             prompts_save_regex: Regex::new(r"^/prompts\s+save\s+(.+)$")?,
             prompts_show_regex: Regex::new(r"^/prompts\s+show\s+(.+)$")?,
@@ -351,6 +354,9 @@ impl CommandParser {
                 } else if let Some(caps) = self.variable_delete_regex.captures(input) {
                     let name = Self::unquote_session_name(&caps[1]);
                     Some(Command::VariableDelete(name))
+                } else if let Some(caps) = self.variable_reload_regex.captures(input) {
+                    let name = caps.get(1).map(|m| Self::unquote_session_name(m.as_str()));
+                    Some(Command::VariableReload(name))
                 } else if let Some(caps) = self.prompts_save_regex.captures(input) {
                     // For prompts save, we only capture the name - content is handled separately
                     let name = Self::unquote_session_name(&caps[1]);

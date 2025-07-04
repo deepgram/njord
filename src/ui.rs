@@ -527,7 +527,7 @@ impl NjordCompleter {
         
         if parts.len() == 1 || (parts.len() == 2 && !input.ends_with(' ')) {
             // Complete var subcommand
-            let subcommands = ["show", "delete"];
+            let subcommands = ["show", "delete", "reload"];
             subcommands.iter()
                 .filter(|cmd| cmd.starts_with(current_word))
                 .map(|cmd| Pair {
@@ -536,9 +536,9 @@ impl NjordCompleter {
                 })
                 .collect()
         } else if parts.len() >= 2 {
-            // Complete variable names for show/delete commands
+            // Complete variable names for show/delete/reload commands
             let subcommand = parts[1];
-            if matches!(subcommand, "show" | "delete") {
+            if matches!(subcommand, "show" | "delete" | "reload") {
                 return self.complete_variable_names(current_word);
             }
             Vec::new()
