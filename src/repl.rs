@@ -2190,7 +2190,6 @@ impl Repl {
                                                         }
                                                     }
                                                     Err(e) => {
-                                                        spinner.stop().await;
                                                         self.ui.print_error(&format!("Stream error: {}", e));
                                                         stream_error = true;
                                                         break;
@@ -2201,7 +2200,6 @@ impl Repl {
                                         }
                                     }
                                     _ = cancel_token.cancelled() => {
-                                        spinner.stop().await;
                                         self.ui.print_info("\nRequest cancelled");
                                         // User message was never added to history, so nothing to remove
                                         return Err(anyhow::anyhow!("Request cancelled"));
@@ -2218,6 +2216,8 @@ impl Repl {
                                 }
                             }
                             
+                            // Stop spinner before printing newline
+                            spinner.stop().await;
                             self.ui.print_agent_newline();
                             
                             // Add the complete response to the session with metadata
