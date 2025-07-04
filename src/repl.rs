@@ -345,7 +345,7 @@ impl Repl {
                 self.session.name.as_deref()
             };
             
-            if let Some(input) = self.ui.read_input(prompt_message, session_name)? {
+            if let Some(input) = self.ui.read_input(prompt_message, session_name, self.config.ephemeral)? {
                 // Handle Ctrl-C signal
                 if input == "__CTRL_C__" {
                     // Cancel any active request
@@ -773,6 +773,12 @@ impl Repl {
                 self.ui.print_info("Started new chat session");
             }
             Command::ChatContinue(session_ref_opt) => {
+                if self.config.ephemeral {
+                    self.ui.print_error("Cannot continue sessions in ephemeral mode (would modify original session)");
+                    self.ui.print_info("Use '/chat load SESSION' to copy a session instead");
+                    return Ok(true);
+                }
+                
                 let target_session = if let Some(session_ref) = session_ref_opt {
                     // Continue specific session by reference
                     match self.resolve_session_reference(&session_ref) {
@@ -1586,7 +1592,7 @@ impl Repl {
                     self.ui.print_info("⚠️  Execute this code? This will run the code on your system!");
                     self.ui.print_info("Type 'yes' to execute, anything else to cancel:");
                     
-                    if let Some(confirmation) = self.ui.read_input(None, None)? {
+                    if let Some(confirmation) = self.ui.read_input(None, None, self.config.ephemeral)? {
                         if confirmation.trim().to_lowercase() == "yes" {
                             self.execute_code_block(block)?;
                         } else {
@@ -1795,7 +1801,7 @@ impl Repl {
                     println!();
                     self.ui.print_info("Enter new content (use {{ and }} for multi-line input):");
                     
-                    if let Some(new_content) = self.ui.read_input(None, None)? {
+                    if let Some(new_content) = self.ui.read_input(None, None, self.config.ephemeral)? {
                         if !new_content.trim().is_empty() {
                             match self.prompts.update_prompt_content(&name, new_content) {
                                 Ok(true) => {

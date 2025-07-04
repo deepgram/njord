@@ -729,15 +729,17 @@ impl UI {
         Ok(())
     }
     
-    pub fn read_input(&mut self, prompt_info: Option<(&str, &str)>, session_name: Option<&str>) -> Result<Option<String>> {
+    pub fn read_input(&mut self, prompt_info: Option<(&str, &str)>, session_name: Option<&str>, ephemeral: bool) -> Result<Option<String>> {
         let (prompt, initial_input) = if let Some((message, status)) = prompt_info {
             let color = match status {
                 "retry" => "\x1b[1;33m", // Yellow for retry
                 "interrupted" => "\x1b[1;31m", // Red for interrupted
-                _ => "\x1b[1;32m", // Green default
+                _ => if ephemeral { "\x1b[1;33m" } else { "\x1b[1;32m" }, // Yellow for ephemeral, green default
             };
             let session_prefix = if let Some(name) = session_name {
                 format!("[{}] ", name)
+            } else if ephemeral {
+                "[ephemeral] ".to_string()
             } else {
                 String::new()
             };
@@ -745,10 +747,13 @@ impl UI {
         } else {
             let session_prefix = if let Some(name) = session_name {
                 format!("[{}] ", name)
+            } else if ephemeral {
+                "[ephemeral] ".to_string()
             } else {
                 String::new()
             };
-            (format!("\x1b[1;32m{}>>> \x1b[0m", session_prefix), "")
+            let color = if ephemeral { "\x1b[1;33m" } else { "\x1b[1;32m" }; // Yellow for ephemeral, green default
+            (format!("{}{}>>> \x1b[0m", color, session_prefix), "")
         };
         
         match self.editor.readline_with_initial(&prompt, (initial_input, "")) {
@@ -775,7 +780,7 @@ impl UI {
                         Ok(Some(input.to_string()))
                     } else if input.starts_with("{") {
                         // Multi-line input mode
-                        self.read_multiline_input(input.to_string(), session_name)
+                        self.read_multiline_input(input.to_string(), session_name, ephemeral)
                     } else {
                         Ok(Some(input.to_string()))
                     }
@@ -793,7 +798,7 @@ impl UI {
         }
     }
     
-    fn read_multiline_input(&mut self, first_line: String, session_name: Option<&str>) -> Result<Option<String>> {
+    fn read_multiline_input(&mut self, first_line: String, session_name: Option<&str>, ephemeral: bool) -> Result<Option<String>> {
         // Parse the opening tag from the first line
         let tag = self.parse_opening_tag(&first_line);
         let end_marker = if let Some(ref tag_name) = tag {
@@ -813,12 +818,15 @@ impl UI {
         
         let session_prefix = if let Some(name) = session_name {
             format!("[{}] ", name)
+        } else if ephemeral {
+            "[ephemeral] ".to_string()
         } else {
             String::new()
         };
+        let color = if ephemeral { "\x1b[1;33m" } else { "\x1b[1;32m" }; // Yellow for ephemeral, green default
         
         loop {
-            match self.editor.readline(&format!("\x1b[1;32m{}... \x1b[0m", session_prefix)) {
+            match self.editor.readline(&format!("{}{}... \x1b[0m", color, session_prefix)) {
                 Ok(line) => {
                     let line = line.trim_end_matches('\n').trim_end_matches('\r');
                     
