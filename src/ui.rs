@@ -16,6 +16,7 @@ pub struct UI {
     editor: Editor<NjordCompleter, DefaultHistory>,
     spinner_active: Arc<AtomicBool>,
     input_history: InputHistory,
+    ephemeral: bool,
 }
 
 #[derive(Clone)]
@@ -672,6 +673,34 @@ impl Validator for NjordCompleter {}
 impl Helper for NjordCompleter {}
 
 impl UI {
+    pub fn with_input_history_file_ephemeral(input_history_file: String) -> Result<Self> {
+        // Create config with bracketed paste enabled
+        let config = Config::builder()
+            .bracketed_paste(true)
+            .build();
+        
+        let mut editor = Editor::with_config(config)?;
+        
+        let completer = NjordCompleter::new(CompletionContext::new());
+        editor.set_helper(Some(completer));
+        
+        // In ephemeral mode, try to load existing input history but don't fail if it doesn't exist
+        let input_history = InputHistory::load(input_history_file.clone())
+            .unwrap_or_else(|_| InputHistory::new(input_history_file));
+        
+        // Load history entries into rustyline
+        for entry in input_history.get_entries() {
+            let _ = editor.add_history_entry(&entry);
+        }
+        
+        Ok(Self { 
+            editor,
+            spinner_active: Arc::new(AtomicBool::new(false)),
+            input_history,
+            ephemeral: true,
+        })
+    }
+    
     pub fn with_input_history_file(input_history_file: String) -> Result<Self> {
         // Create config with bracketed paste enabled
         let config = Config::builder()
@@ -695,6 +724,7 @@ impl UI {
             editor,
             spinner_active: Arc::new(AtomicBool::new(false)),
             input_history,
+            ephemeral: false,
         })
     }
     
@@ -970,19 +1000,29 @@ impl UI {
     
     fn add_to_persistent_history(&mut self, input: String) {
         self.input_history.add_entry(input);
-        // Save immediately to ensure persistence even if app crashes
-        if let Err(e) = self.input_history.save() {
-            eprintln!("Warning: Failed to save input history: {}", e);
+        // Save immediately to ensure persistence even if app crashes (unless in ephemeral mode)
+        if !self.ephemeral {
+            if let Err(e) = self.input_history.save() {
+                eprintln!("Warning: Failed to save input history: {}", e);
+            }
         }
     }
     
     pub fn save_input_history(&self) -> Result<()> {
-        self.input_history.save()
+        if self.ephemeral {
+            Ok(()) // Don't save in ephemeral mode
+        } else {
+            self.input_history.save()
+        }
     }
     
     pub fn clear_input_history(&mut self) -> Result<()> {
         self.input_history.clear();
-        self.input_history.save()
+        if self.ephemeral {
+            Ok(()) // Don't save in ephemeral mode
+        } else {
+            self.input_history.save()
+        }
     }
     
     pub fn get_input_history_stats(&self) -> (usize, Option<String>) {

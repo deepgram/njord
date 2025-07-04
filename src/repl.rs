@@ -95,7 +95,12 @@ impl Repl {
         }
         
         let command_parser = CommandParser::new()?;
-        let mut ui = UI::with_input_history_file(config.inputs_file())?;
+        let mut ui = if config.ephemeral {
+            // In ephemeral mode, try to load existing input history but don't fail if it doesn't exist
+            UI::with_input_history_file_ephemeral(config.inputs_file())?
+        } else {
+            UI::with_input_history_file(config.inputs_file())?
+        };
         
         // Set up initial completion context
         let variables = HashMap::new();
