@@ -500,6 +500,89 @@ impl NjordCompleter {
             prefix
         }
     }
+    
+    fn complete_load_command(&self, line: &str, pos: usize) -> Vec<Pair> {
+        let start_pos = self.find_completion_start(line, pos);
+        let current_word = &line[start_pos..pos];
+        let input = &line[..pos];
+        let parts: Vec<&str> = input.split_whitespace().collect();
+        
+        if parts.len() == 1 || (parts.len() == 2 && !input.ends_with(' ')) {
+            // Complete filename - basic file completion
+            // For now, just return empty - could be enhanced with actual file system completion
+            Vec::new()
+        } else if parts.len() == 2 || (parts.len() == 3 && !input.ends_with(' ')) {
+            // Complete variable name - no specific completion needed
+            Vec::new()
+        } else {
+            Vec::new()
+        }
+    }
+    
+    fn complete_var_command(&self, line: &str, pos: usize) -> Vec<Pair> {
+        let start_pos = self.find_completion_start(line, pos);
+        let current_word = &line[start_pos..pos];
+        let input = &line[..pos];
+        let parts: Vec<&str> = input.split_whitespace().collect();
+        
+        if parts.len() == 1 || (parts.len() == 2 && !input.ends_with(' ')) {
+            // Complete var subcommand
+            let subcommands = ["show", "delete"];
+            subcommands.iter()
+                .filter(|cmd| cmd.starts_with(current_word))
+                .map(|cmd| Pair {
+                    display: cmd.to_string(),
+                    replacement: cmd.to_string(),
+                })
+                .collect()
+        } else if parts.len() >= 2 {
+            // Complete variable names for show/delete commands
+            let subcommand = parts[1];
+            if matches!(subcommand, "show" | "delete") {
+                return self.complete_variable_names(current_word);
+            }
+            Vec::new()
+        } else {
+            Vec::new()
+        }
+    }
+    
+    fn complete_variable_references(&self, line: &str, pos: usize) -> Vec<Pair> {
+        // Look for {{VAR pattern in the line
+        let line_up_to_pos = &line[..pos];
+        
+        // Find the last {{ before the cursor
+        if let Some(brace_start) = line_up_to_pos.rfind("{{") {
+            let var_start = brace_start + 2;
+            if var_start <= pos {
+                let partial_var = &line_up_to_pos[var_start..];
+                
+                // Complete variable names
+                return self.context.variable_names.iter()
+                    .filter(|var_name| var_name.starts_with(partial_var))
+                    .map(|var_name| {
+                        let completion = format!("{}}}", var_name);
+                        Pair {
+                            display: format!("{{{{{}}}}}", var_name),
+                            replacement: completion,
+                        }
+                    })
+                    .collect();
+            }
+        }
+        
+        Vec::new()
+    }
+    
+    fn complete_variable_names(&self, current_word: &str) -> Vec<Pair> {
+        self.context.variable_names.iter()
+            .filter(|name| name.starts_with(current_word))
+            .map(|name| Pair {
+                display: name.clone(),
+                replacement: name.clone(),
+            })
+            .collect()
+    }
 }
 
 impl Completer for NjordCompleter {
