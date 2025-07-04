@@ -14,6 +14,7 @@ pub struct Config {
     pub load_session: Option<String>,
     pub new_session: bool,
     pub state_directory: String,
+    pub ephemeral: bool,
 }
 
 impl Config {
@@ -87,6 +88,7 @@ impl Config {
             load_session: args.load_session.clone(),
             new_session: args.new_session,
             state_directory: args.state_directory.clone(),
+            ephemeral: args.ephemeral,
         })
     }
 }
@@ -109,6 +111,7 @@ mod tests {
             load_session: Some("test-session".to_string()),
             new_session: true,
             state_directory: ".".to_string(),
+            ephemeral: false,
         };
         
         let config = Config::from_args(&args).unwrap();
@@ -138,6 +141,7 @@ mod tests {
             load_session: None,
             new_session: false,
             state_directory: ".".to_string(),
+            ephemeral: false,
         };
         
         let config = Config::from_args_and_env(&args_anthropic, None, None, None).unwrap();
@@ -155,6 +159,7 @@ mod tests {
             load_session: None,
             new_session: false,
             state_directory: ".".to_string(),
+            ephemeral: false,
         };
         
         let config = Config::from_args_and_env(&args_openai, None, None, None).unwrap();
@@ -172,6 +177,7 @@ mod tests {
             load_session: None,
             new_session: false,
             state_directory: ".".to_string(),
+            ephemeral: false,
         };
         
         let config = Config::from_args_and_env(&args_gemini, None, None, None).unwrap();
@@ -191,6 +197,7 @@ mod tests {
             load_session: None,
             new_session: false,
             state_directory: ".".to_string(),
+            ephemeral: false,
         };
         
         let config = Config::from_args_and_env(&args, None, None, None).unwrap();
@@ -212,6 +219,7 @@ mod tests {
             load_session: None,
             new_session: false,
             state_directory: ".".to_string(),
+            ephemeral: false,
         };
         
         let config = Config::from_args_and_env(
