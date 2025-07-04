@@ -2145,7 +2145,7 @@ impl Repl {
                             let mut has_thinking = false;
                             let mut has_content = false;
                             let mut thinking_started = false;
-                            let mut spinner_stopped = false;
+                            let mut spinner = Some(spinner);
                             
                             let stream_result = loop {
                                 tokio::select! {
@@ -2155,9 +2155,8 @@ impl Repl {
                                                 match chunk {
                                                     Ok(content) => {
                                                         // Stop spinner on first content received
-                                                        if !spinner_stopped {
-                                                            spinner.stop().await;
-                                                            spinner_stopped = true;
+                                                        if let Some(s) = spinner.take() {
+                                                            s.stop().await;
                                                         }
                                                         
                                                         if !content.is_empty() {
@@ -2212,8 +2211,8 @@ impl Repl {
                             };
                             
                             // Ensure spinner is stopped if we haven't stopped it yet
-                            if !spinner_stopped {
-                                spinner.stop().await;
+                            if let Some(s) = spinner.take() {
+                                s.stop().await;
                             }
                             
                             // Check if we should return early due to cancellation
