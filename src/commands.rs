@@ -235,7 +235,7 @@ impl CommandParser {
             chat_auto_rename_regex: Regex::new(r"^/chat\s+auto-rename(?:\s+(.+))?$")?,
             summarize_regex: Regex::new(r"^/summarize(?:\s+(.+))?$")?,
             // File loading regexes
-            load_regex: Regex::new(r"^/load\s+(\S+|\"[^\"]*\"|\S+)(?:\s+(\S+|\"[^\"]*\"|\S+))?$")?,
+            load_regex: Regex::new(r"^/load\s+(.+)$")?,
             variable_show_regex: Regex::new(r"^/var\s+show\s+(.+)$")?,
             variable_delete_regex: Regex::new(r"^/var\s+delete\s+(.+)$")?,
             variable_reload_regex: Regex::new(r"^/var\s+reload(?:\s+(.+))?$")?,
