@@ -6,8 +6,6 @@ use std::path::PathBuf;
 
 use crate::session::ChatSession;
 
-pub const HISTORY_FILE: &str = ".njord";
-
 #[derive(Debug, Serialize, Deserialize)]
 pub struct History {
     pub current_session: Option<ChatSession>,
