@@ -227,16 +227,19 @@ impl PromptLibrary {
         let mut overwritten_count = 0;
         
         for (name, prompt) in imported_prompts {
-            if self.prompts.contains_key(&name) {
-                if overwrite {
-                    self.prompts.insert(name, prompt);
-                    overwritten_count += 1;
-                } else {
-                    skipped_count += 1;
+            match self.prompts.entry(name) {
+                std::collections::hash_map::Entry::Occupied(mut e) => {
+                    if overwrite {
+                        e.insert(prompt);
+                        overwritten_count += 1;
+                    } else {
+                        skipped_count += 1;
+                    }
                 }
-            } else {
-                self.prompts.insert(name, prompt);
-                imported_count += 1;
+                std::collections::hash_map::Entry::Vacant(e) => {
+                    e.insert(prompt);
+                    imported_count += 1;
+                }
             }
         }
         

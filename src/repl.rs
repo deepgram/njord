@@ -139,7 +139,7 @@ impl Repl {
         let mut available_models = Vec::new();
         
         // Collect all models from all providers
-        for (_provider_name, provider) in providers {
+        for provider in providers.values() {
             available_models.extend(provider.get_models());
         }
         
@@ -326,10 +326,8 @@ impl Repl {
             // Determine what message to show in prompt
             let prompt_message = if let Some(interrupted) = &self.interrupted_message {
                 Some((interrupted.as_str(), "interrupted"))
-            } else if let Some(queued) = &self.queued_message {
-                Some((queued.as_str(), "retry"))
             } else {
-                None
+                self.queued_message.as_ref().map(|queued| (queued.as_str(), "retry"))
             };
             
             // Determine session name for prompt
@@ -512,12 +510,8 @@ impl Repl {
                 } else {
                     "N/A".to_string()
                 }
-            } else {
-                if self.session.thinking_enabled { "enabled".to_string() } else { "disabled".to_string() }
-            }
-        } else {
-            if self.session.thinking_enabled { "enabled".to_string() } else { "disabled".to_string() }
-        }
+            } else if self.session.thinking_enabled { "enabled".to_string() } else { "disabled".to_string() }
+        } else if self.session.thinking_enabled { "enabled".to_string() } else { "disabled".to_string() }
     }
     
     fn get_session_display(&self) -> String {
@@ -1353,7 +1347,7 @@ impl Repl {
                 }
             }
             Command::Temperature(temp) => {
-                if temp < 0.0 || temp > 2.0 {
+                if !(0.0..=2.0).contains(&temp) {
                     self.ui.print_error("Temperature must be between 0.0 and 2.0");
                 } else {
                     self.session.temperature = temp;
@@ -1817,7 +1811,7 @@ impl Repl {
             }
             Command::InputHistoryStats => {
                 let (count, last_entry) = self.ui.get_input_history_stats();
-                self.ui.print_info(&format!("Input history statistics:"));
+                self.ui.print_info("Input history statistics:");
                 println!("  Total entries: {}", count);
                 println!("  Max entries: 1000");
                 if let Some(last) = last_entry {
@@ -1976,16 +1970,14 @@ impl Repl {
                                                 match chunk {
                                                     Ok(content) => {
                                                         if !content.is_empty() {
-                                                            if content.starts_with("thinking:") {
-                                                                let thinking_text = &content[9..]; // Remove "thinking:" prefix
+                                                            if let Some(thinking_text) = content.strip_prefix("thinking:") {
                                                                 if !thinking_started {
                                                                     self.ui.print_thinking_prefix(agent_number);
                                                                     thinking_started = true;
                                                                     has_thinking = true;
                                                                 }
                                                                 self.ui.print_thinking_chunk(thinking_text);
-                                                            } else if content.starts_with("content:") {
-                                                                let content_text = &content[8..]; // Remove "content:" prefix
+                                                            } else if let Some(content_text) = content.strip_prefix("content:") {
                                                                 if has_thinking && !has_content {
                                                                     self.ui.print_thinking_end();
                                                                     self.ui.print_agent_prefix(agent_number);
@@ -2056,14 +2048,12 @@ impl Repl {
                                     Some(self.session.current_model.clone())
                                 );
                                 return Ok(()); // Success!
+                            } else if attempt < max_retries {
+                                self.ui.print_error("Empty response received, retrying...");
+                                continue;
                             } else {
-                                if attempt < max_retries {
-                                    self.ui.print_error("Empty response received, retrying...");
-                                    continue;
-                                } else {
-                                    // User message was never added to history, so nothing to remove
-                                    return Err(anyhow::anyhow!("Empty response on final attempt"));
-                                }
+                                // User message was never added to history, so nothing to remove
+                                return Err(anyhow::anyhow!("Empty response on final attempt"));
                             }
                         }
                         Err(e) => {
@@ -2222,8 +2212,8 @@ impl Repl {
             match chunk_result {
                 Ok(chunk) => {
                     // Handle both prefixed and non-prefixed content
-                    if chunk.starts_with("content:") {
-                        response.push_str(&chunk[8..]);
+                    if let Some(stripped) = chunk.strip_prefix("content:") {
+                        response.push_str(stripped);
                     } else {
                         response.push_str(&chunk);
                     }
@@ -2295,10 +2285,7 @@ impl Repl {
         }
         
         // Replace problematic characters for session names
-        sanitized = sanitized
-            .replace('\n', " ")
-            .replace('\r', " ")
-            .replace('\t', " ");
+        sanitized = sanitized.replace(['\n', '\r', '\t'], " ");
         
         // Collapse multiple spaces
         while sanitized.contains("  ") {
@@ -2438,8 +2425,8 @@ Format your summary in clear, readable paragraphs. Be objective and factual.";
             match chunk_result {
                 Ok(chunk) => {
                     // Handle both prefixed and non-prefixed content
-                    if chunk.starts_with("content:") {
-                        response.push_str(&chunk[8..]);
+                    if let Some(stripped) = chunk.strip_prefix("content:") {
+                        response.push_str(stripped);
                     } else {
                         response.push_str(&chunk);
                     }
@@ -2689,8 +2676,8 @@ Format your summary in clear, readable paragraphs. Be objective and factual.";
             match chunk_result {
                 Ok(chunk) => {
                     // Handle both prefixed and non-prefixed content
-                    if chunk.starts_with("content:") {
-                        response.push_str(&chunk[8..]);
+                    if let Some(stripped) = chunk.strip_prefix("content:") {
+                        response.push_str(stripped);
                     } else {
                         response.push_str(&chunk);
                     }
@@ -2746,10 +2733,7 @@ Format your summary in clear, readable paragraphs. Be objective and factual.";
         }
         
         // Replace problematic characters for prompt names
-        sanitized = sanitized
-            .replace('\n', " ")
-            .replace('\r', " ")
-            .replace('\t', " ");
+        sanitized = sanitized.replace(['\n', '\r', '\t'], " ");
         
         // Collapse multiple spaces
         while sanitized.contains("  ") {

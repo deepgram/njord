@@ -102,7 +102,7 @@ impl NjordCompleter {
         
         if parts.len() == 1 || (parts.len() == 2 && !input.ends_with(' ')) {
             // Complete chat subcommand
-            let subcommands = vec![
+            let subcommands = [
                 "new", "save", "load", "list", "delete", "continue", "recent", "fork", "merge", "rename", "auto-rename", "auto-rename-all"
             ];
             
@@ -165,7 +165,7 @@ impl NjordCompleter {
             return word.to_string();
         }
         
-        if word.starts_with('"') {
+        if let Some(stripped) = word.strip_prefix('"') {
             if word.len() == 1 {
                 // Just a quote - return empty string for matching
                 String::new()
@@ -174,9 +174,9 @@ impl NjordCompleter {
                 word[1..word.len()-1].to_string()
             } else {
                 // Partial quote - remove opening quote for matching, preserving trailing spaces
-                word[1..].to_string()
+                stripped.to_string()
             }
-        } else if word.starts_with('\'') {
+        } else if let Some(stripped) = word.strip_prefix('\'') {
             if word.len() == 1 {
                 // Just a quote - return empty string for matching
                 String::new()
@@ -185,7 +185,7 @@ impl NjordCompleter {
                 word[1..word.len()-1].to_string()
             } else {
                 // Partial quote - remove opening quote for matching, preserving trailing spaces
-                word[1..].to_string()
+                stripped.to_string()
             }
         } else {
             // No quotes - return as-is, preserving any trailing spaces
@@ -211,7 +211,7 @@ impl NjordCompleter {
         let start_pos = self.find_completion_start(line, pos);
         let current_word = &line[start_pos..pos];
         
-        vec!["on", "off"]
+        ["on", "off"]
             .iter()
             .filter(|option| option.starts_with(current_word))
             .map(|option| Pair {
@@ -225,7 +225,7 @@ impl NjordCompleter {
         let start_pos = self.find_completion_start(line, pos);
         let current_word = &line[start_pos..pos];
         
-        vec!["markdown", "json", "txt"]
+        ["markdown", "json", "txt"]
             .iter()
             .filter(|format| format.starts_with(current_word))
             .map(|format| Pair {
@@ -247,8 +247,7 @@ impl NjordCompleter {
         let mut completions = Vec::new();
         
         // Add ephemeral references (#1, #2, etc.) if current word starts with #
-        if current_word.starts_with('#') {
-            let _number_part = &current_word[1..];
+        if let Some(_number_part) = current_word.strip_prefix('#') {
             for i in 1..=10 { // Show up to 10 ephemeral references
                 let ephemeral_ref = format!("#{}", i);
                 if ephemeral_ref.starts_with(current_word) {
@@ -274,7 +273,7 @@ impl NjordCompleter {
         
         if parts.len() == 1 || (parts.len() == 2 && !input.ends_with(' ')) {
             // Complete copy type
-            let types = vec!["agent", "user", "block"];
+            let types = ["agent", "user", "block"];
             types.iter()
                 .filter(|t| t.starts_with(current_word))
                 .map(|t| Pair {
@@ -296,7 +295,7 @@ impl NjordCompleter {
         
         if parts.len() == 1 || (parts.len() == 2 && !input.ends_with(' ')) {
             // Complete save type
-            let types = vec!["agent", "user", "block"];
+            let types = ["agent", "user", "block"];
             types.iter()
                 .filter(|t| t.starts_with(current_word))
                 .map(|t| Pair {
@@ -318,7 +317,7 @@ impl NjordCompleter {
         
         if parts.len() == 1 || (parts.len() == 2 && !input.ends_with(' ')) {
             // Complete prompts subcommand
-            let subcommands = vec![
+            let subcommands = [
                 "list", "show", "save", "apply", "delete", "rename", "search", 
                 "auto-name", "edit", "import", "export"
             ];
@@ -525,10 +524,10 @@ impl Completer for NjordCompleter {
         
         if longest_prefix.len() > current_word.len() {
             // We have a meaningful partial completion
-            return Ok((start_pos, vec![Pair {
+            Ok((start_pos, vec![Pair {
                 display: longest_prefix.clone(),
                 replacement: longest_prefix,
-            }]));
+            }]))
         } else {
             // No meaningful partial completion - return empty to prevent cycling
             Ok((pos, vec![]))
@@ -542,28 +541,32 @@ impl Hinter for NjordCompleter {
     fn hint(&self, line: &str, pos: usize, _ctx: &rustyline::Context<'_>) -> Option<Self::Hint> {
         let completions = self.complete_command(line, pos);
         
-        if completions.len() == 1 {
-            // Single completion available - show it as a hint
-            Some(format!(" [{}]", completions[0].display))
-        } else if completions.len() > 1 {
-            // Multiple completions available - show them as a hint
-            let completion_names: Vec<String> = completions.iter()
-                .map(|pair| pair.display.clone())
-                .collect();
-            
-            // Limit to first 5 completions to avoid overwhelming the display
-            let display_completions = if completion_names.len() > 5 {
-                let mut limited = completion_names[..5].to_vec();
-                limited.push(format!("... ({} more)", completion_names.len() - 5));
-                limited
-            } else {
-                completion_names
-            };
-            
-            Some(format!(" [{}]", display_completions.join(" ")))
-        } else {
-            // No completions available
-            None
+        match completions.len() {
+            1 => {
+                // Single completion available - show it as a hint
+                Some(format!(" [{}]", completions[0].display))
+            }
+            n if n > 1 => {
+                // Multiple completions available - show them as a hint
+                let completion_names: Vec<String> = completions.iter()
+                    .map(|pair| pair.display.clone())
+                    .collect();
+                
+                // Limit to first 5 completions to avoid overwhelming the display
+                let display_completions = if completion_names.len() > 5 {
+                    let mut limited = completion_names[..5].to_vec();
+                    limited.push(format!("... ({} more)", completion_names.len() - 5));
+                    limited
+                } else {
+                    completion_names
+                };
+                
+                Some(format!(" [{}]", display_completions.join(" ")))
+            }
+            _ => {
+                // No completions available
+                None
+            }
         }
     }
 }

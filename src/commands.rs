@@ -126,8 +126,8 @@ impl CommandParser {
         let trimmed = input.trim();
         
         // Check for ephemeral reference (#1, #2, etc.)
-        if trimmed.starts_with('#') {
-            if let Ok(number) = trimmed[1..].parse::<usize>() {
+        if let Some(stripped) = trimmed.strip_prefix('#') {
+            if let Ok(number) = stripped.parse::<usize>() {
                 return SessionReference::Ephemeral(number);
             }
         }
@@ -137,11 +137,7 @@ impl CommandParser {
            (trimmed.starts_with('\'') && trimmed.ends_with('\'')) {
             let unquoted = trimmed[1..trimmed.len()-1].to_string();
             // Validate that session names starting with # are quoted
-            if unquoted.starts_with('#') {
-                return SessionReference::Named(unquoted);
-            } else {
-                return SessionReference::Named(unquoted);
-            }
+            return SessionReference::Named(unquoted);
         }
         
         // Unquoted session name - must not start with #
@@ -228,7 +224,7 @@ impl CommandParser {
             "/status" => Some(Command::Status),
             "/retry" => Some(Command::Retry),
             "/system" => Some(Command::System(String::new())),
-            "/thinking" => Some(Command::Thinking(!true)), // Toggle current state
+            "/thinking" => Some(Command::Thinking(false)), // Toggle current state
             "/quit" | "/exit" => Some(Command::Quit),
             // Prompt library commands
             "/prompts list" => Some(Command::PromptsList),
