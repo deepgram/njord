@@ -1077,7 +1077,11 @@ pub struct SpinnerHandle {
 impl SpinnerHandle {
     pub async fn stop(mut self) {
         self.spinner_active.store(false, Ordering::Relaxed);
-        let _ = self.handle.await;
+        // Prevent the Drop implementation from running by replacing the handle
+        let handle = std::mem::replace(&mut self.handle, tokio::spawn(async {}));
+        let _ = handle.await;
+        // Forget self to prevent Drop from running
+        std::mem::forget(self);
     }
 }
 
