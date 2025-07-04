@@ -575,10 +575,6 @@ impl Validator for NjordCompleter {}
 impl Helper for NjordCompleter {}
 
 impl UI {
-    pub fn new() -> Result<Self> {
-        Self::with_input_history_file("input_history.json".to_string())
-    }
-    
     pub fn with_input_history_file(input_history_file: String) -> Result<Self> {
         // Create config with bracketed paste enabled
         let config = Config::builder()
