@@ -122,7 +122,6 @@ mod tests {
             thinking_budget: 20000,
             load_session: None,
             new_session: false,
-            history_file: ".njord".to_string(),
             history_file: crate::history::HISTORY_FILE.to_string(),
         };
         
