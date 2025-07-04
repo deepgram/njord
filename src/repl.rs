@@ -2140,14 +2140,12 @@ impl Repl {
                     
                     match provider.chat(chat_request).await {
                         Ok(mut stream) => {
-                            // Stop spinner once we start receiving response
-                            spinner.stop().await;
-                            
                             let mut full_response = String::new();
                             let mut stream_error = false;
                             let mut has_thinking = false;
                             let mut has_content = false;
                             let mut thinking_started = false;
+                            let mut spinner_stopped = false;
                             
                             loop {
                                 tokio::select! {
@@ -2156,6 +2154,12 @@ impl Repl {
                                             Some(chunk) => {
                                                 match chunk {
                                                     Ok(content) => {
+                                                        // Stop spinner on first content received
+                                                        if !spinner_stopped {
+                                                            spinner.stop().await;
+                                                            spinner_stopped = true;
+                                                        }
+                                                        
                                                         if !content.is_empty() {
                                                             if let Some(thinking_text) = content.strip_prefix("thinking:") {
                                                                 if !thinking_started {
@@ -2190,7 +2194,10 @@ impl Repl {
                                                         }
                                                     }
                                                     Err(e) => {
-                                                        spinner.stop().await;
+                                                        if !spinner_stopped {
+                                                            spinner.stop().await;
+                                                            spinner_stopped = true;
+                                                        }
                                                         self.ui.print_error(&format!("Stream error: {}", e));
                                                         stream_error = true;
                                                         break;
@@ -2201,12 +2208,20 @@ impl Repl {
                                         }
                                     }
                                     _ = cancel_token.cancelled() => {
-                                        spinner.stop().await;
+                                        if !spinner_stopped {
+                                            spinner.stop().await;
+                                            spinner_stopped = true;
+                                        }
                                         self.ui.print_info("\nRequest cancelled");
                                         // User message was never added to history, so nothing to remove
                                         return Err(anyhow::anyhow!("Request cancelled"));
                                     }
                                 }
+                            }
+                            
+                            // Ensure spinner is stopped if we haven't stopped it yet
+                            if !spinner_stopped {
+                                spinner.stop().await;
                             }
                             
                             if stream_error {
