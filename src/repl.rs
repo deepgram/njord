@@ -1855,7 +1855,7 @@ impl Repl {
                             content.replace('\n', " ")
                         };
                         
-                        self.ui.print_info(&format!("Loaded '{}' as {{{}}} ({} chars): {}", 
+                        self.ui.print_info(&format!("Loaded '{}' as {{{{{}}}}} ({} chars): {}", 
                             filename, variable_name, content.len(), preview));
                         
                         // Update completion context with new variable

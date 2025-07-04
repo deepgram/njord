@@ -49,7 +49,7 @@ impl NjordCompleter {
     
     fn complete_command(&self, line: &str, pos: usize) -> Vec<Pair> {
         let start_pos = self.find_completion_start(line, pos);
-        let current_word = &line[start_pos..pos];
+        let _current_word = &line[start_pos..pos];
         
         // Basic commands
         let commands = vec![
@@ -561,7 +561,7 @@ impl NjordCompleter {
                 return self.context.variable_names.iter()
                     .filter(|var_name| var_name.starts_with(partial_var))
                     .map(|var_name| {
-                        let completion = format!("{}}}", var_name);
+                        let completion = format!("{}}}}}", var_name);
                         Pair {
                             display: format!("{{{{{}}}}}", var_name),
                             replacement: completion,
