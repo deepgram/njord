@@ -1080,3 +1080,12 @@ impl SpinnerHandle {
         let _ = self.handle.await;
     }
 }
+
+impl Drop for SpinnerHandle {
+    fn drop(&mut self) {
+        // Ensure the spinner flag is cleared even if stop() wasn't called explicitly.
+        self.spinner_active.store(false, Ordering::Relaxed);
+        // Abort the background task to avoid it lingering.
+        self.handle.abort();
+    }
+}
