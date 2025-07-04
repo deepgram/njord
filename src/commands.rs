@@ -42,6 +42,11 @@ pub enum Command {
     Retry,
     Edit(usize),
     Quit,
+    // File loading commands
+    Load(String, Option<String>), // (filename, optional_variable_name)
+    Variables,
+    VariableShow(String),
+    VariableDelete(String),
     // Prompt library commands
     PromptsList,
     PromptsShow(String),
@@ -108,6 +113,10 @@ pub struct CommandParser {
     chat_rename_regex: Regex,
     chat_auto_rename_regex: Regex,
     summarize_regex: Regex,
+    // File loading regexes
+    load_regex: Regex,
+    variable_show_regex: Regex,
+    variable_delete_regex: Regex,
     // Prompt library regexes
     prompts_save_regex: Regex,
     prompts_show_regex: Regex,
@@ -188,6 +197,10 @@ impl CommandParser {
             chat_rename_regex: Regex::new(r"^/chat\s+rename\s+(.+?)(?:\s+(.+))?$")?,
             chat_auto_rename_regex: Regex::new(r"^/chat\s+auto-rename(?:\s+(.+))?$")?,
             summarize_regex: Regex::new(r"^/summarize(?:\s+(.+))?$")?,
+            // File loading regexes
+            load_regex: Regex::new(r"^/load\s+(.+?)(?:\s+(.+))?$")?,
+            variable_show_regex: Regex::new(r"^/var\s+show\s+(.+)$")?,
+            variable_delete_regex: Regex::new(r"^/var\s+delete\s+(.+)$")?,
             // Prompt library regexes
             prompts_save_regex: Regex::new(r"^/prompts\s+save\s+(.+)$")?,
             prompts_show_regex: Regex::new(r"^/prompts\s+show\s+(.+)$")?,
@@ -226,6 +239,8 @@ impl CommandParser {
             "/system" => Some(Command::System(String::new())),
             "/thinking" => Some(Command::Thinking(false)), // Toggle current state
             "/quit" | "/exit" => Some(Command::Quit),
+            // File loading commands
+            "/variables" | "/vars" => Some(Command::Variables),
             // Prompt library commands
             "/prompts list" => Some(Command::PromptsList),
             "/prompts auto-name" => Some(Command::PromptsAutoName(None)),
@@ -326,6 +341,16 @@ impl CommandParser {
                 } else if let Some(caps) = self.summarize_regex.captures(input) {
                     let session_ref = caps.get(1).map(|m| Self::parse_session_reference(m.as_str()));
                     Some(Command::Summarize(session_ref))
+                } else if let Some(caps) = self.load_regex.captures(input) {
+                    let filename = Self::unquote_session_name(&caps[1]);
+                    let variable_name = caps.get(2).map(|m| Self::unquote_session_name(m.as_str()));
+                    Some(Command::Load(filename, variable_name))
+                } else if let Some(caps) = self.variable_show_regex.captures(input) {
+                    let name = Self::unquote_session_name(&caps[1]);
+                    Some(Command::VariableShow(name))
+                } else if let Some(caps) = self.variable_delete_regex.captures(input) {
+                    let name = Self::unquote_session_name(&caps[1]);
+                    Some(Command::VariableDelete(name))
                 } else if let Some(caps) = self.prompts_save_regex.captures(input) {
                     // For prompts save, we only capture the name - content is handled separately
                     let name = Self::unquote_session_name(&caps[1]);

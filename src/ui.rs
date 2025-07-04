@@ -23,6 +23,7 @@ pub struct CompletionContext {
     pub available_models: Vec<String>,
     pub session_names: Vec<String>,
     pub prompt_names: Vec<String>,
+    pub variable_names: Vec<String>,
 }
 
 impl CompletionContext {
@@ -31,6 +32,7 @@ impl CompletionContext {
             available_models: Vec::new(),
             session_names: Vec::new(),
             prompt_names: Vec::new(),
+            variable_names: Vec::new(),
         }
     }
 }
@@ -89,6 +91,15 @@ impl NjordCompleter {
             return self.complete_save_command(line, pos);
         } else if line[..pos].starts_with("/prompts ") {
             return self.complete_prompts_command(line, pos);
+        } else if line[..pos].starts_with("/load ") {
+            return self.complete_load_command(line, pos);
+        } else if line[..pos].starts_with("/var ") {
+            return self.complete_var_command(line, pos);
+        }
+        
+        // Check for variable references in regular text
+        if !line[..pos].starts_with('/') {
+            return self.complete_variable_references(line, pos);
         }
         
         Vec::new()

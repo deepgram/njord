@@ -36,6 +36,7 @@ pub struct Repl {
     interrupted_message: Option<String>,
     ctrl_c_rx: mpsc::UnboundedReceiver<()>,
     last_session_list: Vec<String>, // For ephemeral session references
+    variables: HashMap<String, String>, // For file content variables
 }
 
 impl Repl {
@@ -97,7 +98,8 @@ impl Repl {
         let mut ui = UI::with_input_history_file(config.inputs_file())?;
         
         // Set up initial completion context
-        let completion_context = Self::build_completion_context(&providers, &history, &prompts);
+        let variables = HashMap::new();
+        let completion_context = Self::build_completion_context(&providers, &history, &prompts, &variables);
         ui.update_completion_context(completion_context)?;
         
         // Auto-populate ephemeral session list on startup (newest first)
@@ -116,6 +118,7 @@ impl Repl {
             interrupted_message: None,
             ctrl_c_rx,
             last_session_list,
+            variables,
         })
     }
     
@@ -136,7 +139,7 @@ impl Repl {
         get_provider_for_model(&self.session.current_model)
     }
     
-    fn build_completion_context(providers: &HashMap<String, Box<dyn LLMProvider>>, history: &History, prompts: &PromptLibrary) -> CompletionContext {
+    fn build_completion_context(providers: &HashMap<String, Box<dyn LLMProvider>>, history: &History, prompts: &PromptLibrary, variables: &HashMap<String, String>) -> CompletionContext {
         let mut available_models = Vec::new();
         
         // Collect all models from all providers
@@ -153,15 +156,19 @@ impl Repl {
         // Get prompt names
         let prompt_names = prompts.list_prompts().into_iter().cloned().collect();
         
+        // Get variable names
+        let variable_names = variables.keys().cloned().collect();
+        
         CompletionContext {
             available_models,
             session_names,
             prompt_names,
+            variable_names,
         }
     }
     
     fn update_completion_context(&mut self) -> Result<()> {
-        let context = Self::build_completion_context(&self.providers, &self.history, &self.prompts);
+        let context = Self::build_completion_context(&self.providers, &self.history, &self.prompts, &self.variables);
         self.ui.update_completion_context(context)
     }
     
@@ -647,6 +654,12 @@ impl Repl {
                 println!("    /save user 1 question.txt - Save User #1 message");
                 println!("    /save block 3 code.py - Save code block #3");
                 println!("  /exec N - Execute code block N (with confirmation)");
+                println!("  /load FILE [VAR] - Load file content into variable");
+                println!("    /load config.json - Load as {{config_json}}");
+                println!("    /load data.txt mydata - Load as {{mydata}}");
+                println!("  /variables - List all loaded variables");
+                println!("  /var show VAR - Show variable content");
+                println!("  /var delete VAR - Delete a variable");
                 println!("  /system [PROMPT] - Set system prompt (empty to view, 'clear' to remove)");
                 println!("  /prompts list - List all saved system prompts");
                 println!("  /prompts show NAME - Display a specific prompt");
@@ -669,8 +682,9 @@ impl Repl {
                 println!("  /quit - Exit Njord");
                 println!();
                 println!("Input tips:");
-                println!("  Start with ``` for multi-line input (end with ``` on its own line)");
+                println!("  Start with {{ for multi-line input (end with }} on its own line)");
                 println!("  Use this for code, long prompts, or formatted text");
+                println!("  Reference loaded files with {{VARIABLE_NAME}} in your messages");
             }
             Command::Models => {
                 self.ui.print_info("Available models:");
@@ -1824,6 +1838,75 @@ impl Repl {
                     println!("  Most recent: {}", preview);
                 }
             }
+            Command::Load(filename, variable_name_opt) => {
+                match std::fs::read_to_string(&filename) {
+                    Ok(content) => {
+                        let variable_name = if let Some(name) = variable_name_opt {
+                            name
+                        } else {
+                            self.generate_variable_name_from_filename(&filename)
+                        };
+                        
+                        self.variables.insert(variable_name.clone(), content.clone());
+                        
+                        let preview = if content.len() > 100 {
+                            format!("{}...", &content[..100].replace('\n', " "))
+                        } else {
+                            content.replace('\n', " ")
+                        };
+                        
+                        self.ui.print_info(&format!("Loaded '{}' as {{{}}} ({} chars): {}", 
+                            filename, variable_name, content.len(), preview));
+                        
+                        // Update completion context with new variable
+                        let _ = self.update_completion_context();
+                    }
+                    Err(e) => {
+                        self.ui.print_error(&format!("Failed to load file '{}': {}", filename, e));
+                    }
+                }
+            }
+            Command::Variables => {
+                if self.variables.is_empty() {
+                    self.ui.print_info("No variables loaded");
+                } else {
+                    self.ui.print_info(&format!("Loaded variables ({} total):", self.variables.len()));
+                    for (name, content) in &self.variables {
+                        let preview = if content.len() > 80 {
+                            format!("{}...", &content[..80].replace('\n', " "))
+                        } else {
+                            content.replace('\n', " ")
+                        };
+                        println!("  {{{}}}: {} chars - {}", name, content.len(), preview);
+                    }
+                    println!();
+                    self.ui.print_info("Use {{VARIABLE_NAME}} in your messages to reference content");
+                }
+            }
+            Command::VariableShow(name) => {
+                if let Some(content) = self.variables.get(&name) {
+                    self.ui.print_info(&format!("Variable {{{}}} ({} chars):", name, content.len()));
+                    println!();
+                    println!("{}", content);
+                } else {
+                    self.ui.print_error(&format!("Variable '{}' not found", name));
+                    if !self.variables.is_empty() {
+                        self.ui.print_info("Available variables:");
+                        for var_name in self.variables.keys() {
+                            println!("  {}", var_name);
+                        }
+                    }
+                }
+            }
+            Command::VariableDelete(name) => {
+                if self.variables.remove(&name).is_some() {
+                    self.ui.print_info(&format!("Variable '{}' deleted", name));
+                    // Update completion context after deletion
+                    let _ = self.update_completion_context();
+                } else {
+                    self.ui.print_error(&format!("Variable '{}' not found", name));
+                }
+            }
             _ => {
                 self.ui.print_info(&format!("Command not yet implemented: {:?}", command));
             }
@@ -1833,6 +1916,17 @@ impl Repl {
     }
     
     async fn handle_message(&mut self, message: String) -> Result<()> {
+        // Substitute variables in the message before processing
+        let processed_message = self.substitute_variables(&message);
+        
+        // Show substitution info if variables were replaced
+        if processed_message != message {
+            let var_count = self.variables.keys()
+                .filter(|var_name| message.contains(&format!("{{{{{}}}}}", var_name)))
+                .count();
+            self.ui.print_info(&format!("Substituted {} variable(s) in message", var_count));
+        }
+        
         // Create cancellation token for this request
         let cancel_token = CancellationToken::new();
         self.active_request_token = Some(cancel_token.clone());
@@ -1840,9 +1934,9 @@ impl Repl {
         // Split the receiver to avoid borrow checker issues
         let mut ctrl_c_rx = std::mem::replace(&mut self.ctrl_c_rx, tokio::sync::mpsc::unbounded_channel().1);
         
-        // Try to send the message with retry logic
+        // Try to send the processed message with retry logic
         let result = tokio::select! {
-            result = self.send_message_with_retry(&message, 3, cancel_token.clone()) => {
+            result = self.send_message_with_retry(&processed_message, 3, cancel_token.clone()) => {
                 // Restore the receiver
                 self.ctrl_c_rx = ctrl_c_rx;
                 result
@@ -1850,7 +1944,7 @@ impl Repl {
             _ = cancel_token.cancelled() => {
                 // Restore the receiver
                 self.ctrl_c_rx = ctrl_c_rx;
-                // Request was cancelled - queue as interrupted message
+                // Request was cancelled - queue as interrupted message (original, not processed)
                 self.interrupted_message = Some(message);
                 self.ui.print_info("Request interrupted. Message available for editing.");
                 return Ok(());
@@ -1881,7 +1975,7 @@ impl Repl {
                     return Ok(());
                 }
                 
-                // All retries failed - queue the message for retry
+                // All retries failed - queue the original message for retry
                 self.queued_message = Some(message);
                 self.ui.print_error(&format!("Failed to send message after 3 attempts: {}", e));
                 self.ui.print_info("Message queued for retry. Press Enter to retry, or modify and press Enter.");
@@ -2742,5 +2836,65 @@ Format your summary in clear, readable paragraphs. Be objective and factual.";
         }
         
         sanitized.trim().to_string()
+    }
+    
+    fn generate_variable_name_from_filename(&self, filename: &str) -> String {
+        let path = Path::new(filename);
+        let stem = path.file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("file");
+        
+        // Convert to valid variable name: alphanumeric + underscore, start with letter
+        let mut var_name = String::new();
+        let mut chars = stem.chars();
+        
+        // Ensure first character is a letter
+        if let Some(first_char) = chars.next() {
+            if first_char.is_alphabetic() {
+                var_name.push(first_char.to_ascii_lowercase());
+            } else {
+                var_name.push('f'); // Default prefix
+                if first_char.is_alphanumeric() {
+                    var_name.push(first_char);
+                }
+            }
+        }
+        
+        // Process remaining characters
+        for ch in chars {
+            if ch.is_alphanumeric() {
+                var_name.push(ch.to_ascii_lowercase());
+            } else if ch == '-' || ch == ' ' || ch == '.' {
+                var_name.push('_');
+            }
+            // Skip other characters
+        }
+        
+        // Ensure we have a valid name
+        if var_name.is_empty() {
+            var_name = "file".to_string();
+        }
+        
+        // Make unique if already exists
+        let mut unique_name = var_name.clone();
+        let mut counter = 1;
+        while self.variables.contains_key(&unique_name) {
+            counter += 1;
+            unique_name = format!("{}_{}", var_name, counter);
+        }
+        
+        unique_name
+    }
+    
+    fn substitute_variables(&self, input: &str) -> String {
+        let mut result = input.to_string();
+        
+        // Replace {{VARIABLE_NAME}} with variable content
+        for (var_name, var_content) in &self.variables {
+            let pattern = format!("{{{{{}}}}}", var_name);
+            result = result.replace(&pattern, var_content);
+        }
+        
+        result
     }
 }
