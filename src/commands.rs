@@ -262,11 +262,12 @@ impl CommandParser {
                         _ => SaveType::Agent,
                     };
                     let number = caps.get(2).map(|m| m.as_str().parse().unwrap_or(1));
-                    let filename = caps[3].to_string();
+                    let filename = Self::unquote_session_name(&caps[3]);
                     Some(Command::Save(save_type, number, filename))
                 } else if let Some(caps) = self.save_regex.captures(input) {
                     // Default to agent type for backward compatibility
-                    Some(Command::Save(SaveType::Agent, None, caps[1].to_string()))
+                    let filename = Self::unquote_session_name(&caps[1]);
+                    Some(Command::Save(SaveType::Agent, None, filename))
                 } else if let Some(caps) = self.exec_regex.captures(input) {
                     Some(Command::Exec(caps[1].parse().unwrap_or(1)))
                 } else if let Some(caps) = self.system_regex.captures(input) {
@@ -348,9 +349,10 @@ impl CommandParser {
                     let name = Self::unquote_session_name(&caps[1]);
                     Some(Command::PromptsEdit(name))
                 } else if let Some(caps) = self.prompts_import_regex.captures(input) {
-                    Some(Command::PromptsImport(caps[1].to_string()))
+                    let filename = Self::unquote_session_name(&caps[1]);
+                    Some(Command::PromptsImport(filename))
                 } else if let Some(caps) = self.prompts_export_regex.captures(input) {
-                    let filename = caps.get(1).map(|m| m.as_str().to_string());
+                    let filename = caps.get(1).map(|m| Self::unquote_session_name(m.as_str()));
                     Some(Command::PromptsExport(filename))
                 } else {
                     None
@@ -587,6 +589,38 @@ mod tests {
             assert!(!enabled);
         } else {
             panic!("Expected Thinking command");
+        }
+    }
+
+    #[test]
+    fn test_save_commands() {
+        let parser = create_parser();
+        
+        // Test save with quoted filename
+        if let Some(Command::Save(save_type, number, filename)) = parser.parse("/save agent 1 \"My File.md\"") {
+            assert!(matches!(save_type, SaveType::Agent));
+            assert_eq!(number, Some(1));
+            assert_eq!(filename, "My File.md");
+        } else {
+            panic!("Expected Save command");
+        }
+        
+        // Test save with unquoted filename
+        if let Some(Command::Save(save_type, number, filename)) = parser.parse("/save user 2 output.txt") {
+            assert!(matches!(save_type, SaveType::User));
+            assert_eq!(number, Some(2));
+            assert_eq!(filename, "output.txt");
+        } else {
+            panic!("Expected Save command");
+        }
+        
+        // Test basic save with quoted filename
+        if let Some(Command::Save(save_type, number, filename)) = parser.parse("/save \"My File.md\"") {
+            assert!(matches!(save_type, SaveType::Agent));
+            assert_eq!(number, None);
+            assert_eq!(filename, "My File.md");
+        } else {
+            panic!("Expected Save command");
         }
     }
 
