@@ -2147,7 +2147,7 @@ impl Repl {
                             let mut thinking_started = false;
                             let mut spinner_stopped = false;
                             
-                            loop {
+                            let stream_result = loop {
                                 tokio::select! {
                                     chunk_result = stream.next() => {
                                         match chunk_result {
@@ -2194,34 +2194,31 @@ impl Repl {
                                                         }
                                                     }
                                                     Err(e) => {
-                                                        if !spinner_stopped {
-                                                            spinner.stop().await;
-                                                            spinner_stopped = true;
-                                                        }
                                                         self.ui.print_error(&format!("Stream error: {}", e));
                                                         stream_error = true;
-                                                        break;
+                                                        break Ok(());
                                                     }
                                                 }
                                             }
-                                            None => break, // Stream ended
+                                            None => break Ok(()), // Stream ended
                                         }
                                     }
                                     _ = cancel_token.cancelled() => {
-                                        if !spinner_stopped {
-                                            spinner.stop().await;
-                                            spinner_stopped = true;
-                                        }
                                         self.ui.print_info("\nRequest cancelled");
                                         // User message was never added to history, so nothing to remove
-                                        return Err(anyhow::anyhow!("Request cancelled"));
+                                        break Err(anyhow::anyhow!("Request cancelled"));
                                     }
                                 }
-                            }
+                            };
                             
                             // Ensure spinner is stopped if we haven't stopped it yet
                             if !spinner_stopped {
                                 spinner.stop().await;
+                            }
+                            
+                            // Check if we should return early due to cancellation
+                            if let Err(e) = stream_result {
+                                return Err(e);
                             }
                             
                             if stream_error {
