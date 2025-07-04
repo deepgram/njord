@@ -44,4 +44,8 @@ pub struct Args {
     /// State directory containing .njord.* files
     #[arg(long, default_value = ".")]
     pub state_directory: String,
+    
+    /// Run in ephemeral mode (don't save any changes to disk)
+    #[arg(long)]
+    pub ephemeral: bool,
 }

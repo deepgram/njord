@@ -121,6 +121,7 @@ mod tests {
         assert_eq!(config.thinking_budget, 10000);
         assert_eq!(config.load_session, Some("test-session".to_string()));
         assert!(config.new_session);
+        assert!(!config.ephemeral);
     }
 
     #[test]
@@ -221,5 +222,25 @@ mod tests {
         ).unwrap();
         assert_eq!(config.api_keys.get("openai"), Some(&"cli-openai-key".to_string()));
         assert_eq!(config.api_keys.get("anthropic"), Some(&"env-anthropic-key".to_string()));
+    }
+
+    #[test]
+    fn test_ephemeral_flag() {
+        let args = Args {
+            openai_key: Some("test-key".to_string()),
+            anthropic_key: None,
+            gemini_key: None,
+            model: "gpt-4".to_string(),
+            temperature: 0.7,
+            max_tokens: 4096,
+            thinking_budget: 20000,
+            load_session: None,
+            new_session: false,
+            state_directory: ".".to_string(),
+            ephemeral: true,
+        };
+        
+        let config = Config::from_args(&args).unwrap();
+        assert!(config.ephemeral);
     }
 }
