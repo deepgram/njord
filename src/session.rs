@@ -230,6 +230,7 @@ impl ChatSession {
             system_prompt: self.system_prompt.clone(),
             thinking_enabled: self.thinking_enabled,
             has_llm_interaction: false, // Reset for new copy
+            variable_bindings: self.variable_bindings.clone(), // Copy variable bindings
         }
     }
 }
