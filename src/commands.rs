@@ -171,6 +171,41 @@ impl CommandParser {
         }
     }
     
+    fn parse_load_arguments(args: &str) -> (String, Option<String>) {
+        let args = args.trim();
+        
+        // Handle quoted first argument
+        if args.starts_with('"') {
+            // Find the closing quote
+            if let Some(end_quote) = args[1..].find('"') {
+                let filename = args[1..end_quote + 1].to_string();
+                let remaining = args[end_quote + 2..].trim();
+                if remaining.is_empty() {
+                    (filename, None)
+                } else {
+                    let variable_name = Self::unquote_session_name(remaining);
+                    (filename, Some(variable_name))
+                }
+            } else {
+                // Unclosed quote - treat as unquoted
+                let parts: Vec<&str> = args.split_whitespace().collect();
+                if parts.len() >= 2 {
+                    (Self::unquote_session_name(parts[0]), Some(Self::unquote_session_name(parts[1])))
+                } else {
+                    (Self::unquote_session_name(parts[0]), None)
+                }
+            }
+        } else {
+            // Unquoted first argument
+            let parts: Vec<&str> = args.split_whitespace().collect();
+            if parts.len() >= 2 {
+                (parts[0].to_string(), Some(Self::unquote_session_name(parts[1])))
+            } else {
+                (parts[0].to_string(), None)
+            }
+        }
+    }
+    
     pub fn new() -> Result<Self> {
         Ok(Self {
             model_regex: Regex::new(r"^/model\s+(.+)$")?,
@@ -200,7 +235,7 @@ impl CommandParser {
             chat_auto_rename_regex: Regex::new(r"^/chat\s+auto-rename(?:\s+(.+))?$")?,
             summarize_regex: Regex::new(r"^/summarize(?:\s+(.+))?$")?,
             // File loading regexes
-            load_regex: Regex::new(r"^/load\s+(.+?)(?:\s+(.+))?$")?,
+            load_regex: Regex::new(r"^/load\s+(\S+|\"[^\"]*\"|\S+)(?:\s+(\S+|\"[^\"]*\"|\S+))?$")?,
             variable_show_regex: Regex::new(r"^/var\s+show\s+(.+)$")?,
             variable_delete_regex: Regex::new(r"^/var\s+delete\s+(.+)$")?,
             variable_reload_regex: Regex::new(r"^/var\s+reload(?:\s+(.+))?$")?,
@@ -345,8 +380,9 @@ impl CommandParser {
                     let session_ref = caps.get(1).map(|m| Self::parse_session_reference(m.as_str()));
                     Some(Command::Summarize(session_ref))
                 } else if let Some(caps) = self.load_regex.captures(input) {
-                    let filename = Self::unquote_session_name(&caps[1]);
-                    let variable_name = caps.get(2).map(|m| Self::unquote_session_name(m.as_str()));
+                    // Parse the arguments manually to handle quoted strings properly
+                    let args_part = &caps[1];
+                    let (filename, variable_name) = Self::parse_load_arguments(args_part);
                     Some(Command::Load(filename, variable_name))
                 } else if let Some(caps) = self.variable_show_regex.captures(input) {
                     let name = Self::unquote_session_name(&caps[1]);
