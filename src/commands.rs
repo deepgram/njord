@@ -54,6 +54,10 @@ pub enum Command {
     PromptsEdit(String),
     PromptsImport(String), // filename
     PromptsExport(Option<String>), // optional filename
+    // Input history commands
+    InputHistory,
+    InputHistoryClear,
+    InputHistoryStats,
 }
 
 #[derive(Debug, Clone)]
@@ -229,6 +233,9 @@ impl CommandParser {
             // Prompt library commands
             "/prompts list" => Some(Command::PromptsList),
             "/prompts auto-name" => Some(Command::PromptsAutoName(None)),
+            "/input-history" => Some(Command::InputHistory),
+            "/input-history clear" => Some(Command::InputHistoryClear),
+            "/input-history stats" => Some(Command::InputHistoryStats),
             _ => {
                 if let Some(caps) = self.model_regex.captures(input) {
                     Some(Command::Model(caps[1].to_string()))

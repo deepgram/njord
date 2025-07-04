@@ -93,7 +93,8 @@ impl Repl {
         }
         
         let command_parser = CommandParser::new()?;
-        let mut ui = UI::new()?;
+        let input_history_file = format!("{}.input_history", config.history_file);
+        let mut ui = UI::with_input_history_file(input_history_file)?;
         
         // Set up initial completion context
         let completion_context = Self::build_completion_context(&providers, &history, &prompts);
@@ -240,6 +241,11 @@ impl Repl {
             println!("{}", content);
         }
         
+        // Save input history on exit
+        if let Err(e) = self.ui.save_input_history() {
+            eprintln!("Warning: Failed to save input history on exit: {}", e);
+        }
+        
         Ok(())
     }
     
@@ -310,6 +316,12 @@ impl Repl {
         // Display current session status and recent sessions at startup
         self.display_startup_status();
         self.display_recent_sessions();
+        
+        // Show input history stats on startup
+        let (history_count, _) = self.ui.get_input_history_stats();
+        if history_count > 0 {
+            self.ui.print_info(&format!("Input history: {} entries loaded", history_count));
+        }
         
         loop {
             // Determine what message to show in prompt
@@ -653,6 +665,9 @@ impl Repl {
                 println!("  /prompts edit NAME - Edit an existing prompt");
                 println!("  /prompts import FILE - Import prompts from JSON file");
                 println!("  /prompts export [FILE] - Export prompts to JSON file");
+                println!("  /input-history - Show input history information");
+                println!("  /input-history clear - Clear all input history");
+                println!("  /input-history stats - Show detailed input history statistics");
                 println!("  /temp TEMPERATURE - Set temperature (0.0-2.0)");
                 println!("  /max-tokens TOKENS - Set maximum output tokens");
                 println!("  /thinking-budget TOKENS - Set thinking token budget");
@@ -1770,6 +1785,49 @@ impl Repl {
                     Err(e) => {
                         self.ui.print_error(&format!("Failed to export prompts: {}", e));
                     }
+                }
+            }
+            Command::InputHistory => {
+                let (count, last_entry) = self.ui.get_input_history_stats();
+                if count == 0 {
+                    self.ui.print_info("No input history found");
+                } else {
+                    self.ui.print_info(&format!("Input history: {} entries", count));
+                    if let Some(last) = last_entry {
+                        let preview = if last.len() > 80 {
+                            format!("{}...", &last[..80].replace('\n', " "))
+                        } else {
+                            last.replace('\n', " ")
+                        };
+                        self.ui.print_info(&format!("Most recent: {}", preview));
+                    }
+                    println!();
+                    self.ui.print_info("Use up/down arrows to navigate history");
+                    self.ui.print_info("Use '/input-history clear' to clear all history");
+                }
+            }
+            Command::InputHistoryClear => {
+                match self.ui.clear_input_history() {
+                    Ok(()) => {
+                        self.ui.print_info("Input history cleared");
+                    }
+                    Err(e) => {
+                        self.ui.print_error(&format!("Failed to clear input history: {}", e));
+                    }
+                }
+            }
+            Command::InputHistoryStats => {
+                let (count, last_entry) = self.ui.get_input_history_stats();
+                self.ui.print_info(&format!("Input history statistics:"));
+                println!("  Total entries: {}", count);
+                println!("  Max entries: 1000");
+                if let Some(last) = last_entry {
+                    let preview = if last.len() > 60 {
+                        format!("{}...", &last[..60].replace('\n', " "))
+                    } else {
+                        last.replace('\n', " ")
+                    };
+                    println!("  Most recent: {}", preview);
                 }
             }
             _ => {

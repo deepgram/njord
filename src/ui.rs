@@ -10,10 +10,12 @@ use std::io::{self, Write};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::time::Duration;
+use crate::input_history::InputHistory;
 
 pub struct UI {
     editor: Editor<NjordCompleter, DefaultHistory>,
     spinner_active: Arc<AtomicBool>,
+    input_history: InputHistory,
 }
 
 #[derive(Clone)]
@@ -574,6 +576,10 @@ impl Helper for NjordCompleter {}
 
 impl UI {
     pub fn new() -> Result<Self> {
+        Self::with_input_history_file("input_history.json".to_string())
+    }
+    
+    pub fn with_input_history_file(input_history_file: String) -> Result<Self> {
         // Create config with bracketed paste enabled
         let config = Config::builder()
             .bracketed_paste(true)
@@ -583,9 +589,19 @@ impl UI {
         
         let completer = NjordCompleter::new(CompletionContext::new());
         editor.set_helper(Some(completer));
+        
+        // Load persistent input history
+        let input_history = InputHistory::load(input_history_file)?;
+        
+        // Load history entries into rustyline
+        for entry in input_history.get_entries() {
+            let _ = editor.add_history_entry(&entry);
+        }
+        
         Ok(Self { 
             editor,
             spinner_active: Arc::new(AtomicBool::new(false)),
+            input_history,
         })
     }
     
@@ -650,10 +666,12 @@ impl UI {
                 } else if input.is_empty() && !initial_input.is_empty() {
                     // User pressed Enter on pre-filled input without changes
                     self.editor.add_history_entry(initial_input)?;
+                    self.add_to_persistent_history(initial_input.to_string());
                     Ok(Some(initial_input.to_string()))
                 } else {
                     // Add to history for arrow key navigation
                     self.editor.add_history_entry(&line)?;
+                    self.add_to_persistent_history(line.clone());
                     
                     // Check if input contains newlines (paste detection)
                     if input.contains('\n') {
@@ -729,6 +747,8 @@ impl UI {
         if full_input.trim().is_empty() {
             Ok(None)
         } else {
+            // Add multiline input to persistent history
+            self.add_to_persistent_history(full_input.clone());
             Ok(Some(full_input))
         }
     }
@@ -847,6 +867,29 @@ impl UI {
         println!("\x1b[0;36m```\x1b[0m");
     }
     
+    fn add_to_persistent_history(&mut self, input: String) {
+        self.input_history.add_entry(input);
+        // Save immediately to ensure persistence even if app crashes
+        if let Err(e) = self.input_history.save() {
+            eprintln!("Warning: Failed to save input history: {}", e);
+        }
+    }
+    
+    pub fn save_input_history(&self) -> Result<()> {
+        self.input_history.save()
+    }
+    
+    pub fn clear_input_history(&mut self) -> Result<()> {
+        self.input_history.clear();
+        self.input_history.save()
+    }
+    
+    pub fn get_input_history_stats(&self) -> (usize, Option<String>) {
+        let count = self.input_history.len();
+        let last_entry = self.input_history.get_entries().last().cloned();
+        (count, last_entry)
+    }
+
     pub fn start_spinner(&self, message: &str) -> SpinnerHandle {
         let spinner_active = Arc::clone(&self.spinner_active);
         spinner_active.store(true, Ordering::Relaxed);
