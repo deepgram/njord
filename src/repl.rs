@@ -2216,8 +2216,7 @@ impl Repl {
                                 }
                             }
                             
-                            // Stop spinner before printing newline
-                            spinner.stop().await;
+                            // Print newline after successful stream completion
                             self.ui.print_agent_newline();
                             
                             // Add the complete response to the session with metadata
