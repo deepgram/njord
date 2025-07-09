@@ -184,15 +184,56 @@ impl Repl {
     fn get_all_code_blocks(&self) -> Vec<CodeBlockReference> {
         let mut all_blocks = Vec::new();
         let mut global_block_number = 1;
+        let mut conversation_index = 0;
+        let mut i = 0;
         
-        for numbered_message in &self.session.messages {
-            for code_block in &numbered_message.code_blocks {
-                all_blocks.push(CodeBlockReference {
-                    global_number: global_block_number,
-                    message_number: numbered_message.number,
-                    code_block: code_block.clone(),
-                });
-                global_block_number += 1;
+        while i < self.session.messages.len() {
+            let current_msg = &self.session.messages[i];
+            
+            if current_msg.message.role == "user" {
+                conversation_index += 1;
+                
+                // Process user message code blocks
+                for code_block in &current_msg.code_blocks {
+                    all_blocks.push(CodeBlockReference {
+                        global_number: global_block_number,
+                        message_number: conversation_index, // Use conversation index, not absolute message number
+                        code_block: code_block.clone(),
+                    });
+                    global_block_number += 1;
+                }
+                
+                // Look for the corresponding agent message
+                if i + 1 < self.session.messages.len() {
+                    let next_msg = &self.session.messages[i + 1];
+                    if next_msg.message.role == "assistant" {
+                        // Process agent message code blocks
+                        for code_block in &next_msg.code_blocks {
+                            all_blocks.push(CodeBlockReference {
+                                global_number: global_block_number,
+                                message_number: conversation_index, // Use same conversation index
+                                code_block: code_block.clone(),
+                            });
+                            global_block_number += 1;
+                        }
+                        i += 2; // Skip both user and agent message
+                    } else {
+                        i += 1; // Only skip user message
+                    }
+                } else {
+                    i += 1; // Only skip user message
+                }
+            } else {
+                // Orphaned agent message (shouldn't happen in normal flow)
+                for code_block in &current_msg.code_blocks {
+                    all_blocks.push(CodeBlockReference {
+                        global_number: global_block_number,
+                        message_number: 0, // Mark as orphaned
+                        code_block: code_block.clone(),
+                    });
+                    global_block_number += 1;
+                }
+                i += 1;
             }
         }
         
@@ -1467,9 +1508,16 @@ impl Repl {
                         } else {
                             block_ref.code_block.content.replace('\n', " ")
                         };
-                        println!("  [{}] Message {} ({}): {}", 
+                        
+                        let conversation_display = if block_ref.message_number == 0 {
+                            "orphaned".to_string()
+                        } else {
+                            format!("conversation {}", block_ref.message_number)
+                        };
+                        
+                        println!("  [{}] {} ({}): {}", 
                             block_ref.global_number, 
-                            block_ref.message_number, 
+                            conversation_display,
                             language_display, 
                             preview
                         );
@@ -1481,7 +1529,12 @@ impl Repl {
             Command::Block(block_number) => {
                 let all_blocks = self.get_all_code_blocks();
                 if let Some(block) = all_blocks.get(block_number.saturating_sub(1)) {
-                    self.ui.print_info(&format!("Code block {} from message {}:", block_number, block.message_number));
+                    let conversation_display = if block.message_number == 0 {
+                        "orphaned message".to_string()
+                    } else {
+                        format!("conversation {}", block.message_number)
+                    };
+                    self.ui.print_info(&format!("Code block {} from {}:", block_number, conversation_display));
                     println!();
                     self.ui.print_styled_code_block(&block.code_block.content, block.code_block.language.as_deref());
                 } else {
