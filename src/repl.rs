@@ -21,6 +21,7 @@ struct CodeBlockReference {
     global_number: usize,
     message_number: usize,
     code_block: CodeBlock,
+    role: String, // "user" or "assistant"
 }
 
 pub struct Repl {
@@ -199,6 +200,7 @@ impl Repl {
                         global_number: global_block_number,
                         message_number: conversation_index, // Use conversation index, not absolute message number
                         code_block: code_block.clone(),
+                        role: "user".to_string(),
                     });
                     global_block_number += 1;
                 }
@@ -213,6 +215,7 @@ impl Repl {
                                 global_number: global_block_number,
                                 message_number: conversation_index, // Use same conversation index
                                 code_block: code_block.clone(),
+                                role: "assistant".to_string(),
                             });
                             global_block_number += 1;
                         }
@@ -230,6 +233,7 @@ impl Repl {
                         global_number: global_block_number,
                         message_number: 0, // Mark as orphaned
                         code_block: code_block.clone(),
+                        role: current_msg.message.role.clone(),
                     });
                     global_block_number += 1;
                 }
@@ -1512,7 +1516,12 @@ impl Repl {
                         let conversation_display = if block_ref.message_number == 0 {
                             "orphaned".to_string()
                         } else {
-                            format!("conversation {}", block_ref.message_number)
+                            let role_display = match block_ref.role.as_str() {
+                                "user" => "User",
+                                "assistant" => "Agent",
+                                _ => "Unknown",
+                            };
+                            format!("{} {}", role_display, block_ref.message_number)
                         };
                         
                         println!("  [{}] {} ({}): {}", 
@@ -1532,7 +1541,12 @@ impl Repl {
                     let conversation_display = if block.message_number == 0 {
                         "orphaned message".to_string()
                     } else {
-                        format!("conversation {}", block.message_number)
+                        let role_display = match block.role.as_str() {
+                            "user" => "User",
+                            "assistant" => "Agent",
+                            _ => "Unknown",
+                        };
+                        format!("{} {}", role_display, block.message_number)
                     };
                     self.ui.print_info(&format!("Code block {} from {}:", block_number, conversation_display));
                     println!();
