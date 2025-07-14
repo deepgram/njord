@@ -206,6 +206,59 @@ impl CommandParser {
         }
     }
     
+    fn parse_prompts_save_arguments(args: &str) -> (String, Option<String>) {
+        let args = args.trim();
+        
+        // Handle quoted first argument (name)
+        if args.starts_with('"') {
+            // Find the closing quote for the name
+            if let Some(end_quote) = args[1..].find('"') {
+                let name = args[1..end_quote + 1].to_string();
+                let remaining = args[end_quote + 2..].trim();
+                if remaining.is_empty() {
+                    (name, None)
+                } else {
+                    // Handle quoted content
+                    if remaining.starts_with('"') {
+                        if let Some(content_end_quote) = remaining[1..].find('"') {
+                            let content = remaining[1..content_end_quote + 1].to_string();
+                            (name, Some(content))
+                        } else {
+                            // Unclosed quote in content - take everything after the quote
+                            let content = remaining[1..].to_string();
+                            (name, Some(content))
+                        }
+                    } else {
+                        // Unquoted content
+                        (name, Some(remaining.to_string()))
+                    }
+                }
+            } else {
+                // Unclosed quote - treat as unquoted
+                let parts: Vec<&str> = args.split_whitespace().collect();
+                if parts.len() >= 2 {
+                    let name = Self::unquote_session_name(parts[0]);
+                    let content = parts[1..].join(" ");
+                    let content = Self::unquote_session_name(&content);
+                    (name, Some(content))
+                } else {
+                    let name = Self::unquote_session_name(parts[0]);
+                    (name, None)
+                }
+            }
+        } else {
+            // Unquoted first argument (name)
+            let parts: Vec<&str> = args.splitn(2, ' ').collect();
+            if parts.len() >= 2 {
+                let name = parts[0].to_string();
+                let content = Self::unquote_session_name(parts[1]);
+                (name, Some(content))
+            } else {
+                (parts[0].to_string(), None)
+            }
+        }
+    }
+    
     pub fn new() -> Result<Self> {
         Ok(Self {
             model_regex: Regex::new(r"^/model\s+(.+)$")?,
@@ -240,7 +293,7 @@ impl CommandParser {
             variable_delete_regex: Regex::new(r"^/var\s+delete\s+(.+)$")?,
             variable_reload_regex: Regex::new(r"^/var\s+reload(?:\s+(.+))?$")?,
             // Prompt library regexes
-            prompts_save_regex: Regex::new(r"^/prompts\s+save\s+(.+?)(?:\s+(.+))?$")?,
+            prompts_save_regex: Regex::new(r"^/prompts\s+save\s+(.+)$")?,
             prompts_show_regex: Regex::new(r"^/prompts\s+show\s+(.+)$")?,
             prompts_apply_regex: Regex::new(r"^/prompts\s+apply\s+(.+)$")?,
             prompts_delete_regex: Regex::new(r"^/prompts\s+delete\s+(.+)$")?,
@@ -394,8 +447,9 @@ impl CommandParser {
                     let name = caps.get(1).map(|m| Self::unquote_session_name(m.as_str()));
                     Some(Command::VariableReload(name))
                 } else if let Some(caps) = self.prompts_save_regex.captures(input) {
-                    let name = Self::unquote_session_name(&caps[1]);
-                    let content = caps.get(2).map(|m| Self::unquote_session_name(m.as_str()));
+                    // Parse the arguments manually to handle quoted strings properly
+                    let args_part = &caps[1];
+                    let (name, content) = Self::parse_prompts_save_arguments(args_part);
                     Some(Command::PromptsSave(name, content))
                 } else if let Some(caps) = self.prompts_show_regex.captures(input) {
                     let name = Self::unquote_session_name(&caps[1]);
