@@ -240,7 +240,7 @@ impl CommandParser {
             variable_delete_regex: Regex::new(r"^/var\s+delete\s+(.+)$")?,
             variable_reload_regex: Regex::new(r"^/var\s+reload(?:\s+(.+))?$")?,
             // Prompt library regexes
-            prompts_save_regex: Regex::new(r"^/prompts\s+save\s+(.+)$")?,
+            prompts_save_regex: Regex::new(r"^/prompts\s+save\s+(.+?)(?:\s+(.+))?$")?,
             prompts_show_regex: Regex::new(r"^/prompts\s+show\s+(.+)$")?,
             prompts_apply_regex: Regex::new(r"^/prompts\s+apply\s+(.+)$")?,
             prompts_delete_regex: Regex::new(r"^/prompts\s+delete\s+(.+)$")?,
@@ -394,9 +394,9 @@ impl CommandParser {
                     let name = caps.get(1).map(|m| Self::unquote_session_name(m.as_str()));
                     Some(Command::VariableReload(name))
                 } else if let Some(caps) = self.prompts_save_regex.captures(input) {
-                    // For prompts save, we only capture the name - content is handled separately
                     let name = Self::unquote_session_name(&caps[1]);
-                    Some(Command::PromptsSave(name, None))
+                    let content = caps.get(2).map(|m| Self::unquote_session_name(m.as_str()));
+                    Some(Command::PromptsSave(name, content))
                 } else if let Some(caps) = self.prompts_show_regex.captures(input) {
                     let name = Self::unquote_session_name(&caps[1]);
                     Some(Command::PromptsShow(name))
