@@ -1696,7 +1696,14 @@ impl Repl {
                                 prompt.content.replace('\n', " ")
                             };
                             
-                            println!("  \"{}\"{}: {}", name, usage_info, preview);
+                            // Only quote names that contain spaces, and add cyan coloring
+                            let display_name = if name.contains(' ') {
+                                format!("\x1b[1;36m\"{}\"\x1b[0m", name)
+                            } else {
+                                format!("\x1b[1;36m{}\x1b[0m", name)
+                            };
+                            
+                            println!("  {}{}: {}", display_name, usage_info, preview);
                         }
                     }
                     println!();
