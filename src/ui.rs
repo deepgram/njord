@@ -181,23 +181,64 @@ impl NjordCompleter {
             if word.len() == 1 {
                 // Just a quote - return empty string for matching
                 String::new()
-            } else if word.ends_with('"') && word.len() > 1 {
-                // Fully quoted - remove quotes for matching, preserving internal spaces
-                word[1..word.len()-1].to_string()
             } else {
-                // Partial quote - remove opening quote for matching, preserving trailing spaces
-                stripped.to_string()
+                // Check if this is a properly closed quoted string
+                let chars: Vec<char> = word.chars().collect();
+                let mut i = 1; // Start after opening quote
+                let mut found_closing_quote = false;
+                
+                while i < chars.len() {
+                    if chars[i] == '\\' && i + 1 < chars.len() {
+                        // Skip escaped character
+                        i += 2;
+                    } else if chars[i] == '"' {
+                        // Found unescaped closing quote
+                        if i == chars.len() - 1 {
+                            // This is the final character, so it's a proper closing quote
+                            found_closing_quote = true;
+                        }
+                        break;
+                    } else {
+                        i += 1;
+                    }
+                }
+                
+                if found_closing_quote {
+                    // Fully quoted - extract content between quotes, preserving escaped quotes
+                    word[1..word.len()-1].to_string()
+                } else {
+                    // Partial quote - remove opening quote for matching
+                    stripped.to_string()
+                }
             }
         } else if let Some(stripped) = word.strip_prefix('\'') {
             if word.len() == 1 {
                 // Just a quote - return empty string for matching
                 String::new()
-            } else if word.ends_with('\'') && word.len() > 1 {
-                // Fully quoted - remove quotes for matching, preserving internal spaces
-                word[1..word.len()-1].to_string()
             } else {
-                // Partial quote - remove opening quote for matching, preserving trailing spaces
-                stripped.to_string()
+                // Similar logic for single quotes (though less common in this context)
+                let chars: Vec<char> = word.chars().collect();
+                let mut i = 1;
+                let mut found_closing_quote = false;
+                
+                while i < chars.len() {
+                    if chars[i] == '\\' && i + 1 < chars.len() {
+                        i += 2;
+                    } else if chars[i] == '\'' {
+                        if i == chars.len() - 1 {
+                            found_closing_quote = true;
+                        }
+                        break;
+                    } else {
+                        i += 1;
+                    }
+                }
+                
+                if found_closing_quote {
+                    word[1..word.len()-1].to_string()
+                } else {
+                    stripped.to_string()
+                }
             }
         } else {
             // No quotes - return as-is, preserving any trailing spaces
@@ -391,11 +432,29 @@ impl NjordCompleter {
         let line_up_to_pos = &line[..pos];
         
         // Handle quoted strings - if we're inside quotes, start from the quote
-        if let Some(quote_pos) = line_up_to_pos.rfind('"') {
-            // Check if this quote is the start of a quoted string (not escaped)
-            let before_quote = &line_up_to_pos[..quote_pos];
-            if before_quote.is_empty() || before_quote.ends_with(' ') {
-                return quote_pos;
+        // But we need to make sure the quote isn't escaped
+        let chars: Vec<char> = line_up_to_pos.chars().collect();
+        let mut i = chars.len();
+        
+        // Look backwards for an unescaped quote
+        while i > 0 {
+            i -= 1;
+            if chars[i] == '"' {
+                // Check if this quote is escaped
+                let mut escape_count = 0;
+                let mut j = i;
+                while j > 0 && chars[j - 1] == '\\' {
+                    escape_count += 1;
+                    j -= 1;
+                }
+                
+                // If escape_count is even, the quote is not escaped
+                if escape_count % 2 == 0 {
+                    // Check if this quote is the start of a quoted string
+                    if i == 0 || chars[i - 1] == ' ' {
+                        return i;
+                    }
+                }
             }
         }
         

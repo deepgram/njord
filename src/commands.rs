@@ -213,20 +213,24 @@ impl CommandParser {
         if args.starts_with('"') {
             // Find the proper closing quote for the name, handling escaped quotes
             let mut end_quote_pos = None;
-            let mut chars = args[1..].char_indices();
+            let mut i = 1; // Start after opening quote
+            let chars: Vec<char> = args.chars().collect();
             
-            while let Some((i, ch)) = chars.next() {
-                if ch == '\\' {
-                    // Skip the next character (it's escaped)
-                    chars.next();
-                } else if ch == '"' {
+            while i < chars.len() {
+                if chars[i] == '\\' && i + 1 < chars.len() {
+                    // Skip the escaped character
+                    i += 2;
+                } else if chars[i] == '"' {
                     // Found unescaped closing quote
-                    end_quote_pos = Some(i + 1); // +1 because we started from args[1..]
+                    end_quote_pos = Some(i);
                     break;
+                } else {
+                    i += 1;
                 }
             }
             
             if let Some(end_quote) = end_quote_pos {
+                // Extract the name, keeping escaped quotes as-is for now
                 let name = args[1..end_quote].to_string();
                 let remaining = args[end_quote + 1..].trim();
                 if remaining.is_empty() {
@@ -236,16 +240,19 @@ impl CommandParser {
                     if remaining.starts_with('"') {
                         // Find the proper closing quote for content, handling escaped quotes
                         let mut content_end_quote_pos = None;
-                        let mut content_chars = remaining[1..].char_indices();
+                        let mut j = 1; // Start after opening quote
+                        let remaining_chars: Vec<char> = remaining.chars().collect();
                         
-                        while let Some((i, ch)) = content_chars.next() {
-                            if ch == '\\' {
-                                // Skip the next character (it's escaped)
-                                content_chars.next();
-                            } else if ch == '"' {
+                        while j < remaining_chars.len() {
+                            if remaining_chars[j] == '\\' && j + 1 < remaining_chars.len() {
+                                // Skip the escaped character
+                                j += 2;
+                            } else if remaining_chars[j] == '"' {
                                 // Found unescaped closing quote
-                                content_end_quote_pos = Some(i + 1); // +1 because we started from remaining[1..]
+                                content_end_quote_pos = Some(j);
                                 break;
+                            } else {
+                                j += 1;
                             }
                         }
                         
