@@ -230,8 +230,8 @@ impl CommandParser {
             }
             
             if let Some(end_quote) = end_quote_pos {
-                // Extract the name, keeping escaped quotes as-is for now
-                let name = args[1..end_quote].to_string();
+                // Extract the name and unescape quotes
+                let name = args[1..end_quote].replace("\\\"", "\"");
                 let remaining = args[end_quote + 1..].trim();
                 if remaining.is_empty() {
                     (name, None)
@@ -257,11 +257,11 @@ impl CommandParser {
                         }
                         
                         if let Some(content_end_quote) = content_end_quote_pos {
-                            let content = remaining[1..content_end_quote].to_string();
+                            let content = remaining[1..content_end_quote].replace("\\\"", "\"");
                             (name, Some(content))
                         } else {
-                            // Unclosed quote in content - take everything after the quote
-                            let content = remaining[1..].to_string();
+                            // Unclosed quote in content - take everything after the quote and unescape
+                            let content = remaining[1..].replace("\\\"", "\"");
                             (name, Some(content))
                         }
                     } else {
