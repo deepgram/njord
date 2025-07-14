@@ -1466,7 +1466,7 @@ impl Repl {
                     self.session.system_prompt = None;
                     self.ui.print_info("System prompt cleared");
                 } else {
-                    // Set new system prompt
+                    // Set new system prompt (quotes already stripped by command parser)
                     self.session.system_prompt = Some(prompt);
                     self.ui.print_info("System prompt updated");
                 }

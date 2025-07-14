@@ -416,7 +416,7 @@ impl CommandParser {
                 } else if let Some(caps) = self.exec_regex.captures(input) {
                     Some(Command::Exec(caps[1].parse().unwrap_or(1)))
                 } else if let Some(caps) = self.system_regex.captures(input) {
-                    Some(Command::System(caps[1].to_string()))
+                    Some(Command::System(Self::unquote_session_name(&caps[1])))
                 } else if let Some(caps) = self.temp_regex.captures(input) {
                     Some(Command::Temperature(caps[1].parse().unwrap_or(0.7)))
                 } else if let Some(caps) = self.max_tokens_regex.captures(input) {
@@ -501,7 +501,7 @@ impl CommandParser {
                     let new_name = Self::unquote_session_name(&caps[2]);
                     Some(Command::PromptsRename(old_name, new_name))
                 } else if let Some(caps) = self.prompts_search_regex.captures(input) {
-                    Some(Command::PromptsSearch(caps[1].to_string()))
+                    Some(Command::PromptsSearch(Self::unquote_session_name(&caps[1])))
                 } else if let Some(caps) = self.prompts_auto_name_regex.captures(input) {
                     let name = caps.get(1).map(|m| Self::unquote_session_name(m.as_str()));
                     Some(Command::PromptsAutoName(name))
