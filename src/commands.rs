@@ -211,17 +211,46 @@ impl CommandParser {
         
         // Handle quoted first argument (name)
         if args.starts_with('"') {
-            // Find the closing quote for the name
-            if let Some(end_quote) = args[1..].find('"') {
-                let name = args[1..end_quote + 1].to_string();
-                let remaining = args[end_quote + 2..].trim();
+            // Find the proper closing quote for the name, handling escaped quotes
+            let mut end_quote_pos = None;
+            let mut chars = args[1..].char_indices();
+            
+            while let Some((i, ch)) = chars.next() {
+                if ch == '\\' {
+                    // Skip the next character (it's escaped)
+                    chars.next();
+                } else if ch == '"' {
+                    // Found unescaped closing quote
+                    end_quote_pos = Some(i + 1); // +1 because we started from args[1..]
+                    break;
+                }
+            }
+            
+            if let Some(end_quote) = end_quote_pos {
+                let name = args[1..end_quote].to_string();
+                let remaining = args[end_quote + 1..].trim();
                 if remaining.is_empty() {
                     (name, None)
                 } else {
                     // Handle quoted content
                     if remaining.starts_with('"') {
-                        if let Some(content_end_quote) = remaining[1..].find('"') {
-                            let content = remaining[1..content_end_quote + 1].to_string();
+                        // Find the proper closing quote for content, handling escaped quotes
+                        let mut content_end_quote_pos = None;
+                        let mut content_chars = remaining[1..].char_indices();
+                        
+                        while let Some((i, ch)) = content_chars.next() {
+                            if ch == '\\' {
+                                // Skip the next character (it's escaped)
+                                content_chars.next();
+                            } else if ch == '"' {
+                                // Found unescaped closing quote
+                                content_end_quote_pos = Some(i + 1); // +1 because we started from remaining[1..]
+                                break;
+                            }
+                        }
+                        
+                        if let Some(content_end_quote) = content_end_quote_pos {
+                            let content = remaining[1..content_end_quote].to_string();
                             (name, Some(content))
                         } else {
                             // Unclosed quote in content - take everything after the quote
