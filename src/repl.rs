@@ -501,10 +501,11 @@ impl Repl {
         let recent_sessions = self.history.get_recent_sessions(3);
         if !recent_sessions.is_empty() {
             println!("\x1b[1;36mRecent sessions:\x1b[0m");
-            for (name, session) in recent_sessions {
+            for (index, (name, session)) in recent_sessions.iter().enumerate() {
                 let message_count = session.messages.len();
                 let updated = session.updated_at.format("%m-%d %H:%M");
-                println!("  /chat load {} - {} messages ({})", name, message_count, updated);
+                println!("  #{}: /chat load {} - {} messages ({})", 
+                    index + 1, name, message_count, updated);
             }
             if let Some(_most_recent) = self.history.get_most_recent_session() {
                 println!("  /chat continue - Continue most recent session");
