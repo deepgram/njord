@@ -1508,8 +1508,9 @@ impl Repl {
                     self.ui.print_info(&format!("Code blocks in current session ({} total):", all_blocks.len()));
                     for block_ref in &all_blocks {
                         let language_display = block_ref.code_block.language.as_deref().unwrap_or("text");
-                        let preview = if block_ref.code_block.content.len() > 50 {
-                            format!("{}...", &block_ref.code_block.content[..50].replace('\n', " "))
+                        let preview = if block_ref.code_block.content.chars().count() > 50 {
+                            let truncated: String = block_ref.code_block.content.chars().take(50).collect();
+                            format!("{}...", truncated.replace('\n', " "))
                         } else {
                             block_ref.code_block.content.replace('\n', " ")
                         };
