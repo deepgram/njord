@@ -191,23 +191,6 @@ impl ChatSession {
         self.has_llm_interaction && !self.messages.is_empty()
     }
     
-    pub fn merge_session(&mut self, other: &ChatSession) -> Result<()> {
-        let mut next_number = self.messages.len() + 1;
-        
-        for other_msg in &other.messages {
-            let mut new_msg = other_msg.clone();
-            new_msg.number = next_number;
-            self.messages.push(new_msg);
-            next_number += 1;
-        }
-        
-        self.updated_at = Utc::now();
-        if !other.messages.is_empty() {
-            self.has_llm_interaction = true;
-        }
-        
-        Ok(())
-    }
     
     pub fn generate_auto_name(&self) -> String {
         self.created_at.format("%Y-%m-%d_%H:%M:%S").to_string()
@@ -417,29 +400,6 @@ mod tests {
         assert!(session.goto(2).is_err());
     }
 
-    #[test]
-    fn test_merge_session() {
-        let mut session1 = ChatSession::new("gpt-4".to_string(), 0.7, 1000, 5000);
-        let mut session2 = ChatSession::new("claude".to_string(), 0.8, 2000, 6000);
-        
-        // Add messages to both sessions
-        session1.add_message(Message { role: "user".to_string(), content: "Session 1".to_string() });
-        session2.add_message(Message { role: "user".to_string(), content: "Session 2".to_string() });
-        session2.add_message(Message { role: "assistant".to_string(), content: "Response".to_string() });
-        
-        assert_eq!(session1.messages.len(), 1);
-        assert_eq!(session2.messages.len(), 2);
-        
-        // Merge session2 into session1
-        session1.merge_session(&session2).unwrap();
-        
-        assert_eq!(session1.messages.len(), 3);
-        assert_eq!(session1.messages[0].number, 1);
-        assert_eq!(session1.messages[1].number, 2);
-        assert_eq!(session1.messages[2].number, 3);
-        assert_eq!(session1.messages[1].message.content, "Session 2");
-        assert_eq!(session1.messages[2].message.content, "Response");
-    }
 
     #[test]
     fn test_should_auto_save() {
