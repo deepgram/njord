@@ -43,7 +43,26 @@ impl InputHistory {
     }
     
     pub fn save(&self) -> Result<()> {
-        let content = serde_json::to_string_pretty(self)?;
+        // Reload from disk to merge any changes from other instances
+        let mut merged = self.clone();
+        merged.file_path = self.file_path.clone(); // Restore file path after clone
+        
+        if let Ok(disk_version) = Self::load(self.file_path.clone()) {
+            // Merge entries from disk version, avoiding duplicates
+            for entry in disk_version.entries {
+                // Only add entries that we don't already have
+                if !merged.entries.iter().any(|e| e.input == entry.input && e.timestamp == entry.timestamp) {
+                    merged.entries.push_back(entry);
+                }
+            }
+            
+            // Maintain size limit after merge
+            while merged.entries.len() > MAX_HISTORY_ENTRIES {
+                merged.entries.pop_front();
+            }
+        }
+        
+        let content = serde_json::to_string_pretty(&merged)?;
         fs::write(&self.file_path, content)?;
         Ok(())
     }

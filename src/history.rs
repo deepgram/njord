@@ -37,7 +37,19 @@ impl History {
     }
     
     pub fn save(&self) -> Result<()> {
-        let content = serde_json::to_string_pretty(self)?;
+        // Reload from disk to merge any changes from other instances
+        let mut merged = self.clone();
+        if let Ok(disk_version) = Self::load(self.history_file_path.clone()) {
+            // Merge saved_sessions from disk version, keeping our changes
+            for (name, session) in disk_version.saved_sessions {
+                // Only add sessions from disk that we don't have locally
+                if !merged.saved_sessions.contains_key(&name) {
+                    merged.saved_sessions.insert(name, session);
+                }
+            }
+        }
+        
+        let content = serde_json::to_string_pretty(&merged)?;
         fs::write(&self.history_file_path, content)?;
         Ok(())
     }
@@ -47,7 +59,7 @@ impl History {
         session.name = Some(name.clone());
         session.name_source = Some(crate::session::NameSource::UserProvided);
         self.saved_sessions.insert(name, session);
-        self.save()?;
+        self.save_with_merge()?;
         Ok(())
     }
     
@@ -64,7 +76,7 @@ impl History {
     pub fn delete_session(&mut self, name: &str) -> Result<bool> {
         let existed = self.saved_sessions.remove(name).is_some();
         if existed {
-            self.save()?;
+            self.save_with_merge()?;
         }
         Ok(existed)
     }
@@ -85,7 +97,7 @@ impl History {
             session.name = Some(new_name.to_string());
             // Keep existing name_source - this is used for both user renames and auto-renames
             self.saved_sessions.insert(new_name.to_string(), session);
-            self.save()?;
+            self.save_with_merge()?;
             Ok(true)
         } else {
             Ok(false)
@@ -101,7 +113,7 @@ impl History {
             // Session has a name - overwrite the existing saved session
             let mut session_to_save = session.clone();
             self.saved_sessions.insert(existing_name.clone(), session_to_save);
-            self.save()?;
+            self.save_with_merge()?;
             Ok(Some(existing_name.clone()))
         } else {
             // Session is anonymous - create new timestamp-based session
@@ -111,7 +123,7 @@ impl History {
             session_to_save.name_source = Some(crate::session::NameSource::Timestamp);
             
             self.saved_sessions.insert(auto_name.clone(), session_to_save);
-            self.save()?;
+            self.save_with_merge()?;
             Ok(Some(auto_name))
         }
     }
@@ -193,7 +205,7 @@ impl History {
             session.name = Some(new_name.to_string());
             session.name_source = Some(source);
             self.saved_sessions.insert(new_name.to_string(), session);
-            self.save()?;
+            self.save_with_merge()?;
             Ok(true)
         } else {
             Ok(false)

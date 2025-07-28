@@ -72,7 +72,22 @@ impl PromptLibrary {
     }
     
     pub fn save(&self) -> Result<()> {
-        let content = serde_json::to_string_pretty(self)?;
+        // Reload from disk to merge any changes from other instances
+        let mut merged = self.clone();
+        merged.prompts_file_path = self.prompts_file_path.clone(); // Restore file path after clone
+        
+        if let Ok(disk_version) = Self::load(self.prompts_file_path.clone()) {
+            // Merge prompts from disk version, keeping our changes
+            for (name, prompt) in disk_version.prompts {
+                // Only add prompts from disk that we don't have locally
+                // Our local changes take precedence
+                if !merged.prompts.contains_key(&name) {
+                    merged.prompts.insert(name, prompt);
+                }
+            }
+        }
+        
+        let content = serde_json::to_string_pretty(&merged)?;
         fs::write(&self.prompts_file_path, content)?;
         Ok(())
     }
