@@ -97,14 +97,23 @@ impl History {
             return Ok(None);
         }
         
-        let auto_name = session.generate_auto_name();
-        let mut session_to_save = session.clone();
-        session_to_save.name = Some(auto_name.clone());
-        session_to_save.name_source = Some(crate::session::NameSource::Timestamp);
-        
-        self.saved_sessions.insert(auto_name.clone(), session_to_save);
-        self.save()?;
-        Ok(Some(auto_name))
+        if let Some(existing_name) = &session.name {
+            // Session has a name - overwrite the existing saved session
+            let mut session_to_save = session.clone();
+            self.saved_sessions.insert(existing_name.clone(), session_to_save);
+            self.save()?;
+            Ok(Some(existing_name.clone()))
+        } else {
+            // Session is anonymous - create new timestamp-based session
+            let auto_name = session.generate_auto_name();
+            let mut session_to_save = session.clone();
+            session_to_save.name = Some(auto_name.clone());
+            session_to_save.name_source = Some(crate::session::NameSource::Timestamp);
+            
+            self.saved_sessions.insert(auto_name.clone(), session_to_save);
+            self.save()?;
+            Ok(Some(auto_name))
+        }
     }
 
     
