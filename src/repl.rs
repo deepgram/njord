@@ -713,6 +713,7 @@ impl Repl {
                 println!("  /chat recent - Show recent sessions");
                 println!("  /chat delete [NAME|#N] - Delete a saved session (defaults to current)");
                 println!("  /chat fork NAME - Create copy of current session and activate it");
+                println!("  /chat branch SOURCE_SESSION [NEW_NAME] - Create new session from existing one");
                 println!("  /chat rename NEW_NAME [OLD_NAME] - Rename a session");
                 println!("  /chat auto-rename [NAME] - Auto-generate title for session");
                 println!("  /chat auto-rename-all - Auto-generate titles for all anonymous sessions");
@@ -999,6 +1000,117 @@ impl Repl {
                         // Update completion context and session list
                         let _ = self.update_completion_context();
                         self.update_session_list();
+                    }
+                }
+            }
+            Command::ChatBranch(source_session_ref, new_name_opt) => {
+                match self.resolve_session_reference(&source_session_ref) {
+                    Ok(source_name) => {
+                        // Load the source session
+                        let source_session = self.history.load_session(&source_name).cloned();
+                        
+                        if let Some(source) = source_session {
+                            // Auto-save current session if it has interactions
+                            if let Err(e) = self.history.auto_save_session(&self.session) {
+                                self.ui.print_error(&format!("Failed to auto-save current session: {}", e));
+                            } else {
+                                // Update completion context and session list after auto-save
+                                let _ = self.update_completion_context();
+                                self.update_session_list();
+                            }
+                            
+                            // Create a new session with the source session's content
+                            let mut new_session = source.create_copy();
+                            
+                            if let Some(name) = new_name_opt {
+                                if name.trim().is_empty() {
+                                    self.ui.print_error("Session name cannot be empty");
+                                    return Ok(true);
+                                }
+                                
+                                // Named branch - save it to history
+                                new_session.name = Some(name.clone());
+                                new_session.name_source = Some(crate::session::NameSource::UserProvided);
+                                
+                                match self.history.save_session(name.clone(), new_session.clone()) {
+                                    Ok(()) => {
+                                        self.ui.print_info(&format!("Created new session '{}' branched from '{}' ({} messages)", 
+                                            name, source_name, new_session.messages.len()));
+                                        
+                                        // Activate the new session
+                                        self.session = new_session;
+                                        
+                                        // Update current provider based on session's model
+                                        self.session.current_provider = get_provider_for_model(&self.session.current_model).map(|s| s.to_string());
+                                        
+                                        // Restore session variables
+                                        let session_clone = self.session.clone();
+                                        self.restore_session_variables(&session_clone);
+                                        
+                                        self.ui.print_info(&format!("Activated new session '{}'", name));
+                                        
+                                        if let Some(session_provider) = &self.session.current_provider {
+                                            if self.providers.contains_key(session_provider) {
+                                                self.ui.print_info(&format!("Session model: {} ({})", self.session.current_model, session_provider));
+                                            } else {
+                                                self.ui.print_info(&format!("Session model: {} (provider '{}' not available)", self.session.current_model, session_provider));
+                                            }
+                                        } else {
+                                            self.ui.print_info(&format!("Session model: {}", self.session.current_model));
+                                        }
+                                        
+                                        // Update completion context and session list
+                                        let _ = self.update_completion_context();
+                                        self.update_session_list();
+                                    }
+                                    Err(e) => {
+                                        self.ui.print_error(&format!("Failed to save branched session: {}", e));
+                                    }
+                                }
+                            } else {
+                                // Anonymous branch - don't save to history, just activate
+                                self.ui.print_info(&format!("Created anonymous session branched from '{}' ({} messages)", 
+                                    source_name, new_session.messages.len()));
+                                
+                                // Activate the new session
+                                self.session = new_session;
+                                
+                                // Update current provider based on session's model
+                                self.session.current_provider = get_provider_for_model(&self.session.current_model).map(|s| s.to_string());
+                                
+                                // Restore session variables
+                                let session_clone = self.session.clone();
+                                self.restore_session_variables(&session_clone);
+                                
+                                self.ui.print_info("Activated anonymous branched session");
+                                
+                                if let Some(session_provider) = &self.session.current_provider {
+                                    if self.providers.contains_key(session_provider) {
+                                        self.ui.print_info(&format!("Session model: {} ({})", self.session.current_model, session_provider));
+                                    } else {
+                                        self.ui.print_info(&format!("Session model: {} (provider '{}' not available)", self.session.current_model, session_provider));
+                                    }
+                                } else {
+                                    self.ui.print_info(&format!("Session model: {}", self.session.current_model));
+                                }
+                                
+                                // Update completion context and session list
+                                let _ = self.update_completion_context();
+                                self.update_session_list();
+                            }
+                        } else {
+                            self.ui.print_error(&format!("Session '{}' not found", source_name));
+                            let available_sessions = self.history.list_sessions();
+                            if !available_sessions.is_empty() {
+                                self.ui.print_info("Available sessions:");
+                                for session_name in available_sessions {
+                                    println!("  {}", session_name);
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        self.ui.print_error(&e.to_string());
                     }
                 }
             }
