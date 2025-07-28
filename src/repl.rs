@@ -707,7 +707,7 @@ impl Repl {
                 println!("  /chat new - Start a new chat session");
                 println!("  /chat save NAME - Save current session with given name");
                 println!("  /chat name NAME - Name the current session (replaces any existing name)");
-                println!("  /chat load NAME|#N - Load a previously saved session");
+                println!("  /chat load NAME|#N - Replace current session history with copy of saved session");
                 println!("  /chat continue [NAME|#N] - Continue most recent or specified session");
                 println!("  /chat list - List all saved sessions with ephemeral numbers");
                 println!("  /chat recent - Show recent sessions");
