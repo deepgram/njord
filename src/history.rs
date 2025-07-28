@@ -12,6 +12,8 @@ pub struct History {
     pub saved_sessions: HashMap<String, ChatSession>,
     #[serde(skip)]
     pub history_file_path: String,
+    #[serde(skip)]
+    pub removed_sessions: std::collections::HashSet<String>,
 }
 
 impl History {
@@ -20,6 +22,7 @@ impl History {
             current_session: None,
             saved_sessions: HashMap::new(),
             history_file_path,
+            removed_sessions: std::collections::HashSet::new(),
         }
     }
     
@@ -33,6 +36,7 @@ impl History {
         let content = fs::read_to_string(&path)?;
         let mut history: History = serde_json::from_str(&content)?;
         history.history_file_path = history_file_path;
+        history.removed_sessions = std::collections::HashSet::new();
         Ok(history)
     }
     
@@ -58,6 +62,8 @@ impl History {
     pub fn delete_session(&mut self, name: &str) -> Result<bool> {
         let existed = self.saved_sessions.remove(name).is_some();
         if existed {
+            // Track that we've removed this session to prevent it from being merged back
+            self.removed_sessions.insert(name.to_string());
             self.save_with_merge()?;
         }
         Ok(existed)
@@ -79,6 +85,10 @@ impl History {
             session.name = Some(new_name.to_string());
             // Keep existing name_source - this is used for both user renames and auto-renames
             self.saved_sessions.insert(new_name.to_string(), session);
+            
+            // Track that we've removed the old name to prevent it from being merged back
+            self.removed_sessions.insert(old_name.to_string());
+            
             self.save_with_merge()?;
             Ok(true)
         } else {
@@ -187,6 +197,10 @@ impl History {
             session.name = Some(new_name.to_string());
             session.name_source = Some(source);
             self.saved_sessions.insert(new_name.to_string(), session);
+            
+            // Track that we've removed the old name to prevent it from being merged back
+            self.removed_sessions.insert(old_name.to_string());
+            
             self.save_with_merge()?;
             Ok(true)
         } else {
@@ -307,8 +321,8 @@ impl History {
             // Merge saved_sessions from disk version, keeping our changes
             for (name, session) in disk_version.saved_sessions {
                 // Only add sessions from disk that we don't have locally
-                // Our local changes take precedence
-                if !merged.saved_sessions.contains_key(&name) {
+                // and that we haven't explicitly removed (e.g., during rename or delete)
+                if !merged.saved_sessions.contains_key(&name) && !merged.removed_sessions.contains(&name) {
                     merged.saved_sessions.insert(name, session);
                 }
             }
