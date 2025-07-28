@@ -397,8 +397,9 @@ impl Repl {
                     // User-specified name
                     (Some(name.as_str()), false)
                 } else {
-                    // Anonymous session - use auto-generated name
-                    (Some("anonymous"), true)
+                    // Anonymous session - use stable auto-generated name
+                    let auto_name = self.session.generate_auto_name();
+                    (Some(auto_name.as_str()), true)
                 }
             };
             
@@ -840,15 +841,44 @@ impl Repl {
                 let target_session = if let Some(session_ref) = session_ref_opt {
                     // Continue specific session by reference
                     match self.resolve_session_reference(&session_ref) {
-                        Ok(name) => self.history.load_session(&name).cloned(),
+                        Ok(name) => {
+                            // Don't continue the current session
+                            if let Some(current_name) = &self.session.name {
+                                if current_name == &name {
+                                    self.ui.print_error("Cannot continue the current session");
+                                    self.ui.print_info("You are already in this session");
+                                    return Ok(true);
+                                }
+                            }
+                            self.history.load_session(&name).cloned()
+                        }
                         Err(e) => {
                             self.ui.print_error(&e.to_string());
                             return Ok(true);
                         }
                     }
                 } else {
-                    // Continue most recent session
-                    self.history.get_most_recent_session().cloned()
+                    // Continue most recent session (but not current session)
+                    let most_recent = self.history.get_most_recent_session();
+                    if let Some(most_recent_session) = most_recent {
+                        // Check if the most recent session is the current session
+                        if let Some(current_name) = &self.session.name {
+                            if most_recent_session.name.as_ref() == Some(current_name) {
+                                // Find the second most recent session
+                                let recent_sessions = self.history.get_recent_sessions(10);
+                                let second_most_recent = recent_sessions.iter()
+                                    .find(|(name, _)| Some(name.as_str()) != self.session.name.as_deref())
+                                    .map(|(_, session)| session.clone());
+                                second_most_recent
+                            } else {
+                                Some(most_recent_session.clone())
+                            }
+                        } else {
+                            Some(most_recent_session.clone())
+                        }
+                    } else {
+                        None
+                    }
                 };
                 
                 if let Some(target_session) = target_session {
