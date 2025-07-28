@@ -389,6 +389,7 @@ impl Repl {
             };
             
             // Determine session name for prompt
+            let auto_name;
             let (session_name, is_anonymous) = if self.session.messages.is_empty() {
                 (None, false) // Don't show session name for empty sessions
             } else {
@@ -397,8 +398,8 @@ impl Repl {
                     // User-specified name
                     (Some(name.as_str()), false)
                 } else {
-                    // Anonymous session - use stable auto-generated name
-                    let auto_name = self.session.generate_auto_name();
+                    // Anonymous session - use stable auto-generated name based on session creation time
+                    auto_name = self.session.generate_auto_name();
                     (Some(auto_name.as_str()), true)
                 }
             };
