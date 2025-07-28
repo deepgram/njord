@@ -392,7 +392,8 @@ impl Repl {
             let session_name = if self.session.messages.is_empty() {
                 None // Don't show session name for empty sessions
             } else {
-                self.session.name.as_deref()
+                // Always show a session name if we have messages
+                Some(self.session.name.as_deref().unwrap_or("anonymous"))
             };
             
             if let Some(input) = self.ui.read_input(prompt_message, session_name, self.config.ephemeral)? {
