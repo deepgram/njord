@@ -18,6 +18,7 @@ pub enum Command {
     ChatRename(String, Option<SessionReference>), // (new_name, old_session_ref)
     ChatAutoRename(Option<SessionReference>), // (session_ref)
     ChatAutoRenameAll,
+    ChatName(String),
     Summarize(Option<SessionReference>), // (session_ref)
     Undo(Option<usize>),
     Goto(usize),
