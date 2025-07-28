@@ -389,14 +389,20 @@ impl Repl {
             };
             
             // Determine session name for prompt
-            let session_name = if self.session.messages.is_empty() {
-                None // Don't show session name for empty sessions
+            let (session_name, is_anonymous) = if self.session.messages.is_empty() {
+                (None, false) // Don't show session name for empty sessions
             } else {
                 // Always show a session name if we have messages
-                Some(self.session.name.as_deref().unwrap_or("anonymous"))
+                if let Some(name) = &self.session.name {
+                    // User-specified name
+                    (Some(name.as_str()), false)
+                } else {
+                    // Anonymous session - use auto-generated name
+                    (Some("anonymous"), true)
+                }
             };
             
-            if let Some(input) = self.ui.read_input(prompt_message, session_name, self.config.ephemeral)? {
+            if let Some(input) = self.ui.read_input(prompt_message, session_name, is_anonymous, self.config.ephemeral)? {
                 // Handle Ctrl-C signal
                 if input == "__CTRL_C__" {
                     // Cancel any active request
@@ -1730,7 +1736,7 @@ impl Repl {
                     self.ui.print_info("⚠️  Execute this code? This will run the code on your system!");
                     self.ui.print_info("Type 'yes' to execute, anything else to cancel:");
                     
-                    if let Some(confirmation) = self.ui.read_input(None, None, self.config.ephemeral)? {
+                    if let Some(confirmation) = self.ui.read_input(None, None, false, self.config.ephemeral)? {
                         if confirmation.trim().to_lowercase() == "yes" {
                             self.execute_code_block(block)?;
                         } else {
@@ -1946,7 +1952,7 @@ impl Repl {
                     println!();
                     self.ui.print_info("Enter new content (use {{ and }} for multi-line input):");
                     
-                    if let Some(new_content) = self.ui.read_input(None, None, self.config.ephemeral)? {
+                    if let Some(new_content) = self.ui.read_input(None, None, false, self.config.ephemeral)? {
                         if !new_content.trim().is_empty() {
                             match self.prompts.update_prompt_content(&name, new_content) {
                                 Ok(true) => {
