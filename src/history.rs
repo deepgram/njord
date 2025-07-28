@@ -38,7 +38,7 @@ impl History {
     
     pub fn save(&self) -> Result<()> {
         // Reload from disk to merge any changes from other instances
-        let merged = self.clone();
+        let mut merged = self.clone();
         if let Ok(disk_version) = Self::load(self.history_file_path.clone()) {
             // Merge saved_sessions from disk version, keeping our changes
             for (name, session) in disk_version.saved_sessions {
@@ -320,7 +320,7 @@ impl History {
     
     fn save_with_merge(&self) -> Result<()> {
         // Reload from disk to merge any changes from other instances
-        let merged = self.clone();
+        let mut merged = self.clone();
         if let Ok(disk_version) = Self::load(self.history_file_path.clone()) {
             // Merge saved_sessions from disk version, keeping our changes
             for (name, session) in disk_version.saved_sessions {

@@ -73,7 +73,7 @@ impl PromptLibrary {
     
     pub fn save(&self) -> Result<()> {
         // Reload from disk to merge any changes from other instances
-        let merged = self.clone();
+        let mut merged = self.clone();
         merged.prompts_file_path = self.prompts_file_path.clone(); // Restore file path after clone
         
         if let Ok(disk_version) = Self::load(self.prompts_file_path.clone()) {

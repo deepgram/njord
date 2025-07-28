@@ -44,7 +44,7 @@ impl InputHistory {
     
     pub fn save(&self) -> Result<()> {
         // Reload from disk to merge any changes from other instances
-        let merged = self.clone();
+        let mut merged = self.clone();
         merged.file_path = self.file_path.clone(); // Restore file path after clone
         
         if let Ok(disk_version) = Self::load(self.file_path.clone()) {
