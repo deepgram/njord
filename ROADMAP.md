@@ -47,13 +47,14 @@ Njord is an interactive LLM REPL that aims to provide a powerful terminal-based 
 
 ### **Advanced Session Management** - COMPLETE! ✅
 - [x] **Rich Session Management System**
-  - [x] Always start with fresh sessions
+  - [x] Active/inactive session model with clear terminology
   - [x] Auto-saving sessions with LLM interactions
-  - [x] `/chat load NAME` - Load safe copy of session (non-destructive)
-  - [x] `/chat continue [NAME]` - Resume/modify saved session
-  - [x] `/chat save NAME` - Save current session with name
-  - [x] `/chat fork NAME` - Save current session and start fresh
-  - [x] `/chat merge NAME` - Merge another session into current
+  - [x] `/chat load NAME|#N` - Replace active session with copy of inactive session
+  - [x] `/chat continue [NAME|#N]` - Make inactive session active
+  - [x] `/chat save NAME` - Save copy of active session (active unchanged)
+  - [x] `/chat fork [NAME]` - Create copy of active session and activate it
+  - [x] `/chat rename NEW_NAME [OLD_NAME]` - Rename sessions (active if OLD_NAME unspecified)
+  - [x] `/chat delete [NAME|#N]` - Delete sessions (active becomes new empty if unspecified)
   - [x] `/chat auto-rename [NAME]` - Auto-generate session titles using LLM
   - [x] `/chat auto-rename-all` - Bulk auto-rename all anonymous sessions
   - [x] Automatic session naming with timestamps
@@ -122,15 +123,15 @@ Based on current progress and examining the codebase, the next most valuable fea
 
 ### Core Commands Implementation ✅ COMPLETE!
 - [x] **Advanced Chat Management** - COMPLETE!
-  - [x] `/chat new` - Start new session
-  - [x] `/chat save NAME` - Save current session with name
-  - [x] `/chat load NAME` - Load safe copy of session (non-destructive)
-  - [x] `/chat continue [NAME]` - Resume/modify saved session
-  - [x] `/chat fork NAME` - Save current session and start fresh
-  - [x] `/chat list` - List saved sessions with metadata
-  - [x] `/chat delete NAME` - Delete saved session
+  - [x] `/chat new [NAME]` - Create new session (optionally named), activate it
+  - [x] `/chat save NAME` - Save copy of active session (active unchanged)
+  - [x] `/chat load NAME|#N` - Replace active session with copy of inactive session
+  - [x] `/chat continue [NAME|#N]` - Make inactive session active (most recent if unspecified)
+  - [x] `/chat fork [NAME]` - Create copy of active session and activate it
+  - [x] `/chat rename NEW_NAME [OLD_NAME]` - Rename session (active if OLD_NAME unspecified)
+  - [x] `/chat delete [NAME|#N]` - Delete session (active becomes new empty if unspecified)
+  - [x] `/chat list` - List all chat sessions with metadata
   - [x] `/chat recent` - Show recent sessions
-  - [x] `/chat merge NAME` - Merge another session into current
 
 - [x] **Model Management** - COMPLETE!
   - [x] `/models` - List available models for current provider

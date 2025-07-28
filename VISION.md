@@ -21,11 +21,17 @@ This is an **Interactive LLM REPL** - a terminal-based chat interface for multip
 - `/models` to list available models
 
 ### Session Management
+- Active/inactive session model: exactly one "active" session receives new messages
 - Numbered interactions (User 1, Agent 1, User 2, Agent 2...)
-- `/chat new` - Start fresh session, archive current to `.njord`
-- `/chat save NAME` - Save current session with custom name
-- `/chat load NAME` - Load named session
-- `/chat list` - Show available saved sessions
+- `/chat new [NAME]` - Create new session (optionally named), activate it
+- `/chat save NAME` - Save copy of active session (active unchanged)
+- `/chat load NAME|#N` - Replace active session with copy of inactive session
+- `/chat continue [NAME|#N]` - Make inactive session active (most recent if unspecified)
+- `/chat fork [NAME]` - Create copy of active session and activate it
+- `/chat rename NEW_NAME [OLD_NAME]` - Rename session (active if OLD_NAME unspecified)
+- `/chat delete [NAME|#N]` - Delete session (active becomes new empty if unspecified)
+- `/chat list` - List all chat sessions
+- `/chat recent` - Show recent sessions
 
 ### Navigation & History
 - `/undo` - Remove last agent response from context
