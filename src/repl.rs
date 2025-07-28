@@ -898,37 +898,60 @@ impl Repl {
                     self.ui.print_info("Use '/chat continue #N' to continue by number or '/chat continue \"name\"' to continue by name");
                 }
             }
-            Command::ChatFork(name) => {
-                if name.trim().is_empty() {
-                    self.ui.print_error("Session name cannot be empty");
-                } else if self.session.messages.is_empty() {
+            Command::ChatFork(name_opt) => {
+                if self.session.messages.is_empty() {
                     self.ui.print_error("Cannot fork empty session");
                 } else {
-                    // Create a copy of the current session with a new name
+                    // Create a copy of the current session
                     let mut forked_session = self.session.create_copy();
-                    forked_session.name = Some(name.clone());
-                    forked_session.name_source = Some(crate::session::NameSource::UserProvided);
                     
-                    match self.history.save_session(name.clone(), forked_session.clone()) {
-                        Ok(()) => {
-                            self.ui.print_info(&format!("Session forked as '{}' ({} messages)", name, self.session.messages.len()));
-                            
-                            // Auto-save current session if it has interactions and a name
-                            if let Err(e) = self.history.auto_save_session(&self.session) {
-                                self.ui.print_error(&format!("Failed to auto-save current session: {}", e));
+                    if let Some(name) = name_opt {
+                        if name.trim().is_empty() {
+                            self.ui.print_error("Session name cannot be empty");
+                            return Ok(true);
+                        }
+                        
+                        // Named fork
+                        forked_session.name = Some(name.clone());
+                        forked_session.name_source = Some(crate::session::NameSource::UserProvided);
+                        
+                        match self.history.save_session(name.clone(), forked_session.clone()) {
+                            Ok(()) => {
+                                self.ui.print_info(&format!("Session forked as '{}' ({} messages)", name, self.session.messages.len()));
+                                
+                                // Auto-save current session if it has interactions and a name
+                                if let Err(e) = self.history.auto_save_session(&self.session) {
+                                    self.ui.print_error(&format!("Failed to auto-save current session: {}", e));
+                                }
+                                
+                                // Activate the forked session (original becomes inactive)
+                                self.session = forked_session;
+                                self.ui.print_info(&format!("Activated forked session '{}'", name));
+                                
+                                // Update completion context and session list
+                                let _ = self.update_completion_context();
+                                self.update_session_list();
                             }
-                            
-                            // Activate the forked session (original becomes inactive)
-                            self.session = forked_session;
-                            self.ui.print_info(&format!("Activated forked session '{}'", name));
-                            
-                            // Update completion context and session list
-                            let _ = self.update_completion_context();
-                            self.update_session_list();
+                            Err(e) => {
+                                self.ui.print_error(&format!("Failed to fork session: {}", e));
+                            }
                         }
-                        Err(e) => {
-                            self.ui.print_error(&format!("Failed to fork session: {}", e));
+                    } else {
+                        // Anonymous fork - no name, no saving to history
+                        self.ui.print_info(&format!("Session forked anonymously ({} messages)", self.session.messages.len()));
+                        
+                        // Auto-save current session if it has interactions and a name
+                        if let Err(e) = self.history.auto_save_session(&self.session) {
+                            self.ui.print_error(&format!("Failed to auto-save current session: {}", e));
                         }
+                        
+                        // Activate the anonymous forked session (original becomes inactive)
+                        self.session = forked_session;
+                        self.ui.print_info("Activated anonymous forked session");
+                        
+                        // Update completion context and session list
+                        let _ = self.update_completion_context();
+                        self.update_session_list();
                     }
                 }
             }
