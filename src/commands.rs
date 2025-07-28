@@ -13,7 +13,7 @@ pub enum Command {
     ChatDelete(Option<SessionReference>),
     ChatContinue(Option<SessionReference>),
     ChatRecent,
-    ChatFork(String),
+    ChatFork(Option<String>),
     ChatRename(String, Option<SessionReference>), // (new_name, old_session_ref)
     ChatAutoRename(Option<SessionReference>), // (session_ref)
     ChatAutoRenameAll,
@@ -317,7 +317,7 @@ impl CommandParser {
             chat_load_regex: Regex::new(r"^/chat\s+load\s+(.+)$")?,
             chat_delete_regex: Regex::new(r"^/chat\s+delete(?:\s+(.+))?$")?,
             chat_continue_regex: Regex::new(r"^/chat\s+continue(?:\s+(.+))?$")?,
-            chat_fork_regex: Regex::new(r"^/chat\s+fork\s+(.+)$")?,
+            chat_fork_regex: Regex::new(r"^/chat\s+fork(?:\s+(.+))?$")?,
             chat_rename_regex: Regex::new(r"^/chat\s+rename\s+(.+?)(?:\s+(.+))?$")?,
             chat_auto_rename_regex: Regex::new(r"^/chat\s+auto-rename(?:\s+(.+))?$")?,
             summarize_regex: Regex::new(r"^/summarize(?:\s+(.+))?$")?,
@@ -452,15 +452,17 @@ impl CommandParser {
                     let session_ref = caps.get(1).map(|m| Self::parse_session_reference(m.as_str()));
                     Some(Command::ChatContinue(session_ref))
                 } else if let Some(caps) = self.chat_fork_regex.captures(input) {
-                    // Fork still uses string name for the new session
-                    let trimmed = caps[1].trim();
-                    let unquoted = if (trimmed.starts_with('"') && trimmed.ends_with('"')) ||
-                                     (trimmed.starts_with('\'') && trimmed.ends_with('\'')) {
-                        trimmed[1..trimmed.len()-1].to_string()
-                    } else {
-                        trimmed.to_string()
-                    };
-                    Some(Command::ChatFork(unquoted))
+                    // Fork can have optional name
+                    let name = caps.get(1).map(|m| {
+                        let trimmed = m.as_str().trim();
+                        if (trimmed.starts_with('"') && trimmed.ends_with('"')) ||
+                           (trimmed.starts_with('\'') && trimmed.ends_with('\'')) {
+                            trimmed[1..trimmed.len()-1].to_string()
+                        } else {
+                            trimmed.to_string()
+                        }
+                    });
+                    Some(Command::ChatFork(name))
                 } else if let Some(caps) = self.chat_rename_regex.captures(input) {
                     let trimmed = caps[1].trim();
                     let new_name = if (trimmed.starts_with('"') && trimmed.ends_with('"')) ||
