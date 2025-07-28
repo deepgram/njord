@@ -693,8 +693,7 @@ impl Repl {
                 println!("  /chat list - List all saved sessions with ephemeral numbers");
                 println!("  /chat recent - Show recent sessions");
                 println!("  /chat delete [NAME|#N] - Delete a saved session (defaults to current)");
-                println!("  /chat fork NAME - Save current session and start fresh");
-                println!("  /chat merge NAME - Merge another session into current");
+                println!("  /chat fork NAME - Create copy of current session and activate it");
                 println!("  /chat rename NEW_NAME [OLD_NAME] - Rename a session");
                 println!("  /chat auto-rename [NAME] - Auto-generate title for session");
                 println!("  /chat auto-rename-all - Auto-generate titles for all anonymous sessions");
@@ -905,51 +904,31 @@ impl Repl {
                 } else if self.session.messages.is_empty() {
                     self.ui.print_error("Cannot fork empty session");
                 } else {
-                    match self.history.save_session(name.clone(), self.session.clone()) {
+                    // Create a copy of the current session with a new name
+                    let mut forked_session = self.session.create_copy();
+                    forked_session.name = Some(name.clone());
+                    forked_session.name_source = Some(crate::session::NameSource::UserProvided);
+                    
+                    match self.history.save_session(name.clone(), forked_session.clone()) {
                         Ok(()) => {
                             self.ui.print_info(&format!("Session forked as '{}' ({} messages)", name, self.session.messages.len()));
-                            // Start fresh session
-                            self.session = ChatSession::new(self.config.default_model.clone(), self.config.temperature, self.config.max_tokens, self.config.thinking_budget);
-                            self.session.current_provider = get_provider_for_model(&self.session.current_model).map(|s| s.to_string());
-                            self.ui.print_info("Started new session");
-                            // Update completion context and session list with new session
+                            
+                            // Auto-save current session if it has interactions and a name
+                            if let Err(e) = self.history.auto_save_session(&self.session) {
+                                self.ui.print_error(&format!("Failed to auto-save current session: {}", e));
+                            }
+                            
+                            // Activate the forked session (original becomes inactive)
+                            self.session = forked_session;
+                            self.ui.print_info(&format!("Activated forked session '{}'", name));
+                            
+                            // Update completion context and session list
                             let _ = self.update_completion_context();
                             self.update_session_list();
                         }
                         Err(e) => {
                             self.ui.print_error(&format!("Failed to fork session: {}", e));
                         }
-                    }
-                }
-            }
-            Command::ChatMerge(session_ref) => {
-                match self.resolve_session_reference(&session_ref) {
-                    Ok(name) => {
-                        if let Some(other_session) = self.history.load_session(&name).cloned() {
-                            let other_message_count = other_session.messages.len();
-                            match self.session.merge_session(&other_session) {
-                                Ok(()) => {
-                                    self.ui.print_info(&format!("Merged {} messages from '{}' into current session", 
-                                        other_message_count, name));
-                                    self.ui.print_info(&format!("Current session now has {} messages", self.session.messages.len()));
-                                }
-                                Err(e) => {
-                                    self.ui.print_error(&format!("Failed to merge session: {}", e));
-                                }
-                            }
-                        } else {
-                            self.ui.print_error(&format!("Session '{}' not found", name));
-                            let available_sessions = self.history.list_sessions();
-                            if !available_sessions.is_empty() {
-                                self.ui.print_info("Available sessions:");
-                                for session_name in available_sessions.iter().take(5) {
-                                    println!("  {}", session_name);
-                                }
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        self.ui.print_error(&e.to_string());
                     }
                 }
             }

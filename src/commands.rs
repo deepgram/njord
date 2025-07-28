@@ -14,7 +14,6 @@ pub enum Command {
     ChatContinue(Option<SessionReference>),
     ChatRecent,
     ChatFork(String),
-    ChatMerge(SessionReference),
     ChatRename(String, Option<SessionReference>), // (new_name, old_session_ref)
     ChatAutoRename(Option<SessionReference>), // (session_ref)
     ChatAutoRenameAll,
@@ -111,7 +110,6 @@ pub struct CommandParser {
     chat_delete_regex: Regex,
     chat_continue_regex: Regex,
     chat_fork_regex: Regex,
-    chat_merge_regex: Regex,
     chat_rename_regex: Regex,
     chat_auto_rename_regex: Regex,
     summarize_regex: Regex,
@@ -320,7 +318,6 @@ impl CommandParser {
             chat_delete_regex: Regex::new(r"^/chat\s+delete(?:\s+(.+))?$")?,
             chat_continue_regex: Regex::new(r"^/chat\s+continue(?:\s+(.+))?$")?,
             chat_fork_regex: Regex::new(r"^/chat\s+fork\s+(.+)$")?,
-            chat_merge_regex: Regex::new(r"^/chat\s+merge\s+(.+)$")?,
             chat_rename_regex: Regex::new(r"^/chat\s+rename\s+(.+?)(?:\s+(.+))?$")?,
             chat_auto_rename_regex: Regex::new(r"^/chat\s+auto-rename(?:\s+(.+))?$")?,
             summarize_regex: Regex::new(r"^/summarize(?:\s+(.+))?$")?,
@@ -464,8 +461,6 @@ impl CommandParser {
                         trimmed.to_string()
                     };
                     Some(Command::ChatFork(unquoted))
-                } else if let Some(caps) = self.chat_merge_regex.captures(input) {
-                    Some(Command::ChatMerge(Self::parse_session_reference(&caps[1])))
                 } else if let Some(caps) = self.chat_rename_regex.captures(input) {
                     let trimmed = caps[1].trim();
                     let new_name = if (trimmed.starts_with('"') && trimmed.ends_with('"')) ||
