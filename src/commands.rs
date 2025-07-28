@@ -375,6 +375,19 @@ impl CommandParser {
             "/input-history" => Some(Command::InputHistory),
             "/input-history clear" => Some(Command::InputHistoryClear),
             "/input-history stats" => Some(Command::InputHistoryStats),
+            _ if input.starts_with("/chat name ") => {
+                let name = input[11..].trim();
+                if name.is_empty() {
+                    return None;
+                }
+                let unquoted_name = if (name.starts_with('"') && name.ends_with('"')) ||
+                                      (name.starts_with('\'') && name.ends_with('\'')) {
+                    name[1..name.len()-1].to_string()
+                } else {
+                    name.to_string()
+                };
+                Some(Command::ChatName(unquoted_name))
+            }
             _ => {
                 if let Some(caps) = self.model_regex.captures(input) {
                     Some(Command::Model(caps[1].to_string()))

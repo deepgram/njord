@@ -687,6 +687,7 @@ impl Repl {
                 println!("\x1b[1;36mSession Management:\x1b[0m");
                 println!("  /chat new - Start a new chat session");
                 println!("  /chat save NAME - Save current session with given name");
+                println!("  /chat name NAME - Name the current session (replaces any existing name)");
                 println!("  /chat load NAME|#N - Load a previously saved session");
                 println!("  /chat continue [NAME|#N] - Continue most recent or specified session");
                 println!("  /chat list - List all saved sessions with ephemeral numbers");
@@ -1023,6 +1024,52 @@ impl Repl {
                     }
                     Err(e) => {
                         self.ui.print_error(&format!("Failed to auto-rename sessions: {}", e));
+                    }
+                }
+            }
+            Command::ChatName(name) => {
+                if name.trim().is_empty() {
+                    self.ui.print_error("Session name cannot be empty");
+                } else if self.session.messages.is_empty() {
+                    self.ui.print_error("Cannot name empty session");
+                } else {
+                    // Check if new name already exists
+                    if self.history.load_session(&name).is_some() {
+                        self.ui.print_error(&format!("Session '{}' already exists", name));
+                    } else {
+                        let old_name = self.session.name.clone();
+                        
+                        // Remove old session from history if it had a name
+                        if let Some(ref old_session_name) = old_name {
+                            if let Err(e) = self.history.delete_session(old_session_name) {
+                                self.ui.print_error(&format!("Failed to remove old session: {}", e));
+                                return Ok(true);
+                            }
+                        }
+                        
+                        // Set the new name and save
+                        self.session.name = Some(name.clone());
+                        self.session.name_source = Some(crate::session::NameSource::UserProvided);
+                        
+                        match self.history.save_session(name.clone(), self.session.clone()) {
+                            Ok(()) => {
+                                if let Some(old_session_name) = old_name {
+                                    self.ui.print_info(&format!("Session renamed from '{}' to '{}'", old_session_name, name));
+                                } else {
+                                    self.ui.print_info(&format!("Session named '{}'", name));
+                                }
+                                self.ui.print_info(&format!("Current session: '{}' ({} messages)", name, self.session.messages.len()));
+                                
+                                // Update completion context and session list
+                                let _ = self.update_completion_context();
+                                self.update_session_list();
+                            }
+                            Err(e) => {
+                                // Restore old name on failure
+                                self.session.name = old_name;
+                                self.ui.print_error(&format!("Failed to name session: {}", e));
+                            }
+                        }
                     }
                 }
             }
