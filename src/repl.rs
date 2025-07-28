@@ -946,12 +946,25 @@ impl Repl {
                             }
                         }
                     } else {
-                        // Rename current session - it must be saved first
+                        // Rename current session - auto-save it first if needed
                         if let Some(ref current_name) = self.session.name {
                             current_name.clone()
                         } else {
-                            self.ui.print_error("Current session has no name. Save it first with /chat save NAME");
-                            return Ok(true);
+                            // Auto-save the session to give it a name
+                            match self.history.auto_save_session(&self.session) {
+                                Ok(Some(auto_name)) => {
+                                    self.ui.print_info(&format!("Auto-saved current session as '{}'", auto_name));
+                                    auto_name
+                                }
+                                Ok(None) => {
+                                    self.ui.print_error("Cannot rename empty session");
+                                    return Ok(true);
+                                }
+                                Err(e) => {
+                                    self.ui.print_error(&format!("Failed to auto-save session: {}", e));
+                                    return Ok(true);
+                                }
+                            }
                         }
                     };
                 
@@ -962,6 +975,7 @@ impl Repl {
                             // If we renamed the current session, update its name and show context
                             if old_session_ref.is_none() || self.session.name.as_ref() == Some(&target_name) {
                                 self.session.name = Some(new_name.clone());
+                                self.session.name_source = Some(crate::session::NameSource::UserProvided);
                                 self.ui.print_info(&format!("Current session: \"{}\" ({} messages)", 
                                     new_name, self.session.messages.len()));
                             }
