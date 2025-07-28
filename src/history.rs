@@ -36,24 +36,6 @@ impl History {
         Ok(history)
     }
     
-    pub fn save(&self) -> Result<()> {
-        // Reload from disk to merge any changes from other instances
-        let mut merged = self.clone();
-        if let Ok(disk_version) = Self::load(self.history_file_path.clone()) {
-            // Merge saved_sessions from disk version, keeping our changes
-            for (name, session) in disk_version.saved_sessions {
-                // Only add sessions from disk that we don't have locally
-                if !merged.saved_sessions.contains_key(&name) {
-                    merged.saved_sessions.insert(name, session);
-                }
-            }
-        }
-        
-        let content = serde_json::to_string_pretty(&merged)?;
-        fs::write(&self.history_file_path, content)?;
-        Ok(())
-    }
-    
     pub fn save_session(&mut self, name: String, mut session: ChatSession) -> Result<()> {
         // Set the session name when saving
         session.name = Some(name.clone());
