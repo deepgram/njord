@@ -1243,7 +1243,7 @@ impl Repl {
                         // First, clone the session if it exists
                         let session_to_load = self.history.load_session(&name).cloned();
                         
-                        if let Some(session) = session_to_load {
+                        if let Some(loaded_session) = session_to_load {
                             // Auto-save current session if it has interactions
                             if let Err(e) = self.history.auto_save_session(&self.session) {
                                 self.ui.print_error(&format!("Failed to auto-save current session: {}", e));
@@ -1253,8 +1253,17 @@ impl Repl {
                                 self.update_session_list();
                             }
                             
-                            // Create a copy of the session (new ID, no name, fresh timestamps)
-                            self.session = session.create_copy();
+                            // Replace the current session's history with a copy of the loaded session's history
+                            // Keep the current session's ID, name, and timestamps, but replace messages and settings
+                            self.session.messages = loaded_session.messages.clone();
+                            self.session.current_model = loaded_session.current_model.clone();
+                            self.session.current_provider = loaded_session.current_provider.clone();
+                            self.session.temperature = loaded_session.temperature;
+                            self.session.max_tokens = loaded_session.max_tokens;
+                            self.session.thinking_budget = loaded_session.thinking_budget;
+                            self.session.system_prompt = loaded_session.system_prompt.clone();
+                            self.session.thinking_enabled = loaded_session.thinking_enabled;
+                            self.session.variable_bindings = loaded_session.variable_bindings.clone();
                             
                             // Update current provider based on session's model
                             self.session.current_provider = get_provider_for_model(&self.session.current_model).map(|s| s.to_string());
@@ -1264,9 +1273,8 @@ impl Repl {
                             self.restore_session_variables(&session_clone);
                             
                             // Enhanced feedback with full context
-                            let created = self.session.created_at.format("%Y-%m-%d %H:%M");
-                            self.ui.print_info(&format!("Loaded copy of session \"{}\" ({} messages, created {})", 
-                                name, self.session.messages.len(), created));
+                            self.ui.print_info(&format!("Replaced current session history with copy of \"{}\" ({} messages)", 
+                                name, self.session.messages.len()));
                             
                             if let Some(session_provider) = &self.session.current_provider {
                                 if self.providers.contains_key(session_provider) {
