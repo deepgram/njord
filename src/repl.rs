@@ -867,10 +867,9 @@ impl Repl {
                             if most_recent_session.name.as_ref() == Some(current_name) {
                                 // Find the second most recent session
                                 let recent_sessions = self.history.get_recent_sessions(10);
-                                let second_most_recent = recent_sessions.iter()
+                                recent_sessions.iter()
                                     .find(|(name, _)| Some(name.as_str()) != self.session.name.as_deref())
-                                    .map(|(_, session)| session.clone());
-                                second_most_recent
+                                    .map(|(_, session)| (*session).clone())
                             } else {
                                 Some(most_recent_session.clone())
                             }
