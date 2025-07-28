@@ -43,7 +43,7 @@ impl SystemPrompt {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PromptLibrary {
     pub prompts: HashMap<String, SystemPrompt>,
     #[serde(skip)]
@@ -73,7 +73,7 @@ impl PromptLibrary {
     
     pub fn save(&self) -> Result<()> {
         // Reload from disk to merge any changes from other instances
-        let mut merged = self.clone();
+        let merged = self.clone();
         merged.prompts_file_path = self.prompts_file_path.clone(); // Restore file path after clone
         
         if let Ok(disk_version) = Self::load(self.prompts_file_path.clone()) {

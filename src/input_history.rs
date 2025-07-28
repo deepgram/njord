@@ -13,7 +13,7 @@ pub struct InputHistoryEntry {
     pub timestamp: DateTime<Utc>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InputHistory {
     entries: VecDeque<InputHistoryEntry>,
     #[serde(skip)]
@@ -44,7 +44,7 @@ impl InputHistory {
     
     pub fn save(&self) -> Result<()> {
         // Reload from disk to merge any changes from other instances
-        let mut merged = self.clone();
+        let merged = self.clone();
         merged.file_path = self.file_path.clone(); // Restore file path after clone
         
         if let Ok(disk_version) = Self::load(self.file_path.clone()) {

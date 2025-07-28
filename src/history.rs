@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 use crate::session::ChatSession;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct History {
     pub current_session: Option<ChatSession>,
     pub saved_sessions: HashMap<String, ChatSession>,
@@ -38,7 +38,7 @@ impl History {
     
     pub fn save(&self) -> Result<()> {
         // Reload from disk to merge any changes from other instances
-        let mut merged = self.clone();
+        let merged = self.clone();
         if let Ok(disk_version) = Self::load(self.history_file_path.clone()) {
             // Merge saved_sessions from disk version, keeping our changes
             for (name, session) in disk_version.saved_sessions {
@@ -111,7 +111,7 @@ impl History {
         
         if let Some(existing_name) = &session.name {
             // Session has a name - overwrite the existing saved session
-            let mut session_to_save = session.clone();
+            let session_to_save = session.clone();
             self.saved_sessions.insert(existing_name.clone(), session_to_save);
             self.save_with_merge()?;
             Ok(Some(existing_name.clone()))
@@ -320,7 +320,7 @@ impl History {
     
     fn save_with_merge(&self) -> Result<()> {
         // Reload from disk to merge any changes from other instances
-        let mut merged = self.clone();
+        let merged = self.clone();
         if let Ok(disk_version) = Self::load(self.history_file_path.clone()) {
             // Merge saved_sessions from disk version, keeping our changes
             for (name, session) in disk_version.saved_sessions {
