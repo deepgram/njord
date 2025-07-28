@@ -818,7 +818,7 @@ impl UI {
         Ok(())
     }
     
-    pub fn read_input(&mut self, prompt_info: Option<(&str, &str)>, session_name: Option<&str>, ephemeral: bool) -> Result<Option<String>> {
+    pub fn read_input(&mut self, prompt_info: Option<(&str, &str)>, session_name: Option<&str>, is_anonymous: bool, ephemeral: bool) -> Result<Option<String>> {
         let (prompt, initial_input) = if let Some((message, status)) = prompt_info {
             let color = match status {
                 "retry" => "\x1b[1;33m", // Yellow for retry
@@ -826,7 +826,14 @@ impl UI {
                 _ => if ephemeral { "\x1b[1;33m" } else { "\x1b[1;32m" }, // Yellow for ephemeral, green default
             };
             let session_prefix = if let Some(name) = session_name {
-                format!("[{}] ", name)
+                if is_anonymous {
+                    // Generate auto name and show in dimmed color
+                    let auto_name = chrono::Utc::now().format("%Y-%m-%d_%H:%M:%S").to_string();
+                    format!("[\x1b[2m{}\x1b[0m{}] ", auto_name, color)
+                } else {
+                    // User-specified name in normal color
+                    format!("[{}] ", name)
+                }
             } else if ephemeral {
                 "[ephemeral] ".to_string()
             } else {
@@ -835,7 +842,15 @@ impl UI {
             (format!("{}{}>>> ({}) \x1b[0m", color, session_prefix, status), message)
         } else {
             let session_prefix = if let Some(name) = session_name {
-                format!("[{}] ", name)
+                if is_anonymous {
+                    // Generate auto name and show in dimmed color
+                    let auto_name = chrono::Utc::now().format("%Y-%m-%d_%H:%M:%S").to_string();
+                    let color = if ephemeral { "\x1b[1;33m" } else { "\x1b[1;32m" };
+                    format!("[\x1b[2m{}\x1b[0m{}] ", auto_name, color)
+                } else {
+                    // User-specified name in normal color
+                    format!("[{}] ", name)
+                }
             } else if ephemeral {
                 "[ephemeral] ".to_string()
             } else {
@@ -869,7 +884,7 @@ impl UI {
                         Ok(Some(input.to_string()))
                     } else if input.starts_with("{") {
                         // Multi-line input mode
-                        self.read_multiline_input(input.to_string(), session_name, ephemeral)
+                        self.read_multiline_input(input.to_string(), session_name, is_anonymous, ephemeral)
                     } else {
                         Ok(Some(input.to_string()))
                     }
@@ -887,7 +902,7 @@ impl UI {
         }
     }
     
-    fn read_multiline_input(&mut self, first_line: String, session_name: Option<&str>, ephemeral: bool) -> Result<Option<String>> {
+    fn read_multiline_input(&mut self, first_line: String, session_name: Option<&str>, is_anonymous: bool, ephemeral: bool) -> Result<Option<String>> {
         // Parse the opening tag from the first line
         let tag = self.parse_opening_tag(&first_line);
         let end_marker = if let Some(ref tag_name) = tag {
@@ -906,7 +921,15 @@ impl UI {
         }
         
         let session_prefix = if let Some(name) = session_name {
-            format!("[{}] ", name)
+            if is_anonymous {
+                // Generate auto name and show in dimmed color
+                let auto_name = chrono::Utc::now().format("%Y-%m-%d_%H:%M:%S").to_string();
+                let color = if ephemeral { "\x1b[1;33m" } else { "\x1b[1;32m" };
+                format!("[\x1b[2m{}\x1b[0m{}] ", auto_name, color)
+            } else {
+                // User-specified name in normal color
+                format!("[{}] ", name)
+            }
         } else if ephemeral {
             "[ephemeral] ".to_string()
         } else {
