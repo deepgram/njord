@@ -842,10 +842,9 @@ impl UI {
         } else {
             let session_prefix = if let Some(name) = session_name {
                 if is_anonymous {
-                    // Generate auto name and show in dimmed color
-                    let auto_name = chrono::Utc::now().format("%Y-%m-%d_%H:%M:%S").to_string();
+                    // Show anonymous name in dimmed color (not bold)
                     let color = if ephemeral { "\x1b[1;33m" } else { "\x1b[1;32m" };
-                    format!("[\x1b[2m{}\x1b[0m{}] ", auto_name, color)
+                    format!("[\x1b[2m{}\x1b[0m{}] ", name, color)
                 } else {
                     // User-specified name in normal color
                     format!("[{}] ", name)
