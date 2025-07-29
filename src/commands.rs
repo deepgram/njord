@@ -420,7 +420,7 @@ impl CommandParser {
             chat_continue_regex: Regex::new(r"^/chat\s+continue(?:\s+(.+))?$")?,
             chat_fork_regex: Regex::new(r"^/chat\s+fork(?:\s+(.+))?$")?,
             chat_branch_regex: Regex::new(r"^/chat\s+branch\s+(.+?)(?:\s+(.+))?$")?,
-            chat_rename_regex: Regex::new(r"^/chat\s+rename\s+(.+?)(?:\s+(.+))?$")?,
+            chat_rename_regex: Regex::new(r"^/chat\s+rename\s+(.+)$")?,
             chat_auto_rename_regex: Regex::new(r"^/chat\s+auto-rename(?:\s+(.+))?$")?,
             summarize_regex: Regex::new(r"^/summarize(?:\s+(.+))?$")?,
             // File loading regexes
