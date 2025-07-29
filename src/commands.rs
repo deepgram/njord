@@ -207,6 +207,105 @@ impl CommandParser {
         }
     }
     
+    fn parse_chat_rename_arguments(args: &str) -> (String, Option<SessionReference>) {
+        let args = args.trim();
+        
+        // Handle quoted first argument (new name)
+        if args.starts_with('"') {
+            // Find the proper closing quote for the name, handling escaped quotes
+            let mut end_quote_pos = None;
+            let mut i = 1; // Start after opening quote
+            let chars: Vec<char> = args.chars().collect();
+            
+            while i < chars.len() {
+                if chars[i] == '\\' && i + 1 < chars.len() {
+                    // Skip the escaped character
+                    i += 2;
+                } else if chars[i] == '"' {
+                    // Found unescaped closing quote
+                    end_quote_pos = Some(i);
+                    break;
+                } else {
+                    i += 1;
+                }
+            }
+            
+            if let Some(end_quote) = end_quote_pos {
+                // Extract the name and unescape quotes
+                let new_name = args[1..end_quote].replace("\\\"", "\"");
+                let remaining = args[end_quote + 1..].trim();
+                if remaining.is_empty() {
+                    (new_name, None)
+                } else {
+                    let old_session_ref = Self::parse_session_reference(remaining);
+                    (new_name, Some(old_session_ref))
+                }
+            } else {
+                // Unclosed quote - treat as unquoted
+                let parts: Vec<&str> = args.split_whitespace().collect();
+                if parts.len() >= 2 {
+                    let new_name = Self::unquote_session_name(parts[0]);
+                    let old_session_ref = Self::parse_session_reference(parts[1]);
+                    (new_name, Some(old_session_ref))
+                } else {
+                    let new_name = Self::unquote_session_name(parts[0]);
+                    (new_name, None)
+                }
+            }
+        } else if args.starts_with('\'') {
+            // Handle single quotes similarly
+            let mut end_quote_pos = None;
+            let mut i = 1; // Start after opening quote
+            let chars: Vec<char> = args.chars().collect();
+            
+            while i < chars.len() {
+                if chars[i] == '\\' && i + 1 < chars.len() {
+                    // Skip the escaped character
+                    i += 2;
+                } else if chars[i] == '\'' {
+                    // Found unescaped closing quote
+                    end_quote_pos = Some(i);
+                    break;
+                } else {
+                    i += 1;
+                }
+            }
+            
+            if let Some(end_quote) = end_quote_pos {
+                // Extract the name and unescape quotes
+                let new_name = args[1..end_quote].replace("\\'", "'");
+                let remaining = args[end_quote + 1..].trim();
+                if remaining.is_empty() {
+                    (new_name, None)
+                } else {
+                    let old_session_ref = Self::parse_session_reference(remaining);
+                    (new_name, Some(old_session_ref))
+                }
+            } else {
+                // Unclosed quote - treat as unquoted
+                let parts: Vec<&str> = args.split_whitespace().collect();
+                if parts.len() >= 2 {
+                    let new_name = Self::unquote_session_name(parts[0]);
+                    let old_session_ref = Self::parse_session_reference(parts[1]);
+                    (new_name, Some(old_session_ref))
+                } else {
+                    let new_name = Self::unquote_session_name(parts[0]);
+                    (new_name, None)
+                }
+            }
+        } else {
+            // Unquoted first argument (new name)
+            let parts: Vec<&str> = args.splitn(2, ' ').collect();
+            if parts.len() >= 2 {
+                let new_name = parts[0].to_string();
+                let old_session_ref = Self::parse_session_reference(parts[1]);
+                (new_name, Some(old_session_ref))
+            } else {
+                (parts[0].to_string(), None)
+            }
+        }
+    }
+    
     fn parse_prompts_save_arguments(args: &str) -> (String, Option<String>) {
         let args = args.trim();
         
@@ -456,37 +555,16 @@ impl CommandParser {
                     Some(Command::ChatContinue(session_ref))
                 } else if let Some(caps) = self.chat_fork_regex.captures(input) {
                     // Fork can have optional name
-                    let name = caps.get(1).map(|m| {
-                        let trimmed = m.as_str().trim();
-                        if (trimmed.starts_with('"') && trimmed.ends_with('"')) ||
-                           (trimmed.starts_with('\'') && trimmed.ends_with('\'')) {
-                            trimmed[1..trimmed.len()-1].to_string()
-                        } else {
-                            trimmed.to_string()
-                        }
-                    });
+                    let name = caps.get(1).map(|m| Self::unquote_session_name(m.as_str()));
                     Some(Command::ChatFork(name))
                 } else if let Some(caps) = self.chat_branch_regex.captures(input) {
                     let source_session_ref = Self::parse_session_reference(&caps[1]);
-                    let new_name = caps.get(2).map(|m| {
-                        let trimmed = m.as_str().trim();
-                        if (trimmed.starts_with('"') && trimmed.ends_with('"')) ||
-                           (trimmed.starts_with('\'') && trimmed.ends_with('\'')) {
-                            trimmed[1..trimmed.len()-1].to_string()
-                        } else {
-                            trimmed.to_string()
-                        }
-                    });
+                    let new_name = caps.get(2).map(|m| Self::unquote_session_name(m.as_str()));
                     Some(Command::ChatBranch(source_session_ref, new_name))
                 } else if let Some(caps) = self.chat_rename_regex.captures(input) {
-                    let trimmed = caps[1].trim();
-                    let new_name = if (trimmed.starts_with('"') && trimmed.ends_with('"')) ||
-                                     (trimmed.starts_with('\'') && trimmed.ends_with('\'')) {
-                        trimmed[1..trimmed.len()-1].to_string()
-                    } else {
-                        trimmed.to_string()
-                    };
-                    let old_session_ref = caps.get(2).map(|m| Self::parse_session_reference(m.as_str()));
+                    // Parse chat rename arguments manually to handle quoted strings properly
+                    let args_part = &caps[1];
+                    let (new_name, old_session_ref) = Self::parse_chat_rename_arguments(args_part);
                     Some(Command::ChatRename(new_name, old_session_ref))
                 } else if let Some(caps) = self.chat_auto_rename_regex.captures(input) {
                     let session_ref = caps.get(1).map(|m| Self::parse_session_reference(m.as_str()));
@@ -746,6 +824,33 @@ mod tests {
             }
         } else {
             panic!("Expected ChatLoad command");
+        }
+        
+        // Test chat rename with quoted name
+        if let Some(Command::ChatRename(new_name, old_session_ref)) = parser.parse("/chat rename \"testing this\"") {
+            assert_eq!(new_name, "testing this");
+            assert!(old_session_ref.is_none());
+        } else {
+            panic!("Expected ChatRename command");
+        }
+        
+        // Test chat rename with quoted name and old session
+        if let Some(Command::ChatRename(new_name, old_session_ref)) = parser.parse("/chat rename \"my new name\" old-session") {
+            assert_eq!(new_name, "my new name");
+            if let Some(SessionReference::Named(old_name)) = old_session_ref {
+                assert_eq!(old_name, "old-session");
+            } else {
+                panic!("Expected Named reference for old session");
+            }
+        } else {
+            panic!("Expected ChatRename command");
+        }
+        
+        // Test chat fork with quoted name
+        if let Some(Command::ChatFork(name)) = parser.parse("/chat fork \"my fork\"") {
+            assert_eq!(name, Some("my fork".to_string()));
+        } else {
+            panic!("Expected ChatFork command");
         }
     }
 
