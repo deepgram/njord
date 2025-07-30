@@ -441,12 +441,24 @@ impl Repl {
                         // This is a heredoc command - read the multi-line content
                         match self.ui.read_command_heredoc(&delimiter, session_name, is_anonymous, self.config.ephemeral) {
                             Ok(content) => {
-                                // Reconstruct the full command with the heredoc content
-                                let full_command = format!("{} {}", command_part, content);
-                                
-                                // Parse and execute the reconstructed command
-                                if let Some(command) = self.command_parser.parse(&full_command) {
-                                    match self.handle_command(command).await {
+                                // Handle heredoc commands specially - don't reconstruct as single line
+                                // Instead, parse the command part and handle the content directly
+                                if let Some(command) = self.command_parser.parse(&command_part) {
+                                    // For commands that support heredoc, we need to modify them to accept the content
+                                    let modified_command = match command {
+                                        Command::System(_) => {
+                                            Command::System(content)
+                                        }
+                                        Command::PromptsSave(name, _) => {
+                                            Command::PromptsSave(name, Some(content))
+                                        }
+                                        _ => {
+                                            self.ui.print_error(&format!("Command '{}' does not support heredoc syntax", command_part));
+                                            continue;
+                                        }
+                                    };
+                                    
+                                    match self.handle_command(modified_command).await {
                                         Ok(should_continue) => {
                                             if !should_continue {
                                                 break;
@@ -457,7 +469,7 @@ impl Repl {
                                         }
                                     }
                                 } else {
-                                    self.ui.print_error(&format!("Invalid command after heredoc: '{}'. Type /help for available commands.", full_command));
+                                    self.ui.print_error(&format!("Invalid command: '{}'. Type /help for available commands.", command_part));
                                 }
                             }
                             Err(e) => {
