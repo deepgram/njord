@@ -814,8 +814,9 @@ impl UI {
         println!("  /models - List available models");
         println!("  /quit - Exit Njord");
         println!();
-        println!("For multi-line input, start with {{ and end with }} on its own line.");
-        println!("You can also use {{TAG and TAG}} for tagged blocks (e.g., {{python and python}}).");
+        println!("For multi-line input, you have two options:");
+        println!("  1. Legacy syntax: {{TAG and TAG}} (e.g., {{python and python}})");
+        println!("  2. Heredoc syntax: <<DELIMITER and DELIMITER (e.g., <<EOF and EOF)");
         println!();
         
         Ok(())
@@ -884,8 +885,11 @@ impl UI {
                         // Keep newlines intact for the LLM - don't replace with spaces
                         Ok(Some(input.to_string()))
                     } else if input.starts_with("{") {
-                        // Multi-line input mode
+                        // Multi-line input mode (legacy syntax)
                         self.read_multiline_input(input.to_string(), session_name, is_anonymous, ephemeral)
+                    } else if input.starts_with("<<") {
+                        // Heredoc multi-line input mode
+                        self.read_heredoc_input(input.to_string(), session_name, is_anonymous, ephemeral)
                     } else {
                         Ok(Some(input.to_string()))
                     }
@@ -984,6 +988,80 @@ impl UI {
         }
         
         None
+    }
+    
+    fn read_heredoc_input(&mut self, first_line: String, session_name: Option<&str>, is_anonymous: bool, ephemeral: bool) -> Result<Option<String>> {
+        // Parse the heredoc delimiter from the first line
+        let delimiter = self.parse_heredoc_delimiter(&first_line);
+        
+        if delimiter.is_empty() {
+            // Invalid heredoc syntax, treat as regular input
+            return Ok(Some(first_line));
+        }
+        
+        let mut lines = Vec::new();
+        
+        // Show helpful message about the expected end marker
+        println!("\x1b[2m(Heredoc mode - end with '{}' on its own line)\x1b[0m", delimiter);
+        
+        let session_prefix = if let Some(name) = session_name {
+            if is_anonymous {
+                // Show anonymous name in dimmed color (not bold)
+                let color = if ephemeral { "\x1b[1;33m" } else { "\x1b[1;32m" };
+                format!("[\x1b[2m{}\x1b[0m{}] ", name, color)
+            } else {
+                // User-specified name in normal color
+                format!("[{}] ", name)
+            }
+        } else if ephemeral {
+            "[ephemeral] ".to_string()
+        } else {
+            String::new()
+        };
+        let color = if ephemeral { "\x1b[1;33m" } else { "\x1b[1;32m" }; // Yellow for ephemeral, green default
+        
+        loop {
+            match self.editor.readline(&format!("{}{}... \x1b[0m", color, session_prefix)) {
+                Ok(line) => {
+                    let line = line.trim_end_matches('\n').trim_end_matches('\r');
+                    
+                    // Check for end delimiter
+                    if line.trim() == delimiter {
+                        break;
+                    }
+                    
+                    lines.push(line.to_string());
+                }
+                Err(ReadlineError::Interrupted) | Err(ReadlineError::Eof) => {
+                    break; // Exit heredoc mode on Ctrl-C or Ctrl-D
+                }
+                Err(e) => return Err(anyhow::anyhow!("Failed to read input: {}", e)),
+            }
+        }
+        
+        let full_input = lines.join("\n");
+        if full_input.trim().is_empty() {
+            Ok(None)
+        } else {
+            // Add heredoc input to persistent history
+            self.add_to_persistent_history(full_input.clone());
+            Ok(Some(full_input))
+        }
+    }
+    
+    fn parse_heredoc_delimiter(&self, line: &str) -> String {
+        let trimmed = line.trim();
+        
+        // Check for "<<DELIMITER" pattern
+        if let Some(delimiter_part) = trimmed.strip_prefix("<<") {
+            let delimiter = delimiter_part.trim();
+            // Any contiguous set of non-space characters is a valid delimiter
+            if !delimiter.contains(char::is_whitespace) && !delimiter.is_empty() {
+                return delimiter.to_string();
+            }
+        }
+        
+        String::new()
     }
     
     pub fn print_agent_prefix(&self, number: usize) {
@@ -1111,6 +1189,76 @@ impl UI {
         let count = self.input_history.len();
         let last_entry = self.input_history.get_entries().last().cloned();
         (count, last_entry)
+    }
+    
+    /// Check if a line contains a heredoc pattern and extract the command and delimiter
+    /// Returns (command_part, delimiter) if heredoc is detected, None otherwise
+    pub fn parse_command_heredoc(&self, line: &str) -> Option<(String, String)> {
+        let trimmed = line.trim();
+        
+        // Look for patterns like "/system <<EOF" or "/prompts save my-prompt <<DESC"
+        if let Some(heredoc_pos) = trimmed.find("<<") {
+            let command_part = trimmed[..heredoc_pos].trim().to_string();
+            let delimiter_part = trimmed[heredoc_pos + 2..].trim();
+            
+            // Validate that we have a command and a non-empty delimiter
+            if !command_part.is_empty() && !delimiter_part.is_empty() && !delimiter_part.contains(char::is_whitespace) {
+                return Some((command_part, delimiter_part.to_string()));
+            }
+        }
+        
+        None
+    }
+    
+    /// Read heredoc content for commands (like /system <<EOF)
+    pub fn read_command_heredoc(&mut self, delimiter: &str, session_name: Option<&str>, is_anonymous: bool, ephemeral: bool) -> Result<String> {
+        let mut lines = Vec::new();
+        
+        // Show helpful message about the expected end marker
+        println!("\x1b[2m(Heredoc mode - end with '{}' on its own line)\x1b[0m", delimiter);
+        
+        let session_prefix = if let Some(name) = session_name {
+            if is_anonymous {
+                // Show anonymous name in dimmed color (not bold)
+                let color = if ephemeral { "\x1b[1;33m" } else { "\x1b[1;32m" };
+                format!("[\x1b[2m{}\x1b[0m{}] ", name, color)
+            } else {
+                // User-specified name in normal color
+                format!("[{}] ", name)
+            }
+        } else if ephemeral {
+            "[ephemeral] ".to_string()
+        } else {
+            String::new()
+        };
+        let color = if ephemeral { "\x1b[1;33m" } else { "\x1b[1;32m" }; // Yellow for ephemeral, green default
+        
+        loop {
+            match self.editor.readline(&format!("{}{}... \x1b[0m", color, session_prefix)) {
+                Ok(line) => {
+                    let line = line.trim_end_matches('\n').trim_end_matches('\r');
+                    
+                    // Check for end delimiter
+                    if line.trim() == delimiter {
+                        break;
+                    }
+                    
+                    lines.push(line.to_string());
+                }
+                Err(ReadlineError::Interrupted) | Err(ReadlineError::Eof) => {
+                    break; // Exit heredoc mode on Ctrl-C or Ctrl-D
+                }
+                Err(e) => return Err(anyhow::anyhow!("Failed to read input: {}", e)),
+            }
+        }
+        
+        let content = lines.join("\n");
+        // Add heredoc input to persistent history (the full content, not individual lines)
+        if !content.trim().is_empty() {
+            self.add_to_persistent_history(content.clone());
+        }
+        
+        Ok(content)
     }
 
     pub fn start_spinner(&self, message: &str) -> SpinnerHandle {
