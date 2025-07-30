@@ -436,21 +436,51 @@ impl Repl {
                 self.interrupted_message = None;
                 
                 if input.starts_with('/') {
-                    // This is a command attempt
-                    if let Some(command) = self.command_parser.parse(&input) {
-                        match self.handle_command(command).await {
-                            Ok(should_continue) => {
-                                if !should_continue {
-                                    break;
+                    // Check if this is a heredoc command
+                    if let Some((command_part, delimiter)) = self.ui.parse_command_heredoc(&input) {
+                        // This is a heredoc command - read the multi-line content
+                        match self.ui.read_command_heredoc(&delimiter, session_name, is_anonymous, self.config.ephemeral) {
+                            Ok(content) => {
+                                // Reconstruct the full command with the heredoc content
+                                let full_command = format!("{} {}", command_part, content);
+                                
+                                // Parse and execute the reconstructed command
+                                if let Some(command) = self.command_parser.parse(&full_command) {
+                                    match self.handle_command(command).await {
+                                        Ok(should_continue) => {
+                                            if !should_continue {
+                                                break;
+                                            }
+                                        }
+                                        Err(e) => {
+                                            self.ui.print_error(&e.to_string());
+                                        }
+                                    }
+                                } else {
+                                    self.ui.print_error(&format!("Invalid command after heredoc: '{}'. Type /help for available commands.", full_command));
                                 }
                             }
                             Err(e) => {
-                                self.ui.print_error(&e.to_string());
+                                self.ui.print_error(&format!("Failed to read heredoc content: {}", e));
                             }
                         }
                     } else {
-                        // Invalid command
-                        self.ui.print_error(&format!("Invalid command: '{}'. Type /help for available commands.", input));
+                        // Regular command processing
+                        if let Some(command) = self.command_parser.parse(&input) {
+                            match self.handle_command(command).await {
+                                Ok(should_continue) => {
+                                    if !should_continue {
+                                        break;
+                                    }
+                                }
+                                Err(e) => {
+                                    self.ui.print_error(&e.to_string());
+                                }
+                            }
+                        } else {
+                            // Invalid command
+                            self.ui.print_error(&format!("Invalid command: '{}'. Type /help for available commands.", input));
+                        }
                     }
                 } else {
                     // Handle regular chat message
@@ -764,9 +794,11 @@ impl Repl {
                 // System Prompts & Library
                 println!("\x1b[1;36mSystem Prompts & Library:\x1b[0m");
                 println!("  /system [PROMPT] - Set system prompt (empty to view, 'clear' to remove)");
+                println!("    \x1b[1;32mEx:\x1b[0m /system <<EOF (multi-line with heredoc)");
                 println!("  /prompts list - List all saved system prompts");
                 println!("  /prompts show NAME - Display a specific prompt");
                 println!("  /prompts save NAME [CONTENT] - Save current or specified system prompt");
+                println!("    \x1b[1;32mEx:\x1b[0m /prompts save my-prompt <<DESC (multi-line with heredoc)");
                 println!("  /prompts apply NAME - Apply a saved prompt to current session");
                 println!("  /prompts delete NAME - Remove a saved prompt");
                 println!("  /prompts rename OLD_NAME NEW_NAME - Rename a prompt");
@@ -798,7 +830,8 @@ impl Repl {
                 
                 // Usage Tips
                 println!("\x1b[1;36mUsage Tips:\x1b[0m");
-                println!("  • Start with {{ for multi-line input (end with }} on its own line)");
+                println!("  • Multi-line input: {{TAG ... TAG}} or <<DELIMITER ... DELIMITER");
+                println!("  • Multi-line commands: /system <<EOF or /prompts save name <<DESC");
                 println!("  • Use {{{{VARIABLE_NAME}}}} in messages to reference loaded file content");
                 println!("  • Use #N for ephemeral session references (e.g., /chat load #1)");
                 println!("  • Quote session names with spaces (e.g., /chat load \"My Session\")");
