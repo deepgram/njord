@@ -822,7 +822,7 @@ impl UI {
         Ok(())
     }
     
-    pub fn read_input(&mut self, prompt_info: Option<(&str, &str)>, session_name: Option<&str>, is_anonymous: bool, ephemeral: bool) -> Result<Option<String>> {
+    pub fn read_input(&mut self, prompt_info: Option<(&str, &str)>, session_name: Option<&str>, is_anonymous: bool, ephemeral: bool, user_msg_number: Option<usize>) -> Result<Option<String>> {
         let (prompt, initial_input) = if let Some((message, status)) = prompt_info {
             let color = match status {
                 "retry" => "\x1b[1;33m", // Yellow for retry
@@ -842,7 +842,12 @@ impl UI {
             } else {
                 String::new()
             };
-            (format!("{}{}>>> ({}) \x1b[0m", color, session_prefix, status), message)
+            let user_prefix = if let Some(num) = user_msg_number {
+                format!("U{} ", num)
+            } else {
+                String::new()
+            };
+            (format!("{}{}{}>>> ({}) \x1b[0m", color, session_prefix, user_prefix, status), message)
         } else {
             let session_prefix = if let Some(name) = session_name {
                 if is_anonymous {
@@ -859,7 +864,12 @@ impl UI {
                 String::new()
             };
             let color = if ephemeral { "\x1b[1;33m" } else { "\x1b[1;32m" }; // Yellow for ephemeral, green default
-            (format!("{}{}>>> \x1b[0m", color, session_prefix), "")
+            let user_prefix = if let Some(num) = user_msg_number {
+                format!("U{} ", num)
+            } else {
+                String::new()
+            };
+            (format!("{}{}{}>>> \x1b[0m", color, session_prefix, user_prefix), "")
         };
         
         match self.editor.readline_with_initial(&prompt, (initial_input, "")) {
@@ -907,7 +917,7 @@ impl UI {
         }
     }
     
-    fn read_multiline_input(&mut self, first_line: String, session_name: Option<&str>, is_anonymous: bool, ephemeral: bool) -> Result<Option<String>> {
+    fn read_multiline_input(&mut self, first_line: String, session_name: Option<&str>, is_anonymous: bool, ephemeral: bool, user_msg_number: Option<usize>) -> Result<Option<String>> {
         // Parse the opening tag from the first line
         let tag = self.parse_opening_tag(&first_line);
         let end_marker = if let Some(ref tag_name) = tag {
@@ -940,9 +950,14 @@ impl UI {
             String::new()
         };
         let color = if ephemeral { "\x1b[1;33m" } else { "\x1b[1;32m" }; // Yellow for ephemeral, green default
+        let user_prefix = if let Some(num) = user_msg_number {
+            format!("U{} ", num)
+        } else {
+            String::new()
+        };
         
         loop {
-            match self.editor.readline(&format!("{}{}... \x1b[0m", color, session_prefix)) {
+            match self.editor.readline(&format!("{}{}{}... \x1b[0m", color, session_prefix, user_prefix)) {
                 Ok(line) => {
                     let line = line.trim_end_matches('\n').trim_end_matches('\r');
                     
@@ -990,7 +1005,7 @@ impl UI {
         None
     }
     
-    fn read_heredoc_input(&mut self, first_line: String, session_name: Option<&str>, is_anonymous: bool, ephemeral: bool) -> Result<Option<String>> {
+    fn read_heredoc_input(&mut self, first_line: String, session_name: Option<&str>, is_anonymous: bool, ephemeral: bool, user_msg_number: Option<usize>) -> Result<Option<String>> {
         // Parse the heredoc delimiter from the first line
         let delimiter = self.parse_heredoc_delimiter(&first_line);
         
@@ -1019,9 +1034,14 @@ impl UI {
             String::new()
         };
         let color = if ephemeral { "\x1b[1;33m" } else { "\x1b[1;32m" }; // Yellow for ephemeral, green default
+        let user_prefix = if let Some(num) = user_msg_number {
+            format!("U{} ", num)
+        } else {
+            String::new()
+        };
         
         loop {
-            match self.editor.readline(&format!("{}{}... \x1b[0m", color, session_prefix)) {
+            match self.editor.readline(&format!("{}{}{}... \x1b[0m", color, session_prefix, user_prefix)) {
                 Ok(line) => {
                     let line = line.trim_end_matches('\n').trim_end_matches('\r');
                     
@@ -1211,7 +1231,7 @@ impl UI {
     }
     
     /// Read heredoc content for commands (like /system <<EOF)
-    pub fn read_command_heredoc(&mut self, delimiter: &str, session_name: Option<&str>, is_anonymous: bool, ephemeral: bool) -> Result<String> {
+    pub fn read_command_heredoc(&mut self, delimiter: &str, session_name: Option<&str>, is_anonymous: bool, ephemeral: bool, user_msg_number: Option<usize>) -> Result<String> {
         let mut lines = Vec::new();
         
         // Show helpful message about the expected end marker
@@ -1232,9 +1252,14 @@ impl UI {
             String::new()
         };
         let color = if ephemeral { "\x1b[1;33m" } else { "\x1b[1;32m" }; // Yellow for ephemeral, green default
+        let user_prefix = if let Some(num) = user_msg_number {
+            format!("U{} ", num)
+        } else {
+            String::new()
+        };
         
         loop {
-            match self.editor.readline(&format!("{}{}... \x1b[0m", color, session_prefix)) {
+            match self.editor.readline(&format!("{}{}{}... \x1b[0m", color, session_prefix, user_prefix)) {
                 Ok(line) => {
                     let line = line.trim_end_matches('\n').trim_end_matches('\r');
                     

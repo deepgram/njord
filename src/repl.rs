@@ -414,7 +414,14 @@ impl Repl {
                 }
             };
             
-            if let Some(input) = self.ui.read_input(prompt_message, session_name, is_anonymous, self.config.ephemeral)? {
+            // Get the next user message number for the prompt
+            let user_msg_number = if self.session.messages.is_empty() {
+                Some(1) // First message
+            } else {
+                Some(self.session.get_next_user_message_number())
+            };
+            
+            if let Some(input) = self.ui.read_input(prompt_message, session_name, is_anonymous, self.config.ephemeral, user_msg_number)? {
                 // Handle Ctrl-C signal
                 if input == "__CTRL_C__" {
                     // Cancel any active request
@@ -439,7 +446,7 @@ impl Repl {
                     // Check if this is a heredoc command
                     if let Some((command_part, delimiter)) = self.ui.parse_command_heredoc(&input) {
                         // This is a heredoc command - read the multi-line content
-                        match self.ui.read_command_heredoc(&delimiter, session_name, is_anonymous, self.config.ephemeral) {
+                        match self.ui.read_command_heredoc(&delimiter, session_name, is_anonymous, self.config.ephemeral, user_msg_number) {
                             Ok(content) => {
                                 // Handle heredoc commands specially - don't reconstruct as single line
                                 // Instead, parse the command part and handle the content directly
@@ -1941,7 +1948,7 @@ impl Repl {
                     self.ui.print_info("⚠️  Execute this code? This will run the code on your system!");
                     self.ui.print_info("Type 'yes' to execute, anything else to cancel:");
                     
-                    if let Some(confirmation) = self.ui.read_input(None, None, false, self.config.ephemeral)? {
+                    if let Some(confirmation) = self.ui.read_input(None, None, false, self.config.ephemeral, None)? {
                         if confirmation.trim().to_lowercase() == "yes" {
                             self.execute_code_block(block)?;
                         } else {
@@ -2157,7 +2164,7 @@ impl Repl {
                     println!();
                     self.ui.print_info("Enter new content (use {{ and }} for multi-line input):");
                     
-                    if let Some(new_content) = self.ui.read_input(None, None, false, self.config.ephemeral)? {
+                    if let Some(new_content) = self.ui.read_input(None, None, false, self.config.ephemeral, None)? {
                         if !new_content.trim().is_empty() {
                             match self.prompts.update_prompt_content(&name, new_content) {
                                 Ok(true) => {

@@ -216,6 +216,12 @@ impl ChatSession {
             variable_bindings: self.variable_bindings.clone(), // Copy variable bindings
         }
     }
+    
+    pub fn get_next_user_message_number(&self) -> usize {
+        self.messages.iter()
+            .filter(|msg| msg.message.role == "user")
+            .count() + 1
+    }
 }
 
 #[cfg(test)]
