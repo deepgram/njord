@@ -843,7 +843,7 @@ impl UI {
                 String::new()
             };
             let user_prefix = if let Some(num) = user_msg_number {
-                format!("U{} ", num)
+                format!("{} ", num)
             } else {
                 String::new()
             };
@@ -865,7 +865,7 @@ impl UI {
             };
             let color = if ephemeral { "\x1b[1;33m" } else { "\x1b[1;32m" }; // Yellow for ephemeral, green default
             let user_prefix = if let Some(num) = user_msg_number {
-                format!("U{} ", num)
+                format!("{} ", num)
             } else {
                 String::new()
             };
@@ -951,7 +951,7 @@ impl UI {
         };
         let color = if ephemeral { "\x1b[1;33m" } else { "\x1b[1;32m" }; // Yellow for ephemeral, green default
         let user_prefix = if let Some(num) = user_msg_number {
-            format!("U{} ", num)
+            format!("{} ", num)
         } else {
             String::new()
         };
@@ -1035,7 +1035,7 @@ impl UI {
         };
         let color = if ephemeral { "\x1b[1;33m" } else { "\x1b[1;32m" }; // Yellow for ephemeral, green default
         let user_prefix = if let Some(num) = user_msg_number {
-            format!("U{} ", num)
+            format!("{} ", num)
         } else {
             String::new()
         };
@@ -1253,7 +1253,7 @@ impl UI {
         };
         let color = if ephemeral { "\x1b[1;33m" } else { "\x1b[1;32m" }; // Yellow for ephemeral, green default
         let user_prefix = if let Some(num) = user_msg_number {
-            format!("U{} ", num)
+            format!("{} ", num)
         } else {
             String::new()
         };
