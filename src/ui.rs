@@ -896,10 +896,10 @@ impl UI {
                         Ok(Some(input.to_string()))
                     } else if input.starts_with("{") {
                         // Multi-line input mode (legacy syntax)
-                        self.read_multiline_input(input.to_string(), session_name, is_anonymous, ephemeral)
+                        self.read_multiline_input(input.to_string(), session_name, is_anonymous, ephemeral, user_msg_number)
                     } else if input.starts_with("<<") {
                         // Heredoc multi-line input mode
-                        self.read_heredoc_input(input.to_string(), session_name, is_anonymous, ephemeral)
+                        self.read_heredoc_input(input.to_string(), session_name, is_anonymous, ephemeral, user_msg_number)
                     } else {
                         Ok(Some(input.to_string()))
                     }
