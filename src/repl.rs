@@ -659,19 +659,6 @@ impl Repl {
             .count() + 1
     }
     
-    fn get_message_number_for_agent(&self, agent_number: usize) -> Option<usize> {
-        let mut agent_count = 0;
-        for (i, msg) in self.session.messages.iter().enumerate() {
-            if msg.message.role == "assistant" {
-                agent_count += 1;
-                if agent_count == agent_number {
-                    return Some(i + 1);
-                }
-            }
-        }
-        None
-    }
-    
     fn get_user_message_by_number(&self, user_number: usize) -> Option<(usize, String)> {
         let mut user_count = 0;
         for (i, msg) in self.session.messages.iter().enumerate() {
