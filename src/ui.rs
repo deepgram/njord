@@ -624,7 +624,9 @@ impl NjordCompleter {
                 return self.context.variable_names.iter()
                     .filter(|var_name| var_name.starts_with(partial_var))
                     .map(|var_name| {
-                        let completion = format!("{}}}}}", var_name);
+                        // Only complete the remaining part of the variable name
+                        let remaining = &var_name[partial_var.len()..];
+                        let completion = format!("{}}}}}", remaining);
                         Pair {
                             display: format!("{{{{{}}}}}", var_name),
                             replacement: completion,
