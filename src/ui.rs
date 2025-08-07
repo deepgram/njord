@@ -872,6 +872,11 @@ impl UI {
             (format!("{}{}{}>>> \x1b[0m", color, session_prefix, user_prefix), "")
         };
         
+        // Check if initial_input is multiline - if so, handle it specially
+        if initial_input.contains('\n') {
+            return self.handle_multiline_history_entry(initial_input, &prompt, session_name, is_anonymous, ephemeral, user_msg_number);
+        }
+        
         match self.editor.readline_with_initial(&prompt, (initial_input, "")) {
             Ok(line) => {
                 let input = line.trim();
@@ -1188,6 +1193,117 @@ impl UI {
         
         // Print closing fence
         println!("\x1b[0;36m```\x1b[0m");
+    }
+    
+    fn handle_multiline_history_entry(&mut self, multiline_input: &str, prompt: &str, session_name: Option<&str>, is_anonymous: bool, ephemeral: bool, user_msg_number: Option<usize>) -> Result<Option<String>> {
+        // Display the multiline content with line numbers for clarity
+        println!("\x1b[1;33mMultiline history entry:\x1b[0m");
+        for (i, line) in multiline_input.lines().enumerate() {
+            println!("\x1b[2m{:3}:\x1b[0m {}", i + 1, line);
+        }
+        println!();
+        
+        // Ask user what they want to do
+        println!("Options:");
+        println!("  \x1b[1mEnter\x1b[0m - Use this multiline input as-is");
+        println!("  \x1b[1me\x1b[0m - Edit in multiline mode");
+        println!("  \x1b[1mEsc/Ctrl-C\x1b[0m - Cancel and return to normal input");
+        println!();
+        
+        match self.editor.readline("Choose action (Enter/e/Esc): ") {
+            Ok(choice) => {
+                let choice = choice.trim().to_lowercase();
+                match choice.as_str() {
+                    "" => {
+                        // User pressed Enter - use the multiline input as-is
+                        Ok(Some(multiline_input.to_string()))
+                    }
+                    "e" | "edit" => {
+                        // Enter edit mode - start with the existing content
+                        self.edit_multiline_content(multiline_input, session_name, is_anonymous, ephemeral, user_msg_number)
+                    }
+                    _ => {
+                        // Any other input - cancel and return to normal prompt
+                        println!("Cancelled. Returning to normal input.");
+                        self.read_input(None, session_name, is_anonymous, ephemeral, user_msg_number)
+                    }
+                }
+            }
+            Err(ReadlineError::Interrupted) | Err(ReadlineError::Eof) => {
+                // User cancelled - return to normal input
+                println!("Cancelled. Returning to normal input.");
+                self.read_input(None, session_name, is_anonymous, ephemeral, user_msg_number)
+            }
+            Err(err) => Err(anyhow::anyhow!("Failed to read choice: {}", err)),
+        }
+    }
+    
+    fn edit_multiline_content(&mut self, initial_content: &str, session_name: Option<&str>, is_anonymous: bool, ephemeral: bool, user_msg_number: Option<usize>) -> Result<Option<String>> {
+        println!("\x1b[1;33mEntering multiline edit mode.\x1b[0m");
+        println!("\x1b[2mType your content. End with a line containing only '}}' to finish.\x1b[0m");
+        println!();
+        
+        let mut lines: Vec<String> = initial_content.lines().map(|s| s.to_string()).collect();
+        
+        // Display current content with line numbers
+        for (i, line) in lines.iter().enumerate() {
+            println!("\x1b[2m{:3}:\x1b[0m {}", i + 1, line);
+        }
+        println!();
+        
+        let session_prefix = if let Some(name) = session_name {
+            if is_anonymous {
+                // Show anonymous name in dimmed color (not bold)
+                let color = if ephemeral { "\x1b[1;33m" } else { "\x1b[1;32m" };
+                format!("[\x1b[2m{}\x1b[0m{}] ", name, color)
+            } else {
+                // User-specified name in normal color
+                format!("[{}] ", name)
+            }
+        } else if ephemeral {
+            "[ephemeral] ".to_string()
+        } else {
+            String::new()
+        };
+        let color = if ephemeral { "\x1b[1;33m" } else { "\x1b[1;32m" }; // Yellow for ephemeral, green default
+        let user_prefix = if let Some(num) = user_msg_number {
+            format!("{} ", num)
+        } else {
+            String::new()
+        };
+        
+        // Clear existing lines and start fresh
+        lines.clear();
+        
+        loop {
+            match self.editor.readline(&format!("{}{}{}... \x1b[0m", color, session_prefix, user_prefix)) {
+                Ok(line) => {
+                    let line = line.trim_end_matches('\n').trim_end_matches('\r');
+                    
+                    // Check for end marker
+                    if line.trim() == "}}" {
+                        break;
+                    }
+                    
+                    lines.push(line.to_string());
+                }
+                Err(ReadlineError::Interrupted) | Err(ReadlineError::Eof) => {
+                    // User cancelled - return the original content
+                    println!("Edit cancelled. Using original content.");
+                    return Ok(Some(initial_content.to_string()));
+                }
+                Err(e) => return Err(anyhow::anyhow!("Failed to read input: {}", e)),
+            }
+        }
+        
+        let edited_content = lines.join("\n");
+        if edited_content.trim().is_empty() {
+            Ok(None)
+        } else {
+            // Add edited content to persistent history
+            self.add_to_persistent_history(edited_content.clone());
+            Ok(Some(edited_content))
+        }
     }
     
     fn add_to_persistent_history(&mut self, input: String) {
