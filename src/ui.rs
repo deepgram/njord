@@ -872,11 +872,6 @@ impl UI {
             (format!("{}{}{}>>> \x1b[0m", color, session_prefix, user_prefix), "")
         };
         
-        // Check if initial_input is multiline - if so, handle it specially
-        if initial_input.contains('\n') {
-            return self.handle_multiline_history_entry(initial_input, &prompt, session_name, is_anonymous, ephemeral, user_msg_number);
-        }
-        
         match self.editor.readline_with_initial(&prompt, (initial_input, "")) {
             Ok(line) => {
                 let input = line.trim();
@@ -892,13 +887,20 @@ impl UI {
                     self.editor.add_history_entry(&line)?;
                     self.add_to_persistent_history(line.clone());
                     
-                    // Check if input contains newlines (paste detection)
+                    // Check if input contains newlines (paste detection or history recall)
                     if input.contains('\n') {
-                        let line_count = input.lines().count();
-                        println!("\x1b[1;33mDetected multi-line paste ({} lines). Processing as single message.\x1b[0m", line_count);
-                        
-                        // Keep newlines intact for the LLM - don't replace with spaces
-                        Ok(Some(input.to_string()))
+                        // Check if this is from history (initial_input was multiline) vs new paste
+                        if initial_input.contains('\n') && input == initial_input {
+                            // This is a multiline history entry that user recalled and didn't modify
+                            return self.handle_multiline_history_entry(initial_input, &prompt, session_name, is_anonymous, ephemeral, user_msg_number);
+                        } else {
+                            // This is either a paste or modified multiline input
+                            let line_count = input.lines().count();
+                            println!("\x1b[1;33mDetected multi-line input ({} lines). Processing as single message.\x1b[0m", line_count);
+                            
+                            // Keep newlines intact for the LLM - don't replace with spaces
+                            Ok(Some(input.to_string()))
+                        }
                     } else if input.starts_with("{") {
                         // Multi-line input mode (legacy syntax)
                         self.read_multiline_input(input.to_string(), session_name, is_anonymous, ephemeral, user_msg_number)
