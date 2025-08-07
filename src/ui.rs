@@ -1016,6 +1016,17 @@ impl UI {
         
         let mut lines = Vec::new();
         
+        // Check if there's content after the delimiter on the first line
+        let trimmed = first_line.trim();
+        if let Some(delimiter_part) = trimmed.strip_prefix("<<") {
+            // Look for content after the delimiter
+            let after_delimiter = delimiter_part.strip_prefix(&delimiter).unwrap_or("");
+            if !after_delimiter.trim().is_empty() {
+                // There's content after the delimiter, add it as the first line
+                lines.push(after_delimiter.trim().to_string());
+            }
+        }
+        
         // Show helpful message about the expected end marker
         println!("\x1b[2m(Heredoc mode - end with '{}' on its own line)\x1b[0m", delimiter);
         
@@ -1074,7 +1085,8 @@ impl UI {
         
         // Check for "<<DELIMITER" pattern
         if let Some(delimiter_part) = trimmed.strip_prefix("<<") {
-            let delimiter = delimiter_part.trim();
+            // Split on whitespace to get just the delimiter (first word after <<)
+            let delimiter = delimiter_part.split_whitespace().next().unwrap_or("").trim();
             // Any contiguous set of non-space characters is a valid delimiter
             if !delimiter.contains(char::is_whitespace) && !delimiter.is_empty() {
                 return delimiter.to_string();
