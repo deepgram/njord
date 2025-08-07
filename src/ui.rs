@@ -962,7 +962,7 @@ impl UI {
         };
         
         loop {
-            match self.editor.readline(&format!("{}{}... \x1b[0m", color, session_prefix, user_prefix)) {
+            match self.editor.readline(&format!("{}{}{}... \x1b[0m", color, session_prefix, user_prefix)) {
                 Ok(line) => {
                     let line = line.trim_end_matches('\n').trim_end_matches('\r');
                     
@@ -1209,7 +1209,7 @@ impl UI {
         println!("\x1b[0;36m```\x1b[0m");
     }
     
-    fn handle_multiline_history_entry(&mut self, multiline_input: &str, prompt: &str, session_name: Option<&str>, is_anonymous: bool, ephemeral: bool, user_msg_number: Option<usize>) -> Result<Option<String>> {
+    fn handle_multiline_history_entry(&mut self, multiline_input: &str, _prompt: &str, session_name: Option<&str>, is_anonymous: bool, ephemeral: bool, user_msg_number: Option<usize>) -> Result<Option<String>> {
         // Display the multiline content with line numbers for clarity
         println!("\x1b[1;33mMultiline history entry:\x1b[0m");
         for (i, line) in multiline_input.lines().enumerate() {
