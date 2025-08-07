@@ -81,9 +81,7 @@ impl PromptLibrary {
             for (name, prompt) in disk_version.prompts {
                 // Only add prompts from disk that we don't have locally
                 // Our local changes take precedence
-                if !merged.prompts.contains_key(&name) {
-                    merged.prompts.insert(name, prompt);
-                }
+                merged.prompts.entry(name).or_insert(prompt);
             }
         }
         

@@ -176,11 +176,11 @@ impl CommandParser {
         let args = args.trim();
         
         // Handle quoted first argument
-        if args.starts_with('"') {
+        if let Some(stripped) = args.strip_prefix('"') {
             // Find the closing quote
-            if let Some(end_quote) = args[1..].find('"') {
-                let filename = args[1..end_quote + 1].to_string();
-                let remaining = args[end_quote + 2..].trim();
+            if let Some(end_quote) = stripped.find('"') {
+                let filename = stripped[..end_quote].to_string();
+                let remaining = stripped[end_quote + 1..].trim();
                 if remaining.is_empty() {
                     (filename, None)
                 } else {
@@ -337,11 +337,11 @@ impl CommandParser {
                     (name, None)
                 } else {
                     // Handle quoted content
-                    if remaining.starts_with('"') {
+                    if let Some(content_stripped) = remaining.strip_prefix('"') {
                         // Find the proper closing quote for content, handling escaped quotes
                         let mut content_end_quote_pos = None;
-                        let mut j = 1; // Start after opening quote
-                        let remaining_chars: Vec<char> = remaining.chars().collect();
+                        let mut j = 0; // Start from beginning of stripped content
+                        let remaining_chars: Vec<char> = content_stripped.chars().collect();
                         
                         while j < remaining_chars.len() {
                             if remaining_chars[j] == '\\' && j + 1 < remaining_chars.len() {
@@ -357,11 +357,11 @@ impl CommandParser {
                         }
                         
                         if let Some(content_end_quote) = content_end_quote_pos {
-                            let content = remaining[1..content_end_quote].replace("\\\"", "\"");
+                            let content = content_stripped[..content_end_quote].replace("\\\"", "\"");
                             (name, Some(content))
                         } else {
                             // Unclosed quote in content - take everything after the quote and unescape
-                            let content = remaining[1..].replace("\\\"", "\"");
+                            let content = content_stripped.replace("\\\"", "\"");
                             (name, Some(content))
                         }
                     } else {

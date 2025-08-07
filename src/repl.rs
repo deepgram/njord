@@ -2562,9 +2562,7 @@ impl Repl {
                             }
                             
                             // Check if we should return early due to cancellation
-                            if let Err(e) = stream_result {
-                                return Err(e);
-                            }
+                            stream_result?;
                             
                             if stream_error {
                                 if attempt < max_retries {
