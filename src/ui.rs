@@ -962,7 +962,7 @@ impl UI {
         };
         
         loop {
-            match self.editor.readline(&format!("{}{}{}... \x1b[0m", color, session_prefix, user_prefix)) {
+            match self.editor.readline(&format!("{}{}... \x1b[0m", color, session_prefix, user_prefix)) {
                 Ok(line) => {
                     let line = line.trim_end_matches('\n').trim_end_matches('\r');
                     
@@ -973,8 +973,15 @@ impl UI {
                     
                     lines.push(line.to_string());
                 }
-                Err(ReadlineError::Interrupted) | Err(ReadlineError::Eof) => {
-                    break; // Exit multi-line mode on Ctrl-C or Ctrl-D
+                Err(ReadlineError::Interrupted) => {
+                    // Ctrl-C pressed - cancel multiline input and return special signal
+                    println!("\x1b[2m(Multiline input cancelled)\x1b[0m");
+                    return Ok(Some("__CTRL_C__".to_string()));
+                }
+                Err(ReadlineError::Eof) => {
+                    // Ctrl-D pressed - cancel multiline input
+                    println!("\x1b[2m(Multiline input cancelled)\x1b[0m");
+                    return Ok(None);
                 }
                 Err(e) => return Err(anyhow::anyhow!("Failed to read input: {}", e)),
             }
@@ -1068,8 +1075,15 @@ impl UI {
                     
                     lines.push(line.to_string());
                 }
-                Err(ReadlineError::Interrupted) | Err(ReadlineError::Eof) => {
-                    break; // Exit heredoc mode on Ctrl-C or Ctrl-D
+                Err(ReadlineError::Interrupted) => {
+                    // Ctrl-C pressed - cancel heredoc input and return special signal
+                    println!("\x1b[2m(Heredoc input cancelled)\x1b[0m");
+                    return Ok(Some("__CTRL_C__".to_string()));
+                }
+                Err(ReadlineError::Eof) => {
+                    // Ctrl-D pressed - cancel heredoc input
+                    println!("\x1b[2m(Heredoc input cancelled)\x1b[0m");
+                    return Ok(None);
                 }
                 Err(e) => return Err(anyhow::anyhow!("Failed to read input: {}", e)),
             }
@@ -1287,10 +1301,15 @@ impl UI {
                     
                     lines.push(line.to_string());
                 }
-                Err(ReadlineError::Interrupted) | Err(ReadlineError::Eof) => {
-                    // User cancelled - return the original content
-                    println!("Edit cancelled. Using original content.");
-                    return Ok(Some(initial_content.to_string()));
+                Err(ReadlineError::Interrupted) => {
+                    // Ctrl-C pressed - cancel edit and return special signal
+                    println!("\x1b[2m(Edit cancelled)\x1b[0m");
+                    return Ok(Some("__CTRL_C__".to_string()));
+                }
+                Err(ReadlineError::Eof) => {
+                    // Ctrl-D pressed - cancel edit and return to normal input
+                    println!("\x1b[2m(Edit cancelled)\x1b[0m");
+                    return Ok(None);
                 }
                 Err(e) => return Err(anyhow::anyhow!("Failed to read input: {}", e)),
             }
@@ -1398,8 +1417,15 @@ impl UI {
                     
                     lines.push(line.to_string());
                 }
-                Err(ReadlineError::Interrupted) | Err(ReadlineError::Eof) => {
-                    break; // Exit heredoc mode on Ctrl-C or Ctrl-D
+                Err(ReadlineError::Interrupted) => {
+                    // Ctrl-C pressed - cancel command heredoc input
+                    println!("\x1b[2m(Command heredoc input cancelled)\x1b[0m");
+                    return Err(anyhow::anyhow!("Input cancelled by user"));
+                }
+                Err(ReadlineError::Eof) => {
+                    // Ctrl-D pressed - cancel command heredoc input
+                    println!("\x1b[2m(Command heredoc input cancelled)\x1b[0m");
+                    return Err(anyhow::anyhow!("Input cancelled by user"));
                 }
                 Err(e) => return Err(anyhow::anyhow!("Failed to read input: {}", e)),
             }
