@@ -672,6 +672,19 @@ impl Repl {
         None
     }
     
+    fn get_user_message_by_number(&self, user_number: usize) -> Option<(usize, String)> {
+        let mut user_count = 0;
+        for (i, msg) in self.session.messages.iter().enumerate() {
+            if msg.message.role == "user" {
+                user_count += 1;
+                if user_count == user_number {
+                    return Some((i, msg.message.content.clone()));
+                }
+            }
+        }
+        None
+    }
+    
     fn get_agent_message(&self, agent_number: Option<usize>) -> Option<&str> {
         let target_number = agent_number.unwrap_or_else(|| {
             // Get the most recent agent message number
@@ -773,7 +786,7 @@ impl Repl {
                 println!("\x1b[1;36mMessage Navigation:\x1b[0m");
                 println!("  /history - Show conversation history");
                 println!("  /undo [N] - Undo last N agent responses (restores user message for editing)");
-                println!("  /goto N - Jump back to Agent N (removes later messages)");
+                println!("  /goto N - Jump back to User N (removes later messages and queues user message for editing)");
                 println!("  /search TERM - Search through chat history");
                 println!("  /retry - Regenerate last response");
                 println!("  /edit N - Edit and resend message N");
@@ -1700,39 +1713,27 @@ impl Repl {
                     }
                 }
             }
-            Command::Goto(agent_number) => {
-                // Convert agent number to message number
-                if let Some(message_number) = self.get_message_number_for_agent(agent_number) {
-                    let removed_count = self.session.messages.len().saturating_sub(message_number);
+            Command::Goto(user_number) => {
+                // Find the user message with the given number
+                if let Some((message_index, user_message)) = self.get_user_message_by_number(user_number) {
+                    let removed_count = self.session.messages.len().saturating_sub(message_index);
                     
-                    // Before jumping, check if there's a user message after this agent message
-                    let user_message_to_stage = if message_number < self.session.messages.len() {
-                        // Look for the next user message after this agent message
-                        self.session.messages.iter()
-                            .skip(message_number)
-                            .find(|msg| msg.message.role == "user")
-                            .map(|msg| msg.message.content.clone())
-                    } else {
-                        None
-                    };
-                    
-                    match self.session.goto(message_number) {
+                    // Jump to just before this user message (so it gets queued for editing)
+                    match self.session.goto(message_index) {
                         Ok(()) => {
-                            self.ui.print_info(&format!("Jumped to Agent {}, removed {} later messages", 
-                                agent_number, removed_count));
+                            self.ui.print_info(&format!("Jumped to User {}, removed {} later messages", 
+                                user_number, removed_count));
                             
-                            // Stage the user message if we found one
-                            if let Some(user_msg) = user_message_to_stage {
-                                self.queued_message = Some(user_msg);
-                                self.ui.print_info("User message staged for editing - press Enter to modify and resend");
-                            }
+                            // Queue the user message for editing
+                            self.queued_message = Some(user_message);
+                            self.ui.print_info("User message staged for editing - press Enter to modify and resend");
                         }
                         Err(e) => {
                             self.ui.print_error(&e.to_string());
                         }
                     }
                 } else {
-                    self.ui.print_error(&format!("Agent {} not found", agent_number));
+                    self.ui.print_error(&format!("User {} not found", user_number));
                 }
             }
             Command::System(prompt) => {
