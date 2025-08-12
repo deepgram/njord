@@ -60,6 +60,11 @@ mod tests {
         assert_eq!(get_provider_for_model("o3-pro"), Some("openai"));
         assert_eq!(get_provider_for_model("o4-mini"), Some("openai"));
         
+        // Test GPT-5 models
+        assert_eq!(get_provider_for_model("gpt-5"), Some("openai"));
+        assert_eq!(get_provider_for_model("gpt-5-mini"), Some("openai"));
+        assert_eq!(get_provider_for_model("gpt-5-nano"), Some("openai"));
+        
         // Test Anthropic models
         assert_eq!(get_provider_for_model("claude-sonnet-4-20250514"), Some("anthropic"));
         assert_eq!(get_provider_for_model("claude-opus-4-20250514"), Some("anthropic"));
@@ -117,6 +122,17 @@ mod tests {
         assert_eq!(request.thinking_budget, 5000);
         assert!(request.stream);
         assert!(!request.thinking);
+    }
+
+    #[test]
+    fn test_openai_provider_includes_gpt5_models() {
+        // Test that OpenAI provider includes GPT-5 models in its model list
+        let provider = openai::OpenAIProvider::new("test-key").unwrap();
+        let models = provider.get_models();
+        
+        assert!(models.contains(&"gpt-5".to_string()));
+        assert!(models.contains(&"gpt-5-mini".to_string()));
+        assert!(models.contains(&"gpt-5-nano".to_string()));
     }
 }
 
