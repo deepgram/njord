@@ -82,7 +82,9 @@ impl OpenAIProvider {
     
     pub fn supports_temperature(&self, model: &str) -> bool {
         // Models that don't support custom temperature
-        !matches!(model, "o4-mini" | "o3-pro" | "o1-pro") && !self.is_reasoning_model(model)
+        !matches!(model, "o4-mini" | "o3-pro" | "o1-pro") && 
+        !self.is_reasoning_model(model) && 
+        !model.starts_with("gpt-5")
     }
     
     #[allow(dead_code)]
@@ -281,6 +283,9 @@ impl LLMProvider for OpenAIProvider {
     
     fn get_models(&self) -> Vec<String> {
         vec![
+            "gpt-5".to_string(),
+            "gpt-5-mini".to_string(),
+            "gpt-5-nano".to_string(),
             "o3-pro".to_string(),
             "o3".to_string(),
             "o4-mini".to_string(),

@@ -7,7 +7,7 @@ Named after the Norse god of the sea and sailors, Njord guides you through the v
 ## Features
 
 ### 🤖 Multi-Provider AI Support
-- **OpenAI**: Latest models including o3-pro, o3, o4-mini, gpt-4.1 series with reasoning model support
+- **OpenAI**: Latest models including gpt-5, gpt-5-mini, gpt-5-nano, o3-pro, o3, o4-mini, gpt-4.1 series with reasoning model support
 - **Anthropic**: Claude 4 and 3.x models (Sonnet, Opus, Haiku) with thinking mode support
 - **Google Gemini**: Gemini 2.5 Pro, Flash, and Flash Lite models
 - **Smart Model Detection**: Automatic provider switching based on model selection
@@ -287,6 +287,9 @@ njord --help
 ## Supported Models
 
 ### OpenAI
+- `gpt-5` (latest GPT-5 model)
+- `gpt-5-mini` (compact GPT-5 model)
+- `gpt-5-nano` (lightweight GPT-5 model)
 - `o3-pro` (latest reasoning model)
 - `o3` (reasoning model)
 - `o4-mini` (fast reasoning model)
