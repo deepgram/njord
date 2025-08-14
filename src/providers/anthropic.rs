@@ -74,6 +74,7 @@ impl AnthropicProvider {
     pub fn supports_thinking(&self, model: &str) -> bool {
         // Models that support thinking
         matches!(model, 
+            "claude-opus-4-1-20250805" |
             "claude-opus-4-20250514" | 
             "claude-sonnet-4-20250514" | 
             "claude-3-7-sonnet-20250219"
@@ -319,6 +320,7 @@ impl LLMProvider for AnthropicProvider {
     
     fn get_models(&self) -> Vec<String> {
         vec![
+            "claude-opus-4-1-20250805".to_string(),
             "claude-sonnet-4-20250514".to_string(),
             "claude-opus-4-20250514".to_string(),
             "claude-3-7-sonnet-20250219".to_string(),
