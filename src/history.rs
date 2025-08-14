@@ -10,10 +10,35 @@ use crate::session::ChatSession;
 pub struct History {
     pub current_session: Option<ChatSession>,
     pub saved_sessions: HashMap<String, ChatSession>,
+    #[serde(default)]
+    pub default_preferences: DefaultPreferences,
     #[serde(skip)]
     pub history_file_path: String,
     #[serde(skip)]
     pub removed_sessions: std::collections::HashSet<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DefaultPreferences {
+    pub model: Option<String>,
+    pub temperature: Option<f32>,
+    pub max_tokens: Option<u32>,
+    pub thinking_budget: Option<u32>,
+    pub thinking: Option<bool>,
+    pub system_prompt: Option<String>,
+}
+
+impl Default for DefaultPreferences {
+    fn default() -> Self {
+        Self {
+            model: None,
+            temperature: None,
+            max_tokens: None,
+            thinking_budget: None,
+            thinking: None,
+            system_prompt: None,
+        }
+    }
 }
 
 impl History {
@@ -21,6 +46,7 @@ impl History {
         Self {
             current_session: None,
             saved_sessions: HashMap::new(),
+            default_preferences: DefaultPreferences::default(),
             history_file_path,
             removed_sessions: std::collections::HashSet::new(),
         }
@@ -221,6 +247,46 @@ impl History {
                 }
             })
             .collect()
+    }
+    
+    // Default preferences management
+    pub fn set_default_model(&mut self, model: Option<String>) -> Result<()> {
+        self.default_preferences.model = model;
+        self.save_with_merge()
+    }
+    
+    pub fn set_default_temperature(&mut self, temperature: Option<f32>) -> Result<()> {
+        self.default_preferences.temperature = temperature;
+        self.save_with_merge()
+    }
+    
+    pub fn set_default_max_tokens(&mut self, max_tokens: Option<u32>) -> Result<()> {
+        self.default_preferences.max_tokens = max_tokens;
+        self.save_with_merge()
+    }
+    
+    pub fn set_default_thinking_budget(&mut self, thinking_budget: Option<u32>) -> Result<()> {
+        self.default_preferences.thinking_budget = thinking_budget;
+        self.save_with_merge()
+    }
+    
+    pub fn set_default_thinking(&mut self, thinking: Option<bool>) -> Result<()> {
+        self.default_preferences.thinking = thinking;
+        self.save_with_merge()
+    }
+    
+    pub fn set_default_system_prompt(&mut self, system_prompt: Option<String>) -> Result<()> {
+        self.default_preferences.system_prompt = system_prompt;
+        self.save_with_merge()
+    }
+    
+    pub fn get_default_preferences(&self) -> &DefaultPreferences {
+        &self.default_preferences
+    }
+    
+    pub fn reset_default_preferences(&mut self) -> Result<()> {
+        self.default_preferences = DefaultPreferences::default();
+        self.save_with_merge()
     }
 
     fn create_excerpt(&self, content: &str, term_lower: &str) -> String {
