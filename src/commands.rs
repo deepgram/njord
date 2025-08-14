@@ -446,7 +446,7 @@ impl CommandParser {
             prompts_import_regex: Regex::new(r"^/prompts\s+import\s+(.+)$")?,
             prompts_export_regex: Regex::new(r"^/prompts\s+export(?:\s+(.+))?$")?,
             // Default preferences regexes
-            set_default_regex: Regex::new(r"^/set-default\s+(\w+)\s+(.+)$")?,
+            set_default_regex: Regex::new(r"^/set-default\s+([\w-]+)\s+(.+)$")?,
         })
     }
     
