@@ -67,10 +67,10 @@ impl Repl {
         let mut session = if let Some(session_name) = &config.load_session {
             history.load_session(session_name)
                 .cloned()
-                .unwrap_or_else(|| ChatSession::new(config.default_model.clone(), config.temperature, config.max_tokens, config.thinking_budget))
+                .unwrap_or_else(|| Self::create_session_with_defaults(&config, &history))
         } else {
             // Always start fresh - no more automatic restoration of current session
-            ChatSession::new(config.default_model.clone(), config.temperature, config.max_tokens, config.thinking_budget)
+            Self::create_session_with_defaults(&config, &history)
         };
         
         // Ensure we have a valid model and that its provider is available
@@ -139,6 +139,30 @@ impl Repl {
         } else {
             "claude-sonnet-4-20250514".to_string() // Fallback
         }
+    }
+    
+    fn create_session_with_defaults(config: &Config, history: &History) -> ChatSession {
+        let defaults = history.get_default_preferences();
+        
+        // Use default preferences if set, otherwise fall back to config values
+        let model = defaults.model.clone().unwrap_or_else(|| config.default_model.clone());
+        let temperature = defaults.temperature.unwrap_or(config.temperature);
+        let max_tokens = defaults.max_tokens.unwrap_or(config.max_tokens);
+        let thinking_budget = defaults.thinking_budget.unwrap_or(config.thinking_budget);
+        
+        let mut session = ChatSession::new(model, temperature, max_tokens, thinking_budget);
+        
+        // Set thinking preference if specified
+        if let Some(thinking) = defaults.thinking {
+            session.thinking_enabled = thinking;
+        }
+        
+        // Set system prompt if specified
+        if let Some(ref system_prompt) = defaults.system_prompt {
+            session.system_prompt = Some(system_prompt.clone());
+        }
+        
+        session
     }
     
     fn get_current_provider(&self) -> Option<&str> {
@@ -891,7 +915,7 @@ impl Repl {
                     self.update_session_list();
                 }
                 
-                self.session = ChatSession::new(self.config.default_model.clone(), self.config.temperature, self.config.max_tokens, self.config.thinking_budget);
+                self.session = Self::create_session_with_defaults(&self.config, &self.history);
                 self.session.current_provider = get_provider_for_model(&self.session.current_model).map(|s| s.to_string());
                 self.ui.print_info("Started new chat session");
             }
@@ -1511,12 +1535,7 @@ impl Repl {
                             // Check if we deleted the current session
                             if self.session.name.as_ref() == Some(&target_name) {
                                 // Reset to a new anonymous session
-                                self.session = ChatSession::new(
-                                    self.config.default_model.clone(), 
-                                    self.config.temperature, 
-                                    self.config.max_tokens, 
-                                    self.config.thinking_budget
-                                );
+                                self.session = Self::create_session_with_defaults(&self.config, &self.history);
                                 self.session.current_provider = get_provider_for_model(&self.session.current_model).map(|s| s.to_string());
                                 self.ui.print_info("Current session was deleted - started new anonymous session");
                             }
@@ -1541,12 +1560,7 @@ impl Repl {
                                 self.ui.print_info(&format!("Session '{}' deleted", current_name));
                                 
                                 // Reset to a new anonymous session
-                                self.session = ChatSession::new(
-                                    self.config.default_model.clone(), 
-                                    self.config.temperature, 
-                                    self.config.max_tokens, 
-                                    self.config.thinking_budget
-                                );
+                                self.session = Self::create_session_with_defaults(&self.config, &self.history);
                                 self.session.current_provider = get_provider_for_model(&self.session.current_model).map(|s| s.to_string());
                                 self.ui.print_info("Started new anonymous session");
                                 
@@ -1564,12 +1578,7 @@ impl Repl {
                     } else {
                         // Current session is anonymous - just clear it and start fresh
                         let message_count = self.session.messages.len();
-                        self.session = ChatSession::new(
-                            self.config.default_model.clone(), 
-                            self.config.temperature, 
-                            self.config.max_tokens, 
-                            self.config.thinking_budget
-                        );
+                        self.session = Self::create_session_with_defaults(&self.config, &self.history);
                         self.session.current_provider = get_provider_for_model(&self.session.current_model).map(|s| s.to_string());
                         
                         if message_count > 0 {
@@ -2247,6 +2256,210 @@ impl Repl {
                         last.replace('\n', " ")
                     };
                     println!("  Most recent: {}", preview);
+                }
+            }
+            Command::SetDefault(setting, value) => {
+                match setting.as_str() {
+                    "model" => {
+                        // Validate that the model exists
+                        let mut model_found = false;
+                        for provider in self.providers.values() {
+                            if provider.get_models().contains(&value) {
+                                model_found = true;
+                                break;
+                            }
+                        }
+                        
+                        if model_found {
+                            match self.history.set_default_model(Some(value.clone())) {
+                                Ok(()) => {
+                                    self.ui.print_info(&format!("Default model set to '{}'", value));
+                                }
+                                Err(e) => {
+                                    self.ui.print_error(&format!("Failed to set default model: {}", e));
+                                }
+                            }
+                        } else {
+                            self.ui.print_error(&format!("Model '{}' not found in any available provider", value));
+                            self.ui.print_info("Use '/models' to see available models");
+                        }
+                    }
+                    "temperature" => {
+                        match value.parse::<f32>() {
+                            Ok(temp) if (0.0..=2.0).contains(&temp) => {
+                                match self.history.set_default_temperature(Some(temp)) {
+                                    Ok(()) => {
+                                        self.ui.print_info(&format!("Default temperature set to {}", temp));
+                                    }
+                                    Err(e) => {
+                                        self.ui.print_error(&format!("Failed to set default temperature: {}", e));
+                                    }
+                                }
+                            }
+                            Ok(_) => {
+                                self.ui.print_error("Temperature must be between 0.0 and 2.0");
+                            }
+                            Err(_) => {
+                                self.ui.print_error("Invalid temperature value. Must be a number between 0.0 and 2.0");
+                            }
+                        }
+                    }
+                    "max-tokens" => {
+                        match value.parse::<u32>() {
+                            Ok(tokens) if tokens > 0 => {
+                                match self.history.set_default_max_tokens(Some(tokens)) {
+                                    Ok(()) => {
+                                        self.ui.print_info(&format!("Default max tokens set to {}", tokens));
+                                    }
+                                    Err(e) => {
+                                        self.ui.print_error(&format!("Failed to set default max tokens: {}", e));
+                                    }
+                                }
+                            }
+                            Ok(_) => {
+                                self.ui.print_error("Max tokens must be greater than 0");
+                            }
+                            Err(_) => {
+                                self.ui.print_error("Invalid max tokens value. Must be a positive integer");
+                            }
+                        }
+                    }
+                    "thinking-budget" => {
+                        match value.parse::<u32>() {
+                            Ok(budget) if budget > 0 => {
+                                match self.history.set_default_thinking_budget(Some(budget)) {
+                                    Ok(()) => {
+                                        self.ui.print_info(&format!("Default thinking budget set to {}", budget));
+                                    }
+                                    Err(e) => {
+                                        self.ui.print_error(&format!("Failed to set default thinking budget: {}", e));
+                                    }
+                                }
+                            }
+                            Ok(_) => {
+                                self.ui.print_error("Thinking budget must be greater than 0");
+                            }
+                            Err(_) => {
+                                self.ui.print_error("Invalid thinking budget value. Must be a positive integer");
+                            }
+                        }
+                    }
+                    "thinking" => {
+                        match value.to_lowercase().as_str() {
+                            "true" | "on" | "enabled" | "yes" => {
+                                match self.history.set_default_thinking(Some(true)) {
+                                    Ok(()) => {
+                                        self.ui.print_info("Default thinking set to enabled");
+                                    }
+                                    Err(e) => {
+                                        self.ui.print_error(&format!("Failed to set default thinking: {}", e));
+                                    }
+                                }
+                            }
+                            "false" | "off" | "disabled" | "no" => {
+                                match self.history.set_default_thinking(Some(false)) {
+                                    Ok(()) => {
+                                        self.ui.print_info("Default thinking set to disabled");
+                                    }
+                                    Err(e) => {
+                                        self.ui.print_error(&format!("Failed to set default thinking: {}", e));
+                                    }
+                                }
+                            }
+                            _ => {
+                                self.ui.print_error("Invalid thinking value. Use: true/false, on/off, enabled/disabled, or yes/no");
+                            }
+                        }
+                    }
+                    "system-prompt" => {
+                        if value.trim().is_empty() {
+                            match self.history.set_default_system_prompt(None) {
+                                Ok(()) => {
+                                    self.ui.print_info("Default system prompt cleared");
+                                }
+                                Err(e) => {
+                                    self.ui.print_error(&format!("Failed to clear default system prompt: {}", e));
+                                }
+                            }
+                        } else {
+                            match self.history.set_default_system_prompt(Some(value.clone())) {
+                                Ok(()) => {
+                                    let preview = if value.len() > 100 {
+                                        format!("{}...", &value[..100].replace('\n', " "))
+                                    } else {
+                                        value.replace('\n', " ")
+                                    };
+                                    self.ui.print_info(&format!("Default system prompt set: {}", preview));
+                                }
+                                Err(e) => {
+                                    self.ui.print_error(&format!("Failed to set default system prompt: {}", e));
+                                }
+                            }
+                        }
+                    }
+                    _ => {
+                        self.ui.print_error(&format!("Unknown setting '{}'. Available settings: model, temperature, max-tokens, thinking-budget, thinking, system-prompt", setting));
+                    }
+                }
+            }
+            Command::GetDefaults => {
+                let defaults = self.history.get_default_preferences();
+                self.ui.print_info("Current default preferences:");
+                
+                if let Some(ref model) = defaults.model {
+                    println!("  Model: {}", model);
+                } else {
+                    println!("  Model: (not set)");
+                }
+                
+                if let Some(temp) = defaults.temperature {
+                    println!("  Temperature: {}", temp);
+                } else {
+                    println!("  Temperature: (not set)");
+                }
+                
+                if let Some(tokens) = defaults.max_tokens {
+                    println!("  Max tokens: {}", tokens);
+                } else {
+                    println!("  Max tokens: (not set)");
+                }
+                
+                if let Some(budget) = defaults.thinking_budget {
+                    println!("  Thinking budget: {}", budget);
+                } else {
+                    println!("  Thinking budget: (not set)");
+                }
+                
+                if let Some(thinking) = defaults.thinking {
+                    println!("  Thinking: {}", if thinking { "enabled" } else { "disabled" });
+                } else {
+                    println!("  Thinking: (not set)");
+                }
+                
+                if let Some(ref prompt) = defaults.system_prompt {
+                    let preview = if prompt.len() > 100 {
+                        format!("{}...", &prompt[..100].replace('\n', " "))
+                    } else {
+                        prompt.replace('\n', " ")
+                    };
+                    println!("  System prompt: {}", preview);
+                } else {
+                    println!("  System prompt: (not set)");
+                }
+                
+                println!();
+                self.ui.print_info("Use '/set-default <setting> <value>' to change defaults");
+                self.ui.print_info("Settings that are not set will use built-in defaults when creating new sessions");
+            }
+            Command::ResetDefaults => {
+                match self.history.reset_default_preferences() {
+                    Ok(()) => {
+                        self.ui.print_info("All default preferences have been reset");
+                        self.ui.print_info("New sessions will use built-in defaults");
+                    }
+                    Err(e) => {
+                        self.ui.print_error(&format!("Failed to reset default preferences: {}", e));
+                    }
                 }
             }
             Command::Load(filename, variable_name_opt) => {
