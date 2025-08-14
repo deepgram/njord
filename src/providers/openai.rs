@@ -71,7 +71,7 @@ impl OpenAIProvider {
     }
     
     pub fn is_reasoning_model(&self, model: &str) -> bool {
-        model.starts_with("o1") || model.starts_with("o3") || model.starts_with("o4")
+        model.starts_with("o1") || model.starts_with("o3") || model.starts_with("o4") || model.starts_with("gpt-5")
     }
     
     
@@ -81,7 +81,7 @@ impl OpenAIProvider {
     }
     
     pub fn supports_temperature(&self, model: &str) -> bool {
-        // Models that don't support custom temperature
+        // Models that don't support custom temperature (reasoning models typically don't)
         !matches!(model, "o4-mini" | "o3-pro" | "o1-pro") && !self.is_reasoning_model(model)
     }
     
