@@ -871,6 +871,18 @@ impl Repl {
                 println!("  /input-history stats - Show detailed input history statistics");
                 println!();
                 
+                // Default Preferences
+                println!("\x1b[1;36mDefault Preferences:\x1b[0m");
+                println!("  /set-default SETTING VALUE - Set default value for new sessions");
+                println!("    \x1b[1;32mEx:\x1b[0m /set-default model gpt-4o - Set default model");
+                println!("    \x1b[1;32mEx:\x1b[0m /set-default temperature 0.8 - Set default temperature");
+                println!("    \x1b[1;32mEx:\x1b[0m /set-default thinking on - Set default thinking mode");
+                println!("    \x1b[1;32mEx:\x1b[0m /set-default system-prompt \"You are helpful\" - Set default system prompt");
+                println!("  /get-defaults - Show current default preferences");
+                println!("  /reset-defaults - Reset all defaults to built-in values");
+                println!("    \x1b[1;32mSettings:\x1b[0m model, temperature, max-tokens, thinking-budget, thinking, system-prompt");
+                println!();
+                
                 // Usage Tips
                 println!("\x1b[1;36mUsage Tips:\x1b[0m");
                 println!("  • Multi-line input: {{TAG ... TAG}} or <<DELIMITER ... DELIMITER");
