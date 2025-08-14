@@ -58,7 +58,8 @@ impl NjordCompleter {
             "/chat", "/undo", "/goto", "/search", "/system", "/temp", "/max-tokens",
             "/thinking-budget", "/thinking", "/retry", "/stats", "/tokens", "/export",
             "/block", "/blocks", "/copy", "/save", "/exec", "/edit", "/summarize",
-            "/prompts", "/load", "/variables", "/var"
+            "/prompts", "/load", "/variables", "/var", "/set-default", "/get-defaults",
+            "/reset-defaults"
         ];
         
         if line[..pos].starts_with('/') && !line[..pos].contains(' ') {
@@ -96,6 +97,8 @@ impl NjordCompleter {
             return self.complete_load_command(line, pos);
         } else if line[..pos].starts_with("/var ") {
             return self.complete_var_command(line, pos);
+        } else if line[..pos].starts_with("/set-default ") {
+            return self.complete_set_default_command(line, pos);
         }
         
         // Check for variable references in regular text
@@ -647,6 +650,98 @@ impl NjordCompleter {
                 replacement: name.clone(),
             })
             .collect()
+    }
+    
+    fn complete_set_default_command(&self, line: &str, pos: usize) -> Vec<Pair> {
+        let start_pos = self.find_completion_start(line, pos);
+        let current_word = &line[start_pos..pos];
+        let input = &line[..pos];
+        let parts: Vec<&str> = input.split_whitespace().collect();
+        
+        if parts.len() == 1 || (parts.len() == 2 && !input.ends_with(' ')) {
+            // Complete setting name
+            let settings = [
+                "model", "temperature", "max-tokens", "thinking-budget", 
+                "thinking", "system-prompt"
+            ];
+            
+            return settings.iter()
+                .filter(|setting| setting.starts_with(current_word))
+                .map(|setting| Pair {
+                    display: setting.to_string(),
+                    replacement: setting.to_string(),
+                })
+                .collect();
+        } else if parts.len() >= 2 {
+            // Complete setting value based on the setting type
+            let setting = parts[1];
+            match setting {
+                "model" => {
+                    // Complete with available models
+                    return self.context.available_models.iter()
+                        .filter(|model| model.starts_with(current_word))
+                        .map(|model| Pair {
+                            display: model.clone(),
+                            replacement: model.clone(),
+                        })
+                        .collect();
+                }
+                "thinking" => {
+                    // Complete with boolean values
+                    let values = ["true", "false", "on", "off", "enabled", "disabled", "yes", "no"];
+                    return values.iter()
+                        .filter(|value| value.starts_with(current_word))
+                        .map(|value| Pair {
+                            display: value.to_string(),
+                            replacement: value.to_string(),
+                        })
+                        .collect();
+                }
+                "temperature" => {
+                    // Suggest common temperature values
+                    let values = ["0.0", "0.1", "0.3", "0.5", "0.7", "0.8", "1.0", "1.2", "1.5", "2.0"];
+                    return values.iter()
+                        .filter(|value| value.starts_with(current_word))
+                        .map(|value| Pair {
+                            display: value.to_string(),
+                            replacement: value.to_string(),
+                        })
+                        .collect();
+                }
+                "max-tokens" => {
+                    // Suggest common max-tokens values
+                    let values = ["1024", "2048", "4096", "8192", "16384", "32768"];
+                    return values.iter()
+                        .filter(|value| value.starts_with(current_word))
+                        .map(|value| Pair {
+                            display: value.to_string(),
+                            replacement: value.to_string(),
+                        })
+                        .collect();
+                }
+                "thinking-budget" => {
+                    // Suggest common thinking budget values
+                    let values = ["5000", "10000", "15000", "20000", "25000", "30000", "50000"];
+                    return values.iter()
+                        .filter(|value| value.starts_with(current_word))
+                        .map(|value| Pair {
+                            display: value.to_string(),
+                            replacement: value.to_string(),
+                        })
+                        .collect();
+                }
+                "system-prompt" => {
+                    // Complete with saved prompt names
+                    return self.complete_prompt_names(current_word);
+                }
+                _ => {
+                    // Unknown setting, no completion
+                    return Vec::new();
+                }
+            }
+        }
+        
+        Vec::new()
     }
 }
 
