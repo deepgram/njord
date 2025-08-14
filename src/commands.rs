@@ -65,6 +65,10 @@ pub enum Command {
     InputHistory,
     InputHistoryClear,
     InputHistoryStats,
+    // Default preferences commands
+    SetDefault(String, String), // (setting, value)
+    GetDefaults,
+    ResetDefaults,
 }
 
 #[derive(Debug, Clone)]
@@ -131,6 +135,8 @@ pub struct CommandParser {
     prompts_edit_regex: Regex,
     prompts_import_regex: Regex,
     prompts_export_regex: Regex,
+    // Default preferences regexes
+    set_default_regex: Regex,
 }
 
 impl CommandParser {
@@ -439,6 +445,8 @@ impl CommandParser {
             prompts_edit_regex: Regex::new(r"^/prompts\s+edit\s+(.+)$")?,
             prompts_import_regex: Regex::new(r"^/prompts\s+import\s+(.+)$")?,
             prompts_export_regex: Regex::new(r"^/prompts\s+export(?:\s+(.+))?$")?,
+            // Default preferences regexes
+            set_default_regex: Regex::new(r"^/set-default\s+(\w+)\s+(.+)$")?,
         })
     }
     
@@ -474,6 +482,8 @@ impl CommandParser {
             "/input-history" => Some(Command::InputHistory),
             "/input-history clear" => Some(Command::InputHistoryClear),
             "/input-history stats" => Some(Command::InputHistoryStats),
+            "/get-defaults" => Some(Command::GetDefaults),
+            "/reset-defaults" => Some(Command::ResetDefaults),
             _ if input.starts_with("/chat name ") => {
                 let name = input[11..].trim();
                 if name.is_empty() {
@@ -618,6 +628,10 @@ impl CommandParser {
                 } else if let Some(caps) = self.prompts_export_regex.captures(input) {
                     let filename = caps.get(1).map(|m| Self::unquote_session_name(m.as_str()));
                     Some(Command::PromptsExport(filename))
+                } else if let Some(caps) = self.set_default_regex.captures(input) {
+                    let setting = caps[1].to_string();
+                    let value = Self::unquote_session_name(&caps[2]);
+                    Some(Command::SetDefault(setting, value))
                 } else {
                     None
                 }
@@ -990,6 +1004,47 @@ mod tests {
             assert_eq!(model, "gpt-4");
         } else {
             panic!("Expected Model command");
+        }
+    }
+
+    #[test]
+    fn test_default_preferences_commands() {
+        let parser = create_parser();
+        
+        // Test get defaults
+        assert!(matches!(parser.parse("/get-defaults"), Some(Command::GetDefaults)));
+        
+        // Test reset defaults
+        assert!(matches!(parser.parse("/reset-defaults"), Some(Command::ResetDefaults)));
+        
+        // Test set default commands
+        if let Some(Command::SetDefault(setting, value)) = parser.parse("/set-default model gpt-4o") {
+            assert_eq!(setting, "model");
+            assert_eq!(value, "gpt-4o");
+        } else {
+            panic!("Expected SetDefault command");
+        }
+        
+        if let Some(Command::SetDefault(setting, value)) = parser.parse("/set-default temperature 0.8") {
+            assert_eq!(setting, "temperature");
+            assert_eq!(value, "0.8");
+        } else {
+            panic!("Expected SetDefault command");
+        }
+        
+        if let Some(Command::SetDefault(setting, value)) = parser.parse("/set-default thinking true") {
+            assert_eq!(setting, "thinking");
+            assert_eq!(value, "true");
+        } else {
+            panic!("Expected SetDefault command");
+        }
+        
+        // Test with quoted values
+        if let Some(Command::SetDefault(setting, value)) = parser.parse("/set-default system-prompt \"You are a helpful assistant\"") {
+            assert_eq!(setting, "system-prompt");
+            assert_eq!(value, "You are a helpful assistant");
+        } else {
+            panic!("Expected SetDefault command");
         }
     }
 }
