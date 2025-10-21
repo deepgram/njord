@@ -722,7 +722,7 @@ impl NjordCompleter {
                         .map(|var_name| {
                             // Return the full variable name with closing braces as the replacement
                             // This will replace just the partial variable name (not the opening {{)
-                            let completion = format!("{}}}", var_name);
+                            let completion = format!("{}}}}}", var_name);
                             Pair {
                                 display: format!("{{{{{}}}}}", var_name),
                                 replacement: completion,
@@ -1270,7 +1270,7 @@ impl UI {
                     println!("\x1b[2m(Multiline input cancelled)\x1b[0m");
                     return Ok(None);
                 }
-                Err(e) => return Err(anyhow::anyhow!("Failed to read input: {}", e)),
+                Err(e) => return Err(anyhow::anyhow!("Faile to read input: {}", e)),
             }
         }
 
