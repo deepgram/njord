@@ -437,6 +437,17 @@ impl NjordCompleter {
     fn find_completion_start(&self, line: &str, pos: usize) -> usize {
         let line_up_to_pos = &line[..pos];
         
+        // Check for variable reference pattern {{
+        // We need to find the last {{ before the cursor and return the position after it
+        if let Some(brace_start) = line_up_to_pos.rfind("{{") {
+            // Make sure we're still within the variable reference (no closing }} after the {{)
+            let after_braces = &line_up_to_pos[brace_start + 2..];
+            if !after_braces.contains("}}") {
+                // We're inside a variable reference, return position after {{
+                return brace_start + 2;
+            }
+        }
+        
         // Handle quoted strings - if we're inside quotes, start from the quote
         // But we need to make sure the quote isn't escaped
         let chars: Vec<char> = line_up_to_pos.chars().collect();
@@ -623,19 +634,22 @@ impl NjordCompleter {
             if var_start <= pos {
                 let partial_var = &line_up_to_pos[var_start..];
                 
-                // Complete variable names
-                return self.context.variable_names.iter()
-                    .filter(|var_name| var_name.starts_with(partial_var))
-                    .map(|var_name| {
-                        // Only complete the remaining part of the variable name
-                        let remaining = &var_name[partial_var.len()..];
-                        let completion = format!("{}}}}}", remaining);
-                        Pair {
-                            display: format!("{{{{{}}}}}", var_name),
-                            replacement: completion,
-                        }
-                    })
-                    .collect();
+                // Make sure we haven't closed this variable reference already
+                if !partial_var.contains("}}") {
+                    // Complete variable names
+                    return self.context.variable_names.iter()
+                        .filter(|var_name| var_name.starts_with(partial_var))
+                        .map(|var_name| {
+                            // Return the full variable name with closing braces as the replacement
+                            // This will replace just the partial variable name (not the opening {{)
+                            let completion = format!("{}}}", var_name);
+                            Pair {
+                                display: format!("{{{{{}}}}}", var_name),
+                                replacement: completion,
+                            }
+                        })
+                        .collect();
+                }
             }
         }
         
@@ -1105,7 +1119,7 @@ impl UI {
         }
         
         // Check for "{TAG" pattern
-        if trimmed.starts_with('{') && trimmed.len() > 1 {
+        if trim.starts_with('{') && trimmed.len() > 1 {
             let tag = &trimmed[1..];
             // Any contiguous set of non-space characters is a valid tag
             if !tag.contains(char::is_whitespace) && !tag.is_empty() {
@@ -1457,7 +1471,7 @@ impl UI {
         (count, last_entry)
     }
     
-    /// Check if a line contains a heredoc pattern and extract the command and delimiter
+    /// Check if a line contains a heredoc pattern and extract the comman and delimiter
     /// Returns (command_part, delimiter) if heredoc is detected, None otherwise
     pub fn parse_command_heredoc(&self, line: &str) -> Option<(String, String)> {
         let trimmed = line.trim();
