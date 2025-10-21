@@ -77,7 +77,9 @@ impl AnthropicProvider {
             "claude-opus-4-1-20250805" |
             "claude-opus-4-20250514" | 
             "claude-sonnet-4-20250514" | 
-            "claude-3-7-sonnet-20250219"
+            "claude-3-7-sonnet-20250219" |
+            "claude-sonnet-4-5-20250929" |
+            "claude-haiku-4-5-20251001"
         )
     }
     
@@ -321,6 +323,8 @@ impl LLMProvider for AnthropicProvider {
     fn get_models(&self) -> Vec<String> {
         vec![
             "claude-opus-4-1-20250805".to_string(),
+            "claude-sonnet-4-5-20250929".to_string(),
+            "claude-haiku-4-5-20251001".to_string(),
             "claude-sonnet-4-20250514".to_string(),
             "claude-opus-4-20250514".to_string(),
             "claude-3-7-sonnet-20250219".to_string(),
