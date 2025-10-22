@@ -18,7 +18,7 @@ pub struct History {
     pub removed_sessions: std::collections::HashSet<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct DefaultPreferences {
     pub model: Option<String>,
     pub temperature: Option<f32>,
@@ -26,19 +26,6 @@ pub struct DefaultPreferences {
     pub thinking_budget: Option<u32>,
     pub thinking: Option<bool>,
     pub system_prompt: Option<String>,
-}
-
-impl Default for DefaultPreferences {
-    fn default() -> Self {
-        Self {
-            model: None,
-            temperature: None,
-            max_tokens: None,
-            thinking_budget: None,
-            thinking: None,
-            system_prompt: None,
-        }
-    }
 }
 
 impl History {

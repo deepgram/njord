@@ -3346,9 +3346,8 @@ Format your summary in clear, readable paragraphs. Be objective and factual.";
         // Ensure the name is unique
         let unique_name = self.prompts.ensure_unique_prompt_name(&sanitized_name);
         
-        if name_opt.is_some() {
+        if let Some(old_name) = name_opt {
             // Rename existing prompt
-            let old_name = name_opt.unwrap();
             match self.prompts.rename_prompt(old_name, &unique_name) {
                 Ok(true) => {
                     self.ui.print_info(&format!("Prompt \"{}\" auto-renamed to \"{}\"", old_name, unique_name));
