@@ -1137,14 +1137,14 @@ impl UI {
                         // Check if this is from history (initial_input was multiline) vs new paste
                         if initial_input.contains('\n') && input == initial_input {
                             // This is a multiline history entry that user recalled and didn't modify
-                            return self.handle_multiline_history_entry(
+                            self.handle_multiline_history_entry(
                                 initial_input,
                                 &prompt,
                                 session_name,
                                 is_anonymous,
                                 ephemeral,
                                 user_msg_number,
-                            );
+                            )
                         } else {
                             // This is either a paste or modified multiline input
                             let line_count = input.lines().count();
