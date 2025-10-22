@@ -3075,9 +3075,7 @@ impl Repl {
             (self.session.clone(), "current session".to_string())
         };
         
-        //
-
- Check if session has messages
+        // Check if session has messages
         if target_session.messages.is_empty() {
             return Err(anyhow::anyhow!("Cannot summarize empty session"));
         }
