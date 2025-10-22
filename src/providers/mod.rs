@@ -47,6 +47,7 @@ pub fn get_provider_for_model(model: &str) -> Option<&'static str> {
     }
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -119,8 +120,6 @@ mod tests {
         assert!(!request.thinking);
     }
 }
-
-pub fn create_provider(name: &str, api_key: &str) -> Result<Box<dyn LLMProvider>> {
     match name {
         "openai" => Ok(Box::new(openai::OpenAIProvider::new(api_key)?)),
         "anthropic" => Ok(Box::new(anthropic::AnthropicProvider::new(api_key)?)),
