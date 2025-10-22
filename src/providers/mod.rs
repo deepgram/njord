@@ -47,6 +47,14 @@ pub fn get_provider_for_model(model: &str) -> Option<&'static str> {
     }
 }
 
+pub fn create_provider(name: &str, api_key: &str) -> Result<Box<dyn LLMProvider>> {
+    match name {
+        "openai" => Ok(Box::new(openai::OpenAIProvider::new(api_key)?)),
+        "anthropic" => Ok(Box::new(anthropic::AnthropicProvider::new(api_key)?)),
+        "gemini" => Ok(Box::new(gemini::GeminiProvider::new(api_key)?)),
+        _ => Err(anyhow::anyhow!("Unknown provider: {}", name)),
+    }
+}
 
 #[cfg(test)]
 mod tests {
