@@ -87,13 +87,8 @@ impl Repl {
         // Update session provider based on current model
         session.current_provider = get_provider_for_model(&session.current_model).map(|s| s.to_string());
         
-        // For fresh sessions, use config values
-        // For loaded sessions, keep their stored values
-        if config.load_session.is_none() {
-            session.temperature = config.temperature;
-            session.max_tokens = config.max_tokens;
-            session.thinking_budget = config.thinking_budget;
-        }
+        // Note: We don't overwrite session values here anymore - they were already properly set
+        // from defaults (or config fallbacks) in create_session_with_defaults
         
         let command_parser = CommandParser::new()?;
         let mut ui = if config.ephemeral {
@@ -3080,7 +3075,9 @@ impl Repl {
             (self.session.clone(), "current session".to_string())
         };
         
-        // Check if session has messages
+        //
+
+ Check if session has messages
         if target_session.messages.is_empty() {
             return Err(anyhow::anyhow!("Cannot summarize empty session"));
         }
