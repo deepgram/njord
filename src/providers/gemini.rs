@@ -214,11 +214,11 @@ impl LLMProvider for GeminiProvider {
                                                                             if let Some(text_str) = text.as_str() {
                                                                                 if !text_str.is_empty() {
                                                                                     if is_thought {
-                                                                                        // Wrap thought content in <thinking> tags
-                                                                                        pending_content.insert(0, format!("<thinking>\n{}\n</thinking>", text_str));
+                                                                                        // Prefix thinking content
+                                                                                        pending_content.insert(0, format!("thinking:{}", text_str));
                                                                                     } else {
-                                                                                        // Regular text content
-                                                                                        pending_content.insert(0, text_str.to_string());
+                                                                                        // Prefix regular content
+                                                                                        pending_content.insert(0, format!("content:{}", text_str));
                                                                                     }
                                                                                 }
                                                                             }
@@ -269,11 +269,11 @@ impl LLMProvider for GeminiProvider {
                                                                                 if let Some(text_str) = text.as_str() {
                                                                                     if !text_str.is_empty() {
                                                                                         if is_thought {
-                                                                                            // Wrap thought content in <thinking> tags
-                                                                                            pending_content.insert(0, format!("<thinking>\n{}\n</thinking>", text_str));
+                                                                                            // Prefix thinking content
+                                                                                            pending_content.insert(0, format!("thinking:{}", text_str));
                                                                                         } else {
-                                                                                            // Regular text content
-                                                                                            pending_content.insert(0, text_str.to_string());
+                                                                                            // Prefix regular content
+                                                                                            pending_content.insert(0, format!("content:{}", text_str));
                                                                                         }
                                                                                     }
                                                                                 }
@@ -308,6 +308,8 @@ impl LLMProvider for GeminiProvider {
             let json_response: serde_json::Value = response.json().await?;
             
             let mut full_content = String::new();
+            let mut has_thinking = false;
+            let mut has_content = false;
             
             // Extract both thought and text content
             if let Some(candidates) = json_response.get("candidates") {
@@ -316,22 +318,40 @@ impl LLMProvider for GeminiProvider {
                         if let Some(content_obj) = candidate.get("content") {
                             if let Some(parts) = content_obj.get("parts") {
                                 if let Some(parts_array) = parts.as_array() {
+                                    // First pass: collect all thinking content
                                     for part in parts_array {
-                                        // Check if this part is a thought
                                         let is_thought = part.get("thought")
                                             .and_then(|v| v.as_bool())
                                             .unwrap_or(false);
                                         
-                                        // Get the text content
-                                        if let Some(text) = part.get("text") {
-                                            if let Some(text_str) = text.as_str() {
-                                                if !text_str.is_empty() {
-                                                    if is_thought {
-                                                        // Wrap thought content in <thinking> tags
-                                                        full_content.push_str(&format!("<thinking>\n{}\n</thinking>\n", text_str));
-                                                    } else {
-                                                        // Regular text content
-                                                        full_content.push_str(text_str);
+                                        if is_thought {
+                                            if let Some(text) = part.get("text") {
+                                                if let Some(text_str) = text.as_str() {
+                                                    if !text_str.is_empty() {
+                                                        if !has_thinking {
+                                                            has_thinking = true;
+                                                        }
+                                                        full_content.push_str(&format!("thinking:{}", text_str));
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    
+                                    // Second pass: collect all regular content
+                                    for part in parts_array {
+                                        let is_thought = part.get("thought")
+                                            .and_then(|v| v.as_bool())
+                                            .unwrap_or(false);
+                                        
+                                        if !is_thought {
+                                            if let Some(text) = part.get("text") {
+                                                if let Some(text_str) = text.as_str() {
+                                                    if !text_str.is_empty() {
+                                                        if !has_content {
+                                                            has_content = true;
+                                                        }
+                                                        full_content.push_str(&format!("content:{}", text_str));
                                                     }
                                                 }
                                             }
@@ -345,7 +365,7 @@ impl LLMProvider for GeminiProvider {
             }
             
             if full_content.is_empty() {
-                full_content = "No response content".to_string();
+                full_content = "content:No response content".to_string();
             }
             
             let stream = futures::stream::once(async move { Ok(full_content) });
