@@ -71,7 +71,12 @@ impl OpenAIProvider {
     }
     
     pub fn is_reasoning_model(&self, model: &str) -> bool {
-        model.starts_with("o1") || model.starts_with("o3") || model.starts_with("o4") || model.starts_with("gpt-5")
+        // gpt-5 and gpt-5.1 variants support reasoning, but gpt-4 variants do not
+        // All o1, o3, o4 models support reasoning
+        (model.starts_with("gpt-5") && !model.starts_with("gpt-4")) || 
+        model.starts_with("o1") || 
+        model.starts_with("o3") || 
+        model.starts_with("o4")
     }
     
     
@@ -85,10 +90,9 @@ impl OpenAIProvider {
         !matches!(model, "o4-mini" | "o3-pro" | "o1-pro") && !self.is_reasoning_model(model)
     }
     
-    #[allow(dead_code)]
-    pub fn supports_thinking(&self, _model: &str) -> bool {
-        // OpenAI models don't support thinking
-        false
+    pub fn supports_thinking(&self, model: &str) -> bool {
+        // OpenAI reasoning models support thinking
+        self.is_reasoning_model(model)
     }
     
 }
@@ -107,6 +111,14 @@ impl LLMProvider for OpenAIProvider {
                 "input": request.messages
             });
             
+            // Add reasoning support for thinking-enabled models
+            if request.thinking && self.supports_thinking(&request.model) {
+                payload["reasoning"] = json!({
+                    "effort": "high"
+                });
+                payload["max_output_tokens"] = json!(request.max_tokens + request.thinking_budget);
+            }
+            
             // Only add temperature for non-reasoning models
             if !self.is_reasoning_model(&request.model) {
                 payload["temperature"] = json!(request.temperature);
@@ -121,6 +133,16 @@ impl LLMProvider for OpenAIProvider {
                 "messages": request.messages,
                 "stream": request.stream
             });
+            
+            // Add reasoning support for thinking-enabled models
+            if request.thinking && self.supports_thinking(&request.model) {
+                payload["reasoning_effort"] = json!("high");
+                // Use max_completion_tokens for reasoning models (includes output + reasoning)
+                payload["max_completion_tokens"] = json!(request.max_tokens + request.thinking_budget);
+            } else {
+                // Use regular max_tokens for non-reasoning models
+                payload["max_tokens"] = json!(request.max_tokens);
+            }
             
             // Only add temperature for models that support it
             if self.supports_temperature(&request.model) {
