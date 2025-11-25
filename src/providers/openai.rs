@@ -281,6 +281,8 @@ impl LLMProvider for OpenAIProvider {
     
     fn get_models(&self) -> Vec<String> {
         vec![
+            "gpt-5.1".to_string(),
+            "gpt-5.1-2025-11-13".to_string(),
             "gpt-5".to_string(),
             "gpt-5-mini".to_string(),
             "gpt-5-nano".to_string(),
