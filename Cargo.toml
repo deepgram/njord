@@ -1,6 +1,6 @@
 [package]
 name = "njord"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2021"
 authors = ["Your Name <your.email@example.com>"]
 description = "Interactive LLM REPL - Navigate the vast ocean of AI conversations"
