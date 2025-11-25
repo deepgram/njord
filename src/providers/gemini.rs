@@ -71,8 +71,8 @@ impl GeminiProvider {
     
     #[allow(dead_code)]
     pub fn supports_thinking(&self, _model: &str) -> bool {
-        // Gemini models don't support thinking
-        false
+        // All Gemini models support thinking
+        true
     }
     
     #[allow(dead_code)]
@@ -127,12 +127,29 @@ impl LLMProvider for GeminiProvider {
         
         let contents = self.convert_messages(&request.messages);
         
+        // Build generation config with thinking support
+        let mut generation_config = json!({
+            "temperature": request.temperature,
+            "maxOutputTokens": request.max_tokens,
+        });
+        
+        // Add thinking config if thinking is enabled
+        if request.thinking {
+            generation_config["thinkingConfig"] = json!({
+                "includeThoughts": true,
+                "thinkingLevel": "HIGH"
+            });
+        } else {
+            // Explicitly set LOW when thinking is off to minimize latency
+            generation_config["thinkingConfig"] = json!({
+                "includeThoughts": false,
+                "thinkingLevel": "LOW"
+            });
+        }
+        
         let payload = json!({
             "contents": contents,
-            "generationConfig": {
-                "temperature": request.temperature,
-                "maxOutputTokens": request.max_tokens,
-            }
+            "generationConfig": generation_config
         });
         
         let response = self.make_request_with_retry(&url, &payload).await?;
