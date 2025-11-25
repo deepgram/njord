@@ -75,6 +75,7 @@ mod tests {
         assert_eq!(get_provider_for_model("claude-3-5-sonnet-20241022"), Some("anthropic"));
         
         // Test Gemini models
+        assert_eq!(get_provider_for_model("gemini-3-pro-preview"), Some("gemini"));
         assert_eq!(get_provider_for_model("gemini-2.5-pro"), Some("gemini"));
         assert_eq!(get_provider_for_model("gemini-2.5-flash"), Some("gemini"));
         assert_eq!(get_provider_for_model("gemini-2.5-flash-lite"), Some("gemini"));
