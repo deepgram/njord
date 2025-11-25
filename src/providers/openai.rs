@@ -7,7 +7,6 @@ use tokio::time::{sleep, Duration};
 
 use super::{LLMProvider, ChatRequest};
 
-#[allow(dead_code)]
 pub struct OpenAIProvider {
     client: Client,
     api_key: String,
@@ -103,7 +102,6 @@ impl OpenAIProvider {
         // OpenAI reasoning models support thinking
         self.is_reasoning_model(model)
     }
-    
 }
 
 #[async_trait]
