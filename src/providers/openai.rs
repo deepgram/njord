@@ -125,6 +125,9 @@ impl LLMProvider for OpenAIProvider {
         // Capture thinking flag for debug output
         let is_thinking = request.thinking && self.supports_thinking(&request.model);
         
+        // Check if model supports streaming
+        let can_stream = self.supports_streaming(&request.model);
+        
         let (url, payload) = if use_responses_api {
             // Use Responses API for reasoning support
             let url = "https://api.openai.com/v1/responses";
@@ -132,6 +135,11 @@ impl LLMProvider for OpenAIProvider {
                 "model": request.model,
                 "input": request.messages
             });
+            
+            // Add streaming support for Responses API if model supports it
+            if request.stream && can_stream {
+                payload["stream"] = json!(true);
+            }
             
             // Add reasoning support for thinking-enabled models
             if is_thinking {
@@ -161,7 +169,7 @@ impl LLMProvider for OpenAIProvider {
             let mut payload = json!({
                 "model": request.model,
                 "messages": request.messages,
-                "stream": request.stream
+                "stream": request.stream && can_stream
             });
             
             // Add reasoning support for thinking-enabled models (though Chat Completions doesn't return reasoning)
@@ -182,9 +190,8 @@ impl LLMProvider for OpenAIProvider {
             (url, payload)
         };
         
-        // Check if model supports streaming
-        let can_stream = self.supports_streaming(&request.model);
-        let should_stream = request.stream && can_stream && !use_responses_api; // Responses API doesn't support streaming
+        // Determine if we should stream
+        let should_stream = request.stream && can_stream && (use_responses_api || !use_responses_api);
         
         // DEBUG: Log streaming decision
         eprintln!("DEBUG: use_responses_api={}, can_stream={}, should_stream={}, request.stream={}", 
@@ -192,7 +199,165 @@ impl LLMProvider for OpenAIProvider {
         
         let response = self.make_request_with_retry(url, &payload).await?;
         
-        if should_stream {
+        if should_stream && use_responses_api {
+            // Handle streaming response for Responses API
+            use futures::stream::unfold;
+            use futures::StreamExt;
+            
+            let buffer = String::new();
+            let byte_stream = response.bytes_stream();
+            
+            let stream = unfold(
+                (buffer, byte_stream, Vec::<String>::new()),
+                move |(mut buffer, mut byte_stream, mut pending_content)| async move {
+                    // First, check if we have pending content to yield
+                    if let Some(content) = pending_content.pop() {
+                        return Some((Ok(content), (buffer, byte_stream, pending_content)));
+                    }
+                    
+                    loop {
+                        match byte_stream.next().await {
+                            Some(Ok(bytes)) => {
+                                let chunk = String::from_utf8_lossy(&bytes);
+                                buffer.push_str(&chunk);
+                                
+                                // Process ALL complete lines ending with \n
+                                while let Some(newline_pos) = buffer.find('\n') {
+                                    let line = buffer[..newline_pos].trim().to_string();
+                                    buffer = buffer[newline_pos + 1..].to_string();
+                                    
+                                    // Parse SSE data lines
+                                    if let Some(json_str) = line.strip_prefix("data: ") {
+                                        if json_str.trim() == "[DONE]" {
+                                            // If we have pending content, yield it first
+                                            if let Some(content) = pending_content.pop() {
+                                                return Some((Ok(content), (buffer, byte_stream, pending_content)));
+                                            }
+                                            return None; // End of stream
+                                        }
+                                        
+                                        // Parse the JSON chunk for Responses API streaming format
+                                        if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(json_str) {
+                                            // DEBUG: Log streaming chunk structure
+                                            if is_thinking {
+                                                eprintln!("DEBUG: Responses API streaming chunk: {}", serde_json::to_string(&json_val).unwrap_or_else(|_| "Failed to serialize".to_string()));
+                                            }
+                                            
+                                            // Check for reasoning chunks
+                                            if let Some(reasoning) = json_val.get("reasoning") {
+                                                if let Some(summary) = reasoning.get("summary") {
+                                                    if let Some(summary_array) = summary.as_array() {
+                                                        for summary_item in summary_array {
+                                                            if let Some(text) = summary_item.get("text").and_then(|t| t.as_str()) {
+                                                                if !text.is_empty() {
+                                                                    pending_content.insert(0, format!("thinking:{}", text));
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            
+                                            // Check for message content chunks
+                                            if let Some(output) = json_val.get("output") {
+                                                if let Some(output_array) = output.as_array() {
+                                                    for item in output_array {
+                                                        if let Some(item_type) = item.get("type").and_then(|t| t.as_str()) {
+                                                            if item_type == "message" {
+                                                                if let Some(content) = item.get("content") {
+                                                                    if let Some(content_array) = content.as_array() {
+                                                                        for content_item in content_array {
+                                                                            if let Some(text) = content_item.get("text").and_then(|t| t.as_str()) {
+                                                                                if !text.is_empty() {
+                                                                                    pending_content.insert(0, format!("content:{}", text));
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                // If we have pending content, yield the first piece
+                                if let Some(content) = pending_content.pop() {
+                                    return Some((Ok(content), (buffer, byte_stream, pending_content)));
+                                }
+                                // Continue to next chunk if no content to yield
+                            }
+                            Some(Err(e)) => {
+                                return Some((Err(anyhow::anyhow!("Stream error: {}", e)), (buffer, byte_stream, pending_content)));
+                            }
+                            None => {
+                                // Stream ended - process any remaining complete lines in buffer
+                                while let Some(newline_pos) = buffer.find('\n') {
+                                    let line = buffer[..newline_pos].trim().to_string();
+                                    buffer = buffer[newline_pos + 1..].to_string();
+                                    
+                                    if let Some(json_str) = line.strip_prefix("data: ") {
+                                        if json_str.trim() != "[DONE]" {
+                                            if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(json_str) {
+                                                // Check for reasoning chunks
+                                                if let Some(reasoning) = json_val.get("reasoning") {
+                                                    if let Some(summary) = reasoning.get("summary") {
+                                                        if let Some(summary_array) = summary.as_array() {
+                                                            for summary_item in summary_array {
+                                                                if let Some(text) = summary_item.get("text").and_then(|t| t.as_str()) {
+                                                                    if !text.is_empty() {
+                                                                        pending_content.insert(0, format!("thinking:{}", text));
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                
+                                                // Check for message content chunks
+                                                if let Some(output) = json_val.get("output") {
+                                                    if let Some(output_array) = output.as_array() {
+                                                        for item in output_array {
+                                                            if let Some(item_type) = item.get("type").and_then(|t| t.as_str()) {
+                                                                if item_type == "message" {
+                                                                    if let Some(content) = item.get("content") {
+                                                                        if let Some(content_array) = content.as_array() {
+                                                                            for content_item in content_array {
+                                                                                if let Some(text) = content_item.get("text").and_then(|t| t.as_str()) {
+                                                                                    if !text.is_empty() {
+                                                                                        pending_content.insert(0, format!("content:{}", text));
+                                                                                    }
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                // Yield any remaining pending content
+                                if let Some(content) = pending_content.pop() {
+                                    return Some((Ok(content), (String::new(), byte_stream, pending_content)));
+                                }
+                                
+                                return None; // Stream truly ended
+                            }
+                        }
+                    }
+                }
+            );
+            
+            Ok(Box::new(Box::pin(stream)))
+        } else if should_stream && !use_responses_api {
             // Handle streaming response for Chat Completions API
             use futures::stream::unfold;
             use futures::StreamExt;
@@ -297,7 +462,7 @@ impl LLMProvider for OpenAIProvider {
             
             Ok(Box::new(Box::pin(stream)))
         } else {
-            // Handle non-streaming response
+            // Handle non-streaming response (for models that don't support streaming or when streaming is disabled)
             let json_response: serde_json::Value = response.json().await?;
             
             // DEBUG: Log the full response structure when thinking is enabled
@@ -307,7 +472,7 @@ impl LLMProvider for OpenAIProvider {
                     serde_json::to_string_pretty(&json_response).unwrap_or_else(|_| "Failed to serialize".to_string()));
             }
             
-            let mut full_content = String::new();
+            let mut chunks: Vec<String> = Vec::new();
             
             if use_responses_api {
                 // Parse response using the Responses API format
@@ -337,7 +502,7 @@ impl LLMProvider for OpenAIProvider {
                                                         if is_thinking {
                                                             eprintln!("DEBUG: Found reasoning text: {}", text);
                                                         }
-                                                        full_content.push_str(&format!("thinking:{}", text));
+                                                        chunks.push(format!("thinking:{}", text));
                                                     }
                                                 }
                                             }
@@ -349,7 +514,7 @@ impl LLMProvider for OpenAIProvider {
                         
                         // Then, look for message content
                         for item in output_array {
-                            if let Some(item_type) =item.get("type").and_then(|t| t.as_str()) {
+                            if let Some(item_type) = item.get("type").and_then(|t| t.as_str()) {
                                 if item_type == "message" {
                                     if let Some(content) = item.get("content") {
                                         if let Some(content_array) = content.as_array() {
@@ -360,7 +525,7 @@ impl LLMProvider for OpenAIProvider {
                                                         if is_thinking {
                                                             eprintln!("DEBUG: Found message text: {}", text);
                                                         }
-                                                        full_content.push_str(&format!("content:{}", text));
+                                                        chunks.push(format!("content:{}", text));
                                                     }
                                                 }
                                             }
@@ -372,12 +537,21 @@ impl LLMProvider for OpenAIProvider {
                     }
                 }
                 
-                // DEBUG: Log the final concatenated content
-                eprintln!("DEBUG: Final full_content length: {}", full_content.len());
-                eprintln!("DEBUG: Final full_content: {}", full_content);
+                // DEBUG: Log the chunks
+                if is_thinking {
+                    eprintln!("DEBUG: Total chunks: {}", chunks.len());
+                    for (i, chunk) in chunks.iter().enumerate() {
+                        let preview = if chunk.len() > 100 {
+                            format!("{}...", &chunk[..100])
+                        } else {
+                            chunk.clone()
+                        };
+                        eprintln!("DEBUG: Chunk[{}]: {}", i, preview);
+                    }
+                }
                 
-                if full_content.is_empty() {
-                    full_content = "content:No response content".to_string();
+                if chunks.is_empty() {
+                    chunks.push("content:No response content".to_string());
                 }
             } else {
                 // Parse response using the Chat Completions API format
@@ -392,10 +566,11 @@ impl LLMProvider for OpenAIProvider {
                     .to_string();
                 
                 // Chat Completions API doesn't return reasoning, so all content is regular content
-                full_content = format!("content:{}", content);
+                chunks.push(format!("content:{}", content));
             }
             
-            let stream = futures::stream::once(async move { Ok(full_content) });
+            // Create a stream from the chunks vector
+            let stream = futures::stream::iter(chunks.into_iter().map(Ok));
             Ok(Box::new(Box::pin(stream)))
         }
     }
