@@ -79,6 +79,15 @@ impl OpenAIProvider {
         model.starts_with("o4")
     }
     
+    pub fn supports_chat_completions(&self, model: &str) -> bool {
+        // Based on the table, o3-pro and o1-pro don't support Chat Completions
+        !matches!(model, "o3-pro" | "o1-pro")
+    }
+    
+    pub fn supports_responses_api(&self, _model: &str) -> bool {
+        // According to the table, all models support Responses API
+        true
+    }
     
     fn supports_streaming(&self, model: &str) -> bool {
         // Based on your analysis, these models don't support streaming
@@ -100,11 +109,24 @@ impl OpenAIProvider {
 #[async_trait]
 impl LLMProvider for OpenAIProvider {
     async fn chat(&self, request: ChatRequest) -> Result<Box<dyn Stream<Item = Result<String>> + Unpin + Send>> {
-        // Use different APIs based on model requirements
-        let use_responses_api = matches!(request.model.as_str(), "o3-pro" | "o1-pro");
+        // Always prefer Responses API for reasoning support when thinking is enabled
+        // Fall back to Chat Completions only if model doesn't support Responses API or thinking is disabled
+        let use_responses_api = if request.thinking && self.supports_thinking(&request.model) {
+            // Always use Responses API for thinking-enabled requests on reasoning models
+            true
+        } else if !self.supports_chat_completions(&request.model) {
+            // Must use Responses API for models that don't support Chat Completions
+            true
+        } else {
+            // Use Chat Completions for non-reasoning requests on models that support it
+            false
+        };
+        
+        // Capture thinking flag for debug output
+        let is_thinking = request.thinking && self.supports_thinking(&request.model);
         
         let (url, payload) = if use_responses_api {
-            // Use Responses API for models that require it
+            // Use Responses API for reasoning support
             let url = "https://api.openai.com/v1/responses";
             let mut payload = json!({
                 "model": request.model,
@@ -112,16 +134,24 @@ impl LLMProvider for OpenAIProvider {
             });
             
             // Add reasoning support for thinking-enabled models
-            if request.thinking && self.supports_thinking(&request.model) {
+            if is_thinking {
                 payload["reasoning"] = json!({
+                    "summary": "detailed",  // Use detailed for full reasoning output
                     "effort": "high"
                 });
                 payload["max_output_tokens"] = json!(request.max_tokens + request.thinking_budget);
+            } else {
+                payload["max_output_tokens"] = json!(request.max_tokens);
             }
             
             // Only add temperature for non-reasoning models
-            if !self.is_reasoning_model(&request.model) {
+            if !self.is_reasoning_model(&request.model) && self.supports_temperature(&request.model) {
                 payload["temperature"] = json!(request.temperature);
+            }
+            
+            // DEBUG: Log the request payload when thinking is enabled
+            if is_thinking {
+                eprintln!("DEBUG: OpenAI Responses API request with reasoning: {}", serde_json::to_string_pretty(&payload).unwrap_or_else(|_| "Failed to serialize".to_string()));
             }
             
             (url, payload)
@@ -134,8 +164,8 @@ impl LLMProvider for OpenAIProvider {
                 "stream": request.stream
             });
             
-            // Add reasoning support for thinking-enabled models
-            if request.thinking && self.supports_thinking(&request.model) {
+            // Add reasoning support for thinking-enabled models (though Chat Completions doesn't return reasoning)
+            if is_thinking {
                 payload["reasoning_effort"] = json!("high");
                 // Use max_completion_tokens for reasoning models (includes output + reasoning)
                 payload["max_completion_tokens"] = json!(request.max_tokens + request.thinking_budget);
@@ -154,11 +184,11 @@ impl LLMProvider for OpenAIProvider {
         
         // Check if model supports streaming
         let can_stream = self.supports_streaming(&request.model);
-        let should_stream = request.stream && can_stream;
+        let should_stream = request.stream && can_stream && !use_responses_api; // Responses API doesn't support streaming
         
         let response = self.make_request_with_retry(url, &payload).await?;
         
-        if should_stream && !use_responses_api {
+        if should_stream {
             // Handle streaming response for Chat Completions API
             use futures::stream::unfold;
             use futures::StreamExt;
@@ -206,7 +236,8 @@ impl LLMProvider for OpenAIProvider {
                                                 .and_then(|content| content.as_str())
                                             {
                                                 if !content.is_empty() {
-                                                    pending_content.insert(0, content.to_string());
+                                                    // Chat Completions API doesn't return reasoning, so all content is regular content
+                                                    pending_content.insert(0, format!("content:{}", content));
                                                 }
                                             }
                                         }
@@ -240,7 +271,7 @@ impl LLMProvider for OpenAIProvider {
                                                     .and_then(|content| content.as_str())
                                                 {
                                                     if !content.is_empty() {
-                                                        pending_content.insert(0, content.to_string());
+                                                        pending_content.insert(0, format!("content:{}", content));
                                                     }
                                                 }
                                             }
@@ -265,27 +296,92 @@ impl LLMProvider for OpenAIProvider {
             // Handle non-streaming response
             let json_response: serde_json::Value = response.json().await?;
             
-            let content = if use_responses_api {
+            // DEBUG: Log the full response structure when thinking is enabled
+            if is_thinking {
+                eprintln!("DEBUG: OpenAI {} response: {}", 
+                    if use_responses_api { "Responses API" } else { "Chat Completions API" },
+                    serde_json::to_string_pretty(&json_response).unwrap_or_else(|_| "Failed to serialize".to_string()));
+            }
+            
+            let mut full_content = String::new();
+            
+            if use_responses_api {
                 // Parse response using the Responses API format
-                json_response
-                    .get("output")
-                    .and_then(|output| output.as_array())
-                    .and_then(|arr| {
-                        // Find the message object in the output array
-                        arr.iter().find(|item| {
-                            item.get("type").and_then(|t| t.as_str()) == Some("message")
-                        })
-                    })
-                    .and_then(|message| message.get("content"))
-                    .and_then(|content| content.as_array())
-                    .and_then(|arr| arr.first())
-                    .and_then(|content_item| content_item.get("text"))
-                    .and_then(|text| text.as_str())
-                    .unwrap_or("No response content")
-                    .to_string()
+                if let Some(output) = json_response.get("output") {
+                    if let Some(output_array) = output.as_array() {
+                        // DEBUG: Log output array structure
+                        if is_thinking {
+                            eprintln!("DEBUG: Output array has {} items", output_array.len());
+                            for (i, item) in output_array.iter().enumerate() {
+                                if let Some(item_type) = item.get("type").and_then(|t| t.as_str()) {
+                                    eprintln!("DEBUG: Output[{}] type: {}", i, item_type);
+                                }
+                            }
+                        }
+                        
+                        // First, look for reasoning content
+                        for item in output_array {
+                            if let Some(item_type) = item.get("type").and_then(|t| t.as_str()) {
+                                if item_type == "reasoning" {
+                                    if let Some(reasoning_content) = item.get("content") {
+                                        if let Some(reasoning_str) = reasoning_content.as_str() {
+                                            // DEBUG: Log reasoning content
+                                            if is_thinking {
+                                                eprintln!("DEBUG: Found reasoning content: {}", reasoning_str);
+                                            }
+                                            full_content.push_str(&format!("thinking:{}", reasoning_str));
+                                        } else if let Some(reasoning_array) = reasoning_content.as_array() {
+                                            // Reasoning might be an array of content items
+                                            for reasoning_item in reasoning_array {
+                                                if let Some(text) = reasoning_item.get("text").and_then(|t| t.as_str()) {
+                                                    // DEBUG: Log reasoning text
+                                                    if is_thinking {
+                                                        eprintln!("DEBUG: Found reasoning text: {}", text);
+                                                    }
+                                                    full_content.push_str(&format!("thinking:{}", text));
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Then, look for message content
+                        for item in output_array {
+                            if let Some(item_type) = item.get("type").and_then(|t| t.as_str()) {
+                                if item_type == "message" {
+                                    if let Some(content) = item.get("content") {
+                                        if let Some(content_array) = content.as_array() {
+                                            for content_item in content_array {
+                                                if let Some(text) = content_item.get("text").and_then(|t| t.as_str()) {
+                                                    // DEBUG: Log message text
+                                                    if is_thinking {
+                                                        eprintln!("DEBUG: Found message text: {}", text);
+                                                    }
+                                                    full_content.push_str(&format!("content:{}", text));
+                                                }
+                                            }
+                                        } else if let Some(content_str) = content.as_str() {
+                                            // DEBUG: Log message content
+                                            if is_thinking {
+                                                eprintln!("DEBUG: Found message content: {}", content_str);
+                                            }
+                                            full_content.push_str(&format!("content:{}", content_str));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                if full_content.is_empty() {
+                    full_content = "content:No response content".to_string();
+                }
             } else {
                 // Parse response using the Chat Completions API format
-                json_response
+                let content = json_response
                     .get("choices")
                     .and_then(|choices| choices.as_array())
                     .and_then(|arr| arr.first())
@@ -293,10 +389,13 @@ impl LLMProvider for OpenAIProvider {
                     .and_then(|msg| msg.get("content"))
                     .and_then(|content| content.as_str())
                     .unwrap_or("No response content")
-                    .to_string()
-            };
+                    .to_string();
+                
+                // Chat Completions API doesn't return reasoning, so all content is regular content
+                full_content = format!("content:{}", content);
+            }
             
-            let stream = futures::stream::once(async move { Ok(content) });
+            let stream = futures::stream::once(async move { Ok(full_content) });
             Ok(Box::new(Box::pin(stream)))
         }
     }
