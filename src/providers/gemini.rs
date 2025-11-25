@@ -197,16 +197,42 @@ impl LLMProvider for GeminiProvider {
                                         
                                         // Parse the JSON chunk
                                         if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(json_str) {
+                                            // DEBUG: Log the full JSON structure when thinking is enabled
+                                            if request.thinking {
+                                                eprintln!("DEBUG: Gemini thinking response chunk: {}", serde_json::to_string_pretty(&json_val).unwrap_or_else(|_| "Failed to serialize".to_string()));
+                                            }
+                                            
                                             if let Some(candidates) = json_val.get("candidates") {
                                                 if let Some(candidates_array) = candidates.as_array() {
                                                     if let Some(candidate) = candidates_array.first() {
                                                         if let Some(content_obj) = candidate.get("content") {
                                                             if let Some(parts) = content_obj.get("parts") {
                                                                 if let Some(parts_array) = parts.as_array() {
-                                                                    if let Some(part) = parts_array.first() {
+                                                                    // DEBUG: Log parts structure
+                                                                    if request.thinking {
+                                                                        eprintln!("DEBUG: Parts array: {:?}", parts_array);
+                                                                    }
+                                                                    
+                                                                    for part in parts_array {
+                                                                        // Check for thought content
+                                                                        if let Some(thought) = part.get("thought") {
+                                                                            if let Some(thought_str) = thought.as_str() {
+                                                                                if !thought_str.is_empty() {
+                                                                                    // DEBUG: Log thought content
+                                                                                    eprintln!("DEBUG: Found thought: {}", thought_str);
+                                                                                    pending_content.insert(0, format!("<thinking>\n{}\n</thinking>\n", thought_str));
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                        
+                                                                        // Check for regular text content
                                                                         if let Some(text) = part.get("text") {
                                                                             if let Some(text_str) = text.as_str() {
                                                                                 if !text_str.is_empty() {
+                                                                                    // DEBUG: Log text content
+                                                                                    if request.thinking {
+                                                                                        eprintln!("DEBUG: Found text: {}", text_str);
+                                                                                    }
                                                                                     pending_content.insert(0, text_str.to_string());
                                                                                 }
                                                                             }
@@ -246,7 +272,17 @@ impl LLMProvider for GeminiProvider {
                                                             if let Some(content_obj) = candidate.get("content") {
                                                                 if let Some(parts) = content_obj.get("parts") {
                                                                     if let Some(parts_array) = parts.as_array() {
-                                                                        if let Some(part) = parts_array.first() {
+                                                                        for part in parts_array {
+                                                                            // Check for thought content
+                                                                            if let Some(thought) = part.get("thought") {
+                                                                                if let Some(thought_str) = thought.as_str() {
+                                                                                    if !thought_str.is_empty() {
+                                                                                        pending_content.insert(0, format!("<thinking>\n{}\n</thinking>\n", thought_str));
+                                                                                    }
+                                                                                }
+                                                                            }
+                                                                            
+                                                                            // Check for regular text content
                                                                             if let Some(text) = part.get("text") {
                                                                                 if let Some(text_str) = text.as_str() {
                                                                                     if !text_str.is_empty() {
@@ -283,20 +319,51 @@ impl LLMProvider for GeminiProvider {
             // Handle non-streaming response
             let json_response: serde_json::Value = response.json().await?;
             
-            let content = json_response
-                .get("candidates")
-                .and_then(|candidates| candidates.as_array())
-                .and_then(|arr| arr.first())
-                .and_then(|candidate| candidate.get("content"))
-                .and_then(|content| content.get("parts"))
-                .and_then(|parts| parts.as_array())
-                .and_then(|arr| arr.first())
-                .and_then(|part| part.get("text"))
-                .and_then(|text| text.as_str())
-                .unwrap_or("No response content")
-                .to_string();
+            // DEBUG: Log the full response structure when thinking is enabled
+            if request.thinking {
+                eprintln!("DEBUG: Gemini non-streaming thinking response: {}", serde_json::to_string_pretty(&json_response).unwrap_or_else(|_| "Failed to serialize".to_string()));
+            }
             
-            let stream = futures::stream::once(async move { Ok(content) });
+            let mut full_content = String::new();
+            
+            // Extract both thought and text content
+            if let Some(candidates) = json_response.get("candidates") {
+                if let Some(candidates_array) = candidates.as_array() {
+                    if let Some(candidate) = candidates_array.first() {
+                        if let Some(content_obj) = candidate.get("content") {
+                            if let Some(parts) = content_obj.get("parts") {
+                                if let Some(parts_array) = parts.as_array() {
+                                    for part in parts_array {
+                                        // Check for thought content
+                                        if let Some(thought) = part.get("thought") {
+                                            if let Some(thought_str) = thought.as_str() {
+                                                if !thought_str.is_empty() {
+                                                    full_content.push_str(&format!("<thinking>\n{}\n</thinking>\n", thought_str));
+                                                }
+                                            }
+                                        }
+                                        
+                                        // Check for regular text content
+                                        if let Some(text) = part.get("text") {
+                                            if let Some(text_str) = text.as_str() {
+                                                if !text_str.is_empty() {
+                                                    full_content.push_str(text_str);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            if full_content.is_empty() {
+                full_content = "No response content".to_string();
+            }
+            
+            let stream = futures::stream::once(async move { Ok(full_content) });
             Ok(Box::new(Box::pin(stream)))
         }
     }
