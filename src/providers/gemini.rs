@@ -162,9 +162,12 @@ impl LLMProvider for GeminiProvider {
             let buffer = String::new();
             let byte_stream = response.bytes_stream();
             
+            // Capture thinking flag before the closure
+            let is_thinking = request.thinking;
+            
             let stream = unfold(
                 (buffer, byte_stream, Vec::<String>::new()),
-                |(mut buffer, mut byte_stream, mut pending_content)| async move {
+                move |(mut buffer, mut byte_stream, mut pending_content)| async move {
                     // First, check if we have pending content to yield
                     if let Some(content) = pending_content.pop() {
                         return Some((Ok(content), (buffer, byte_stream, pending_content)));
@@ -198,7 +201,7 @@ impl LLMProvider for GeminiProvider {
                                         // Parse the JSON chunk
                                         if let Ok(json_val) = serde_json::from_str::<serde_json::Value>(json_str) {
                                             // DEBUG: Log the full JSON structure when thinking is enabled
-                                            if request.thinking {
+                                            if is_thinking {
                                                 eprintln!("DEBUG: Gemini thinking response chunk: {}", serde_json::to_string_pretty(&json_val).unwrap_or_else(|_| "Failed to serialize".to_string()));
                                             }
                                             
@@ -209,7 +212,7 @@ impl LLMProvider for GeminiProvider {
                                                             if let Some(parts) = content_obj.get("parts") {
                                                                 if let Some(parts_array) = parts.as_array() {
                                                                     // DEBUG: Log parts structure
-                                                                    if request.thinking {
+                                                                    if is_thinking {
                                                                         eprintln!("DEBUG: Parts array: {:?}", parts_array);
                                                                     }
                                                                     
@@ -230,7 +233,7 @@ impl LLMProvider for GeminiProvider {
                                                                             if let Some(text_str) = text.as_str() {
                                                                                 if !text_str.is_empty() {
                                                                                     // DEBUG: Log text content
-                                                                                    if request.thinking {
+                                                                                    if is_thinking {
                                                                                         eprintln!("DEBUG: Found text: {}", text_str);
                                                                                     }
                                                                                     pending_content.insert(0, text_str.to_string());
