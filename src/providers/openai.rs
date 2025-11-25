@@ -83,11 +83,6 @@ impl OpenAIProvider {
         !matches!(model, "o3-pro" | "o1-pro")
     }
     
-    pub fn supports_responses_api(&self, _model: &str) -> bool {
-        // According to the table, all models support Responses API
-        true
-    }
-    
     fn supports_streaming(&self, model: &str) -> bool {
         // Based on your analysis, these models don't support streaming
         !matches!(model, "o3-pro" | "o1-pro")
