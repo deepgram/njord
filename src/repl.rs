@@ -1009,7 +1009,7 @@ impl Repl {
                     self.ui.print_error("No sessions found to continue");
                 }
             }
-            Command::ChatRecent => {
+            Command::Chat Recent => {
                 let recent_sessions = self.history.get_recent_sessions(10);
                 if recent_sessions.is_empty() {
                     self.ui.print_info("No recent sessions found");
@@ -1651,7 +1651,7 @@ impl Repl {
                     println!("Model: {}", self.session.current_model);
                     println!("Temperature: {}", self.session.temperature);
                     if let Some(system_prompt) = &self.session.system_prompt {
-                        println!("System prompt: {}", system_prompt);
+                        println!("System prompt: {}",system_prompt);
                     }
                     println!();
                     
@@ -2937,7 +2937,7 @@ impl Repl {
         
         // Choose a reliable model for title generation
         let model = match provider_name {
-            "anthropic" => "claude-3-5-sonnet-20241022",
+            "anthropic" => "claude-haiku-4-5-20251001",
             "openai" => "gpt-4o",
             "gemini" => "gemini-2.5-pro",
             _ => return Err(anyhow::anyhow!("Unknown provider: {}", provider_name)),
@@ -3124,7 +3124,7 @@ impl Repl {
         
         // Choose a reliable model for summary generation
         let model = match provider_name {
-            "anthropic" => "claude-3-5-sonnet-20241022",
+            "anthropic" => "claude-haiku-4-5-20251001",
             "openai" => "gpt-4o",
             "gemini" => "gemini-2.5-pro",
             _ => return Err(anyhow::anyhow!("Unknown provider: {}", provider_name)),
@@ -3400,7 +3400,7 @@ Format your summary in clear, readable paragraphs. Be objective and factual.";
         
         // Choose a reliable model for name generation
         let model = match provider_name {
-            "anthropic" => "claude-3-5-sonnet-20241022",
+            "anthropic" => "claude-haiku-4-5-20251001",
             "openai" => "gpt-4o",
             "gemini" => "gemini-2.5-pro",
             _ => return Err(anyhow::anyhow!("Unknown provider: {}", provider_name)),
