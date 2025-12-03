@@ -1009,7 +1009,7 @@ impl Repl {
                     self.ui.print_error("No sessions found to continue");
                 }
             }
-            Command::Chat Recent => {
+            Command::ChatRecent => {
                 let recent_sessions = self.history.get_recent_sessions(10);
                 if recent_sessions.is_empty() {
                     self.ui.print_info("No recent sessions found");
@@ -2691,7 +2691,7 @@ impl Repl {
                     // Add conversation history
                     request_messages.extend(self.session.messages.iter().map(|nm| nm.message.clone()));
                     
-                    // Add current user message
+                    //Add current user message
                     request_messages.push(user_message.clone());
                     
                     let chat_request = ChatRequest {
@@ -3071,7 +3071,7 @@ impl Repl {
                 return Err(anyhow::anyhow!("Session '{}' not found", name));
             }
         } else {
-            // Summarize current session
+            // Summar ize current session
             (self.session.clone(), "current session".to_string())
         };
         
