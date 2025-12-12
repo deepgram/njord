@@ -70,7 +70,7 @@ impl OpenAIProvider {
     }
     
     pub fn is_reasoning_model(&self, model: &str) -> bool {
-        // gpt-5 and gpt-5.1 variants support reasoning, but gpt-4 variants do not
+        // gpt-5 and gpt-5.1 and gpt-5.2 variants support reasoning, but gpt-4 variants do not
         // All o1, o3, o4 models support reasoning
         (model.starts_with("gpt-5") && !model.starts_with("gpt-4")) || 
         model.starts_with("o1") || 
@@ -79,8 +79,9 @@ impl OpenAIProvider {
     }
     
     pub fn supports_chat_completions(&self, model: &str) -> bool {
-        // Based on the table, o3-pro and o1-pro don't support Chat Completions
-        !matches!(model, "o3-pro" | "o1-pro")
+        // Based on the table, o3-pro, o1-pro, and gpt-5.2-pro don't support Chat Completions
+        !matches!(model, "o3-pro" | "o1-pro") && 
+        !model.starts_with("gpt-5.2-pro")
     }
     
     fn supports_streaming(&self, model: &str) -> bool {
@@ -90,7 +91,10 @@ impl OpenAIProvider {
     
     pub fn supports_temperature(&self, model: &str) -> bool {
         // Models that don't support custom temperature (reasoning models typically don't)
-        !matches!(model, "o4-mini" | "o3-pro" | "o1-pro") && !self.is_reasoning_model(model)
+        // gpt-5.2-pro doesn't support temperature
+        !matches!(model, "o4-mini" | "o3-pro" | "o1-pro") && 
+        !model.starts_with("gpt-5.2-pro") &&
+        !self.is_reasoning_model(model)
     }
     
     pub fn supports_thinking(&self, model: &str) -> bool {
@@ -489,6 +493,10 @@ impl LLMProvider for OpenAIProvider {
     
     fn get_models(&self) -> Vec<String> {
         vec![
+            "gpt-5.2-pro".to_string(),
+            "gpt-5.2-pro-2025-12-11".to_string(),
+            "gpt-5.2".to_string(),
+            "gpt-5.2-2025-12-11".to_string(),
             "gpt-5.1".to_string(),
             "gpt-5.1-2025-11-13".to_string(),
             "gpt-5".to_string(),
