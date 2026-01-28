@@ -1,6 +1,8 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fs;
+use std::path::Path;
 
 use crate::cli::Args;
 
@@ -19,15 +21,24 @@ pub struct Config {
 
 impl Config {
     pub fn sessions_file(&self) -> String {
-        format!("{}/.njord.sessions", self.state_directory)
+        format!("{}/sessions", self.state_directory)
     }
-    
+
     pub fn prompts_file(&self) -> String {
-        format!("{}/.njord.prompts", self.state_directory)
+        format!("{}/prompts", self.state_directory)
     }
-    
+
     pub fn inputs_file(&self) -> String {
-        format!("{}/.njord.inputs", self.state_directory)
+        format!("{}/inputs", self.state_directory)
+    }
+
+    /// Ensures the state directory exists, creating it if necessary.
+    pub fn ensure_state_directory(&self) -> Result<()> {
+        let path = Path::new(&self.state_directory);
+        if !path.exists() {
+            fs::create_dir_all(path)?;
+        }
+        Ok(())
     }
 }
 
@@ -250,5 +261,61 @@ mod tests {
         
         let config = Config::from_args(&args).unwrap();
         assert!(config.ephemeral);
+    }
+
+    #[test]
+    fn test_file_paths() {
+        let args = Args {
+            openai_key: Some("test-key".to_string()),
+            anthropic_key: None,
+            gemini_key: None,
+            model: "gpt-4".to_string(),
+            temperature: 0.7,
+            max_tokens: 4096,
+            thinking_budget: 20000,
+            load_session: None,
+            new_session: false,
+            state_directory: "/custom/path".to_string(),
+            ephemeral: false,
+        };
+
+        let config = Config::from_args(&args).unwrap();
+        assert_eq!(config.sessions_file(), "/custom/path/sessions");
+        assert_eq!(config.prompts_file(), "/custom/path/prompts");
+        assert_eq!(config.inputs_file(), "/custom/path/inputs");
+    }
+
+    #[test]
+    fn test_ensure_state_directory() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let state_path = temp_dir.path().join("njord_test_state");
+
+        let args = Args {
+            openai_key: Some("test-key".to_string()),
+            anthropic_key: None,
+            gemini_key: None,
+            model: "gpt-4".to_string(),
+            temperature: 0.7,
+            max_tokens: 4096,
+            thinking_budget: 20000,
+            load_session: None,
+            new_session: false,
+            state_directory: state_path.to_string_lossy().to_string(),
+            ephemeral: false,
+        };
+
+        let config = Config::from_args(&args).unwrap();
+
+        // Directory should not exist yet
+        assert!(!state_path.exists());
+
+        // Ensure it gets created
+        config.ensure_state_directory().unwrap();
+        assert!(state_path.exists());
+        assert!(state_path.is_dir());
+
+        // Calling again should be idempotent
+        config.ensure_state_directory().unwrap();
+        assert!(state_path.exists());
     }
 }

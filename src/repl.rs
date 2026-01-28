@@ -59,7 +59,12 @@ impl Repl {
         if providers.is_empty() {
             return Err(anyhow::anyhow!("No valid API keys provided. Please set at least one API key."));
         }
-        
+
+        // Ensure state directory exists (only matters for non-ephemeral mode)
+        if !config.ephemeral {
+            config.ensure_state_directory()?;
+        }
+
         let history = History::load(config.sessions_file())?;
         let prompts = PromptLibrary::load(config.prompts_file())?;
         

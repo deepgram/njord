@@ -1,5 +1,17 @@
 use clap::Parser;
 
+/// Returns the default state directory following XDG Base Directory specification.
+/// Uses $XDG_DATA_HOME/njord if set, otherwise ~/.local/share/njord
+pub fn default_state_directory() -> String {
+    if let Ok(xdg_data_home) = std::env::var("XDG_DATA_HOME") {
+        format!("{}/njord", xdg_data_home)
+    } else if let Some(home) = dirs::home_dir() {
+        format!("{}/.local/share/njord", home.display())
+    } else {
+        ".".to_string() // Fallback to current directory
+    }
+}
+
 #[derive(Parser, Debug)]
 #[command(name = "njord")]
 #[command(about = "Interactive LLM REPL - Navigate the vast ocean of AI conversations")]
@@ -41,11 +53,27 @@ pub struct Args {
     #[arg(long)]
     pub new_session: bool,
     
-    /// State directory containing .njord.* files
-    #[arg(long, default_value = ".")]
+    /// State directory for njord data files (sessions, prompts, inputs)
+    #[arg(long, default_value_t = default_state_directory())]
     pub state_directory: String,
     
     /// Run in ephemeral mode (don't save any changes to disk)
     #[arg(long)]
     pub ephemeral: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_state_directory_returns_valid_path() {
+        let result = default_state_directory();
+        // Should either end with njord (if XDG or home is set) or be "." (fallback)
+        assert!(
+            result.ends_with("/njord") || result == ".",
+            "Expected path ending with /njord or '.', got: {}",
+            result
+        );
+    }
 }
