@@ -5,6 +5,8 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 use chrono::Utc;
 use std::path::Path;
+use std::io::Write;
+use tempfile::NamedTempFile;
 
 use crate::{
     commands::{Command, CommandParser, CopyType, SaveType, SessionReference},
@@ -667,7 +669,7 @@ impl Repl {
     
     fn get_session_display(&self) -> String {
         let message_count = self.session.messages.len();
-        
+
         if message_count == 0 {
             "new (0 messages)".to_string()
         } else if let Some(name) = &self.session.name {
@@ -676,7 +678,57 @@ impl Repl {
             format!("untitled ({} messages)", message_count)
         }
     }
-    
+
+    fn open_in_editor(&self, initial_content: &str) -> Result<Option<String>> {
+        // Get editor from environment, fallback to vi
+        let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vi".to_string());
+
+        // Create temp file with .md extension for syntax highlighting
+        let mut temp_file = NamedTempFile::with_suffix(".md")?;
+
+        // Write initial content
+        temp_file.write_all(initial_content.as_bytes())?;
+        temp_file.flush()?;
+
+        let temp_path = temp_file.path().to_path_buf();
+
+        // Spawn editor and wait for it to exit
+        let status = std::process::Command::new(&editor)
+            .arg(&temp_path)
+            .status();
+
+        match status {
+            Ok(exit_status) => {
+                if !exit_status.success() {
+                    // Editor exited with error, but still try to read the file
+                    // (user may have saved before the error)
+                }
+
+                // Read the edited content
+                let content = std::fs::read_to_string(&temp_path)?;
+
+                // Trim whitespace and check for empty (cancel)
+                let trimmed = content.trim();
+                if trimmed.is_empty() {
+                    Ok(None)
+                } else {
+                    Ok(Some(trimmed.to_string()))
+                }
+            }
+            Err(e) => {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    Err(anyhow::anyhow!(
+                        "Editor '{}' not found. Set $EDITOR environment variable to your preferred editor.",
+                        editor
+                    ))
+                } else {
+                    Err(anyhow::anyhow!("Failed to launch editor '{}': {}", editor, e))
+                }
+            }
+        }
+        // temp_file is automatically deleted when dropped
+    }
+
     fn get_next_agent_number(&self) -> usize {
         self.session.messages.iter()
             .filter(|msg| msg.message.role == "assistant")
