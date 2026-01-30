@@ -2801,13 +2801,14 @@ impl Repl {
     }
     
     async fn handle_message(&mut self, message: String) -> Result<()> {
-        // Substitute variables in the message before processing
-        let processed_message = match self.substitute_variables(&message) {
-            Ok(msg) => {
-                if msg != message {
+        // Validate that variables can be substituted (catch errors early)
+        // But keep the original message with {{var}} templates for storage
+        match self.substitute_variables(&message) {
+            Ok(substituted) => {
+                if substituted != message {
                     self.ui.print_info("Variables substituted");
                 }
-                msg
+                // Variables are valid, continue with original message
             }
             Err(errors) => {
                 for (var_name, error) in &errors {
@@ -2835,12 +2836,16 @@ impl Repl {
                                 result = result.replace(&pattern, "");
                             }
                         }
-                        // Re-run substitution to handle any remaining valid variables
+                        // Validate remaining variables work, then recurse with modified template
                         match self.substitute_variables(&result) {
-                            Ok(final_result) => final_result,
+                            Ok(_) => {
+                                // Remaining variables are valid, recurse with the modified template
+                                return Box::pin(self.handle_message(result)).await;
+                            }
                             Err(_) => {
-                                // If still failing, just strip all patterns
-                                inline_regex.replace_all(&result, "").to_string()
+                                // If still failing, strip all patterns and recurse
+                                let stripped = inline_regex.replace_all(&result, "").to_string();
+                                return Box::pin(self.handle_message(stripped)).await;
                             }
                         }
                     }
@@ -2862,18 +2867,19 @@ impl Repl {
                     }
                 }
             }
-        };
+        }
 
         // Create cancellation token for this request
         let cancel_token = CancellationToken::new();
         self.active_request_token = Some(cancel_token.clone());
-        
+
         // Split the receiver to avoid borrow checker issues
         let mut ctrl_c_rx = std::mem::replace(&mut self.ctrl_c_rx, tokio::sync::mpsc::unbounded_channel().1);
-        
-        // Try to send the processed message with retry logic
+
+        // Pass the ORIGINAL message (with {{var}} templates) to send_message_with_retry
+        // Session will store the template, substitution happens at LLM send time
         let result = tokio::select! {
-            result = self.send_message_with_retry(&processed_message, 3, cancel_token.clone()) => {
+            result = self.send_message_with_retry(&message, 3, cancel_token.clone()) => {
                 // Restore the receiver
                 self.ctrl_c_rx = ctrl_c_rx;
                 result
@@ -2969,12 +2975,27 @@ impl Repl {
                     
                     // Add conversation history
                     request_messages.extend(self.session.messages.iter().map(|nm| nm.message.clone()));
-                    
+
                     //Add current user message
                     request_messages.push(user_message.clone());
-                    
+
+                    // Substitute variables in all user messages at send time
+                    // This ensures templates like {{date}} get fresh values each time
+                    let substituted_messages: Vec<Message> = request_messages
+                        .into_iter()
+                        .map(|mut msg| {
+                            if msg.role == "user" {
+                                // Only substitute user messages (assistant/system don't have variables)
+                                if let Ok(substituted) = self.substitute_variables(&msg.content) {
+                                    msg.content = substituted;
+                                }
+                            }
+                            msg
+                        })
+                        .collect();
+
                     let chat_request = ChatRequest {
-                        messages: request_messages,
+                        messages: substituted_messages,
                         model: self.session.current_model.clone(),
                         temperature: self.session.temperature,
                         max_tokens: self.session.max_tokens,
