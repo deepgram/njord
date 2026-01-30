@@ -884,7 +884,7 @@ impl Repl {
                 
                 // Message Navigation
                 println!("\x1b[1;36mMessage Navigation:\x1b[0m");
-                println!("  /history - Show conversation history");
+                println!("  /history [--expand]- Show conversation history");
                 println!("  /undo [N] - Undo last N agent responses (restores user message for editing)");
                 println!("  /goto N - Jump back to User N (removes later messages and queues user message for editing)");
                 println!("  /search TERM - Search through chat history");
@@ -915,15 +915,17 @@ impl Repl {
                 
                 // File & Variable Operations
                 println!("\x1b[1;36mFile & Variable Operations:\x1b[0m");
-                println!("  /load FILE [VAR] - Load file content into variable");
-                println!("    \x1b[1;32mEx:\x1b[0m /load config.json - Load as {{{{config_json}}}}");
-                println!("    \x1b[1;32mEx:\x1b[0m /load data.txt mydata - Load as {{{{mydata}}}}");
-                println!("  /variables - List all loaded variables");
-                println!("  /var show VAR - Show variable content");
-                println!("  /var delete VAR - Delete a variable");
-                println!("  /var reload [VAR] - Reload variable(s) from file(s)");
-                println!("    \x1b[1;32mEx:\x1b[0m /var reload - Reload all variables");
-                println!("    \x1b[1;32mEx:\x1b[0m /var reload myvar - Reload specific variable");
+                println!("  /load SOURCE VAR   - Load variable from source");
+                println!("    Sources: =literal, @filepath, !command");
+                println!("    \x1b[1;32mEx:\x1b[0m /load \"=hello\" greeting");
+                println!("    \x1b[1;32mEx:\x1b[0m /load \"@src/main.rs\" code");
+                println!("    \x1b[1;32mEx:\x1b[0m /load \"!git diff\" changes");
+                println!("    \x1b[1;32mEx:\x1b[0m /load \"!slow-cmd\" x --timeout 60");
+                println!("  /freeze VAR        - Toggle frozen state on variable");
+                println!("  /vars              - List loaded variables");
+                println!("  /var show VAR      - Show variable content");
+                println!("  /var reload [VAR]  - Reload frozen variable(s)");
+                println!("  /var delete VAR    - Delete a variable");
                 println!();
                 
                 // System Prompts & Library
@@ -2685,6 +2687,44 @@ impl Repl {
                     self.reload_all_variables();
                 }
             }
+            Command::VariableFreeze(var_name) => {
+                if let Some(var) = self.variables.get_mut(&var_name) {
+                    if var.is_frozen() {
+                        // Unfreeze
+                        var.unfreeze();
+                        if let Some(session_var) = self.session.variables.get_mut(&var_name) {
+                            session_var.unfreeze();
+                        }
+                        self.ui.print_info(&format!("Variable '{{{{{}}}}}' unfrozen (now live)", var_name));
+                    } else {
+                        // Freeze with current value
+                        match var.source.evaluate_sync() {
+                            Ok(value) => {
+                                let size = value.len();
+                                var.freeze(value.clone());
+                                if let Some(session_var) = self.session.variables.get_mut(&var_name) {
+                                    session_var.freeze(value);
+                                }
+                                self.ui.print_info(&format!(
+                                    "Variable '{{{{{}}}}}' frozen ({} bytes captured)",
+                                    var_name, size
+                                ));
+                            }
+                            Err(e) => {
+                                self.ui.print_error(&format!("Failed to freeze '{}': {}", var_name, e));
+                            }
+                        }
+                    }
+                } else {
+                    self.ui.print_error(&format!("Variable '{}' not found", var_name));
+                    if !self.variables.is_empty() {
+                        self.ui.print_info("Available variables:");
+                        for name in self.variables.keys() {
+                            println!("  {}", name);
+                        }
+                    }
+                }
+            }
             Command::Edit(target) => {
                 match target {
                     EditTarget::NewMessage(prefix) => {
@@ -2752,16 +2792,68 @@ impl Repl {
     
     async fn handle_message(&mut self, message: String) -> Result<()> {
         // Substitute variables in the message before processing
-        let processed_message = self.substitute_variables(&message);
-        
-        // Show substitution info if variables were replaced
-        if processed_message != message {
-            let var_count = self.variables.keys()
-                .filter(|var_name| message.contains(&format!("{{{{{}}}}}", var_name)))
-                .count();
-            self.ui.print_info(&format!("Substituted {} variable(s) in message", var_count));
-        }
-        
+        let processed_message = match self.substitute_variables(&message) {
+            Ok(msg) => {
+                if msg != message {
+                    self.ui.print_info("Variables substituted");
+                }
+                msg
+            }
+            Err(errors) => {
+                for (var_name, error) in &errors {
+                    self.ui.print_error(&format!("Variable '{}' failed: {}", var_name, error));
+                }
+
+                println!("  [s]kip (use empty) / [a]bort / [r]etry / [e]dit source?");
+
+                let mut input = String::new();
+                std::io::stdin().read_line(&mut input)?;
+
+                match input.trim().to_lowercase().as_str() {
+                    "s" | "skip" => {
+                        let mut result = message.clone();
+                        // Remove failed named variables
+                        for (var_name, _) in &errors {
+                            let pattern = format!("{{{{{}}}}}", var_name);
+                            result = result.replace(&pattern, "");
+                        }
+                        // Also remove failed inline patterns
+                        let inline_regex = regex::Regex::new(r"\{\{([=@!][^}]+)\}\}").unwrap();
+                        for (source_str, _) in &errors {
+                            if source_str.starts_with('=') || source_str.starts_with('@') || source_str.starts_with('!') {
+                                let pattern = format!("{{{{{}}}}}", source_str);
+                                result = result.replace(&pattern, "");
+                            }
+                        }
+                        // Re-run substitution to handle any remaining valid variables
+                        match self.substitute_variables(&result) {
+                            Ok(final_result) => final_result,
+                            Err(_) => {
+                                // If still failing, just strip all patterns
+                                inline_regex.replace_all(&result, "").to_string()
+                            }
+                        }
+                    }
+                    "a" | "abort" => {
+                        self.ui.print_info("Request aborted");
+                        return Ok(());
+                    }
+                    "r" | "retry" => {
+                        return Box::pin(self.handle_message(message)).await;
+                    }
+                    "e" | "edit" => {
+                        self.queued_message = Some(message);
+                        self.ui.print_info("Message queued for editing. Use /edit to modify.");
+                        return Ok(());
+                    }
+                    _ => {
+                        self.ui.print_info("Invalid choice. Aborting.");
+                        return Ok(());
+                    }
+                }
+            }
+        };
+
         // Create cancellation token for this request
         let cancel_token = CancellationToken::new();
         self.active_request_token = Some(cancel_token.clone());
@@ -3787,19 +3879,66 @@ Format your summary in clear, readable paragraphs. Be objective and factual.";
         name
     }
 
-    fn substitute_variables(&self, input: &str) -> String {
+    fn substitute_variables(&self, input: &str) -> Result<String, Vec<(String, String)>> {
         let mut result = input.to_string();
+        let mut errors: Vec<(String, String)> = Vec::new();
 
-        // Replace {{VARIABLE_NAME}} with variable content
+        // First, substitute named variables {{varname}}
         for (var_name, var) in &self.variables {
             let pattern = format!("{{{{{}}}}}", var_name);
-            // Evaluate the variable source to get current content
-            if let Ok(content) = var.source.evaluate_sync() {
-                result = result.replace(&pattern, &content);
+            if result.contains(&pattern) {
+                let value = if let Some(frozen) = &var.frozen_value {
+                    Ok(frozen.clone())
+                } else {
+                    var.source.evaluate_sync()
+                };
+
+                match value {
+                    Ok(content) => {
+                        result = result.replace(&pattern, &content);
+                    }
+                    Err(e) => {
+                        errors.push((var_name.clone(), e.to_string()));
+                    }
+                }
             }
         }
 
-        result
+        // Then, substitute inline patterns {{@path}}, {{!cmd}}, {{=literal}}
+        let inline_regex = regex::Regex::new(r"\{\{([=@!][^}]+)\}\}").unwrap();
+        let mut inline_errors: Vec<(String, String)> = Vec::new();
+
+        // Collect all matches first to avoid borrow issues
+        let matches: Vec<(String, String)> = inline_regex
+            .captures_iter(&result)
+            .map(|cap| (cap[0].to_string(), cap[1].to_string()))
+            .collect();
+
+        for (full_match, source_str) in matches {
+            match VariableSource::parse(&source_str) {
+                Ok(source) => {
+                    match source.evaluate_sync() {
+                        Ok(content) => {
+                            result = result.replace(&full_match, &content);
+                        }
+                        Err(e) => {
+                            inline_errors.push((source_str, e.to_string()));
+                        }
+                    }
+                }
+                Err(e) => {
+                    inline_errors.push((source_str, e.to_string()));
+                }
+            }
+        }
+
+        errors.extend(inline_errors);
+
+        if errors.is_empty() {
+            Ok(result)
+        } else {
+            Err(errors)
+        }
     }
     
     fn restore_session_variables(&mut self, session: &ChatSession) {
