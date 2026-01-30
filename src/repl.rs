@@ -16,6 +16,7 @@ use crate::{
     session::{ChatSession, CodeBlock},
     ui::{UI, CompletionContext},
     prompts::PromptLibrary,
+    variable::{Variable, VariableSource},
 };
 
 #[derive(Debug, Clone)]
@@ -1554,7 +1555,7 @@ impl Repl {
                             self.session.thinking_budget = loaded_session.thinking_budget;
                             self.session.system_prompt = loaded_session.system_prompt.clone();
                             self.session.thinking_enabled = loaded_session.thinking_enabled;
-                            self.session.variable_bindings = loaded_session.variable_bindings.clone();
+                            self.session.variables = loaded_session.variables.clone();
                             
                             // Update current provider based on session's model
                             self.session.current_provider = get_provider_for_model(&self.session.current_model).map(|s| s.to_string());
@@ -2575,9 +2576,13 @@ impl Repl {
                         };
                         
                         self.variables.insert(variable_name.clone(), content.clone());
-                        
-                        // Store the binding in the session for persistence
-                        self.session.variable_bindings.insert(filename.clone(), variable_name.clone());
+
+                        // Store the variable in the session for persistence
+                        let var = Variable::new(
+                            variable_name.clone(),
+                            VariableSource::File(std::path::PathBuf::from(&filename)),
+                        );
+                        self.session.variables.insert(variable_name.clone(), var);
                         
                         let preview = if content.len() > 100 {
                             format!("{}...", &content[..100].replace('\n', " "))
@@ -2602,10 +2607,12 @@ impl Repl {
                 } else {
                     self.ui.print_info(&format!("Loaded variables ({} total):", self.variables.len()));
                     
-                    // Create reverse mapping from variable name to filename
-                    let mut var_to_file: HashMap<String, String> = HashMap::new();
-                    for (filename, var_name) in &self.session.variable_bindings {
-                        var_to_file.insert(var_name.clone(), filename.clone());
+                    // Create mapping from variable name to source display
+                    let mut var_to_source: HashMap<String, String> = HashMap::new();
+                    for (var_name, var) in &self.session.variables {
+                        if let VariableSource::File(path) = &var.source {
+                            var_to_source.insert(var_name.clone(), path.display().to_string());
+                        }
                     }
                     
                     for (name, content) in &self.variables {
@@ -2615,8 +2622,8 @@ impl Repl {
                             content.replace('\n', " ")
                         };
                         
-                        if let Some(filename) = var_to_file.get(name) {
-                            println!("  {{{{{}}}}} (from '{}'): {} chars - {}", name, filename, content.len(), preview);
+                        if let Some(source) = var_to_source.get(name) {
+                            println!("  {{{{{}}}}} (from '{}'): {} chars - {}", name, source, content.len(), preview);
                         } else {
                             println!("  {{{{{}}}}}: {} chars - {}", name, content.len(), preview);
                         }
@@ -2642,8 +2649,8 @@ impl Repl {
             }
             Command::VariableDelete(name) => {
                 if self.variables.remove(&name).is_some() {
-                    // Also remove from session bindings
-                    self.session.variable_bindings.retain(|_, var_name| var_name != &name);
+                    // Also remove from session variables
+                    self.session.variables.remove(&name);
                     
                     self.ui.print_info(&format!("Variable '{}' deleted", name));
                     // Update completion context after deletion
@@ -3724,15 +3731,17 @@ Format your summary in clear, readable paragraphs. Be objective and factual.";
         // Clear current variables
         self.variables.clear();
         
-        // Restore variables from session bindings
-        for (filename, variable_name) in &session.variable_bindings {
-            match std::fs::read_to_string(filename) {
-                Ok(content) => {
-                    self.variables.insert(variable_name.clone(), content);
-                }
-                Err(_) => {
-                    // File no longer exists, but we'll keep the binding in case it comes back
-                    self.ui.print_info(&format!("Warning: File '{}' for variable '{}' not found", filename, variable_name));
+        // Restore variables from session
+        for (var_name, var) in &session.variables {
+            if let VariableSource::File(path) = &var.source {
+                match std::fs::read_to_string(path) {
+                    Ok(content) => {
+                        self.variables.insert(var_name.clone(), content);
+                    }
+                    Err(_) => {
+                        // File no longer exists, but we'll keep the binding in case it comes back
+                        self.ui.print_info(&format!("Warning: File '{}' for variable '{}' not found", path.display(), var_name));
+                    }
                 }
             }
         }
@@ -3742,10 +3751,15 @@ Format your summary in clear, readable paragraphs. Be objective and factual.";
     }
     
     fn reload_specific_variable(&mut self, var_name: &str) {
-        // Find the filename for this variable
-        let filename = self.session.variable_bindings.iter()
-            .find(|(_, v)| v == &var_name)
-            .map(|(f, _)| f.clone());
+        // Find the file path for this variable
+        let filename = self.session.variables.get(var_name)
+            .and_then(|var| {
+                if let VariableSource::File(path) = &var.source {
+                    Some(path.display().to_string())
+                } else {
+                    None
+                }
+            });
         
         if let Some(filename) = filename {
             match std::fs::read_to_string(&filename) {
@@ -3784,18 +3798,24 @@ Format your summary in clear, readable paragraphs. Be objective and factual.";
     }
     
     fn reload_all_variables(&mut self) {
-        if self.session.variable_bindings.is_empty() {
+        if self.session.variables.is_empty() {
             self.ui.print_info("No variables to reload");
             return;
         }
-        
+
         let mut reloaded_count = 0;
         let mut failed_count = 0;
         let mut removed_count = 0;
-        
-        // Collect bindings to avoid borrow checker issues
-        let bindings: Vec<(String, String)> = self.session.variable_bindings.iter()
-            .map(|(f, v)| (f.clone(), v.clone()))
+
+        // Collect file-based variables to avoid borrow checker issues
+        let bindings: Vec<(String, String)> = self.session.variables.iter()
+            .filter_map(|(var_name, var)| {
+                if let VariableSource::File(path) = &var.source {
+                    Some((path.display().to_string(), var_name.clone()))
+                } else {
+                    None
+                }
+            })
             .collect();
         
         for (filename, var_name) in bindings {

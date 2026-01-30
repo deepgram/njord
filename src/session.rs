@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::providers::Message;
+use crate::variable::{Variable, VariableSource};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum NameSource {
@@ -30,8 +31,37 @@ pub struct ChatSession {
     pub thinking_enabled: bool,
     #[serde(default)]
     pub has_llm_interaction: bool,
-    #[serde(default)]
-    pub variable_bindings: std::collections::HashMap<String, String>, // filename -> variable_name
+    #[serde(default, deserialize_with = "deserialize_variables", alias = "variable_bindings")]
+    pub variables: std::collections::HashMap<String, Variable>,
+}
+
+fn deserialize_variables<'de, D>(deserializer: D) -> Result<std::collections::HashMap<String, Variable>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    // Try to deserialize as new format first
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum VariablesFormat {
+        New(std::collections::HashMap<String, Variable>),
+        Old(std::collections::HashMap<String, String>),
+    }
+
+    match VariablesFormat::deserialize(deserializer)? {
+        VariablesFormat::New(vars) => Ok(vars),
+        VariablesFormat::Old(old_bindings) => {
+            // Migrate old format: filename -> var_name becomes var_name -> Variable with @filename source
+            let mut new_vars = std::collections::HashMap::new();
+            for (filename, var_name) in old_bindings {
+                let var = Variable::new(
+                    var_name.clone(),
+                    VariableSource::File(std::path::PathBuf::from(filename)),
+                );
+                new_vars.insert(var_name, var);
+            }
+            Ok(new_vars)
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -69,7 +99,7 @@ impl ChatSession {
             system_prompt: None,
             thinking_enabled: false,
             has_llm_interaction: false,
-            variable_bindings: std::collections::HashMap::new(),
+            variables: std::collections::HashMap::new(),
         }
     }
     
@@ -213,7 +243,7 @@ impl ChatSession {
             system_prompt: self.system_prompt.clone(),
             thinking_enabled: self.thinking_enabled,
             has_llm_interaction: false, // Reset for new copy
-            variable_bindings: self.variable_bindings.clone(), // Copy variable bindings
+            variables: self.variables.clone(), // Copy variables
         }
     }
     
@@ -453,5 +483,29 @@ mod tests {
         assert_eq!(copy.current_model, original.current_model);
         assert_eq!(copy.temperature, original.temperature);
         assert_eq!(copy.messages[0].message.content, "Test");
+    }
+
+    #[test]
+    fn test_variable_bindings_migration() {
+        // Old format: HashMap<String, String> (filename -> var_name)
+        let json = r#"{
+            "id": "00000000-0000-0000-0000-000000000000",
+            "created_at": "2024-01-01T00:00:00Z",
+            "updated_at": "2024-01-01T00:00:00Z",
+            "messages": [],
+            "current_model": "gpt-4",
+            "temperature": 0.7,
+            "max_tokens": 1000,
+            "thinking_budget": 5000,
+            "thinking_enabled": false,
+            "variable_bindings": {
+                "src/main.rs": "code"
+            }
+        }"#;
+
+        let session: ChatSession = serde_json::from_str(json).unwrap();
+        assert!(session.variables.contains_key("code"));
+        let var = session.variables.get("code").unwrap();
+        assert!(matches!(&var.source, crate::variable::VariableSource::File(p) if p == &std::path::PathBuf::from("src/main.rs")));
     }
 }
