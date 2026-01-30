@@ -40,7 +40,7 @@ pub struct Repl {
     interrupted_message: Option<String>,
     ctrl_c_rx: mpsc::UnboundedReceiver<()>,
     last_session_list: Vec<String>, // For ephemeral session references
-    variables: HashMap<String, String>, // For file content variables
+    variables: HashMap<String, Variable>, // For file content variables
 }
 
 impl Repl {
@@ -172,7 +172,7 @@ impl Repl {
         get_provider_for_model(&self.session.current_model)
     }
     
-    fn build_completion_context(providers: &HashMap<String, Box<dyn LLMProvider>>, history: &History, prompts: &PromptLibrary, variables: &HashMap<String, String>) -> CompletionContext {
+    fn build_completion_context(providers: &HashMap<String, Box<dyn LLMProvider>>, history: &History, prompts: &PromptLibrary, variables: &HashMap<String, Variable>) -> CompletionContext {
         let mut available_models = Vec::new();
         
         // Collect all models from all providers
@@ -2566,38 +2566,52 @@ impl Repl {
                     }
                 }
             }
-            Command::Load(filename, variable_name_opt) => {
-                match std::fs::read_to_string(&filename) {
-                    Ok(content) => {
-                        let variable_name = if let Some(name) = variable_name_opt {
-                            name
-                        } else {
-                            self.generate_variable_name_from_filename(&filename)
-                        };
-                        
-                        self.variables.insert(variable_name.clone(), content.clone());
+            Command::Load(source_str, variable_name_opt) => {
+                // Parse the source string (handle --timeout flag if present)
+                let (source, timeout_override) = Self::parse_load_source_and_timeout(&source_str);
 
-                        // Store the variable in the session for persistence
-                        let var = Variable::new(
-                            variable_name.clone(),
-                            VariableSource::File(std::path::PathBuf::from(&filename)),
-                        );
-                        self.session.variables.insert(variable_name.clone(), var);
-                        
-                        let preview = if content.len() > 100 {
-                            format!("{}...", &content[..100].replace('\n', " "))
-                        } else {
-                            content.replace('\n', " ")
-                        };
-                        
-                        self.ui.print_info(&format!("Loaded '{}' as {{{{{}}}}} ({} chars): {}", 
-                            filename, variable_name, content.len(), preview));
-                        
-                        // Update completion context with new variable
-                        let _ = self.update_completion_context();
+                match VariableSource::parse(&source) {
+                    Ok(mut var_source) => {
+                        // Apply timeout override for commands
+                        if let (VariableSource::Command { ref mut timeout_secs, .. }, Some(t)) = (&mut var_source, timeout_override) {
+                            *timeout_secs = t;
+                        }
+
+                        // Generate or use provided variable name
+                        let variable_name = variable_name_opt.unwrap_or_else(|| {
+                            self.generate_variable_name_from_source(&var_source)
+                        });
+
+                        // Evaluate to show preview and validate source works
+                        match var_source.evaluate_sync() {
+                            Ok(content) => {
+                                let preview = if content.len() > 100 {
+                                    format!("{}...", &content[..100].replace('\n', " "))
+                                } else {
+                                    content.replace('\n', " ")
+                                };
+
+                                let var = Variable::new(variable_name.clone(), var_source.clone());
+                                self.variables.insert(variable_name.clone(), var.clone());
+                                self.session.variables.insert(variable_name.clone(), var);
+
+                                self.ui.print_info(&format!(
+                                    "Loaded {} as {{{{{}}}}} ({} chars): {}",
+                                    var_source.display_source(),
+                                    variable_name,
+                                    content.len(),
+                                    preview
+                                ));
+
+                                let _ = self.update_completion_context();
+                            }
+                            Err(e) => {
+                                self.ui.print_error(&format!("Failed to load: {}", e));
+                            }
+                        }
                     }
                     Err(e) => {
-                        self.ui.print_error(&format!("Failed to load file '{}': {}", filename, e));
+                        self.ui.print_error(&format!("{}", e));
                     }
                 }
             }
@@ -2606,37 +2620,40 @@ impl Repl {
                     self.ui.print_info("No variables loaded");
                 } else {
                     self.ui.print_info(&format!("Loaded variables ({} total):", self.variables.len()));
-                    
-                    // Create mapping from variable name to source display
-                    let mut var_to_source: HashMap<String, String> = HashMap::new();
-                    for (var_name, var) in &self.session.variables {
-                        if let VariableSource::File(path) = &var.source {
-                            var_to_source.insert(var_name.clone(), path.display().to_string());
-                        }
-                    }
-                    
-                    for (name, content) in &self.variables {
-                        let preview = if content.len() > 80 {
-                            format!("{}...", &content[..80].replace('\n', " "))
-                        } else {
-                            content.replace('\n', " ")
+
+                    for (name, var) in &self.variables {
+                        // Try to evaluate the source to show preview
+                        let (preview, len) = match var.source.evaluate_sync() {
+                            Ok(content) => {
+                                let preview = if content.len() > 80 {
+                                    format!("{}...", &content[..80].replace('\n', " "))
+                                } else {
+                                    content.replace('\n', " ")
+                                };
+                                (preview, content.len())
+                            }
+                            Err(_) => ("[evaluation failed]".to_string(), 0)
                         };
-                        
-                        if let Some(source) = var_to_source.get(name) {
-                            println!("  {{{{{}}}}} (from '{}'): {} chars - {}", name, source, content.len(), preview);
-                        } else {
-                            println!("  {{{{{}}}}}: {} chars - {}", name, content.len(), preview);
-                        }
+
+                        let source_display = var.source.display_source();
+                        println!("  {{{{{}}}}} (from '{}'): {} chars - {}", name, source_display, len, preview);
                     }
                     println!();
                     self.ui.print_info("Use {{VARIABLE_NAME}} in your messages to reference content");
                 }
             }
             Command::VariableShow(name) => {
-                if let Some(content) = self.variables.get(&name) {
-                    self.ui.print_info(&format!("Variable {{{}}} ({} chars):", name, content.len()));
-                    println!();
-                    println!("{}", content);
+                if let Some(var) = self.variables.get(&name) {
+                    match var.source.evaluate_sync() {
+                        Ok(content) => {
+                            self.ui.print_info(&format!("Variable {{{}}} ({} chars):", name, content.len()));
+                            println!();
+                            println!("{}", content);
+                        }
+                        Err(e) => {
+                            self.ui.print_error(&format!("Failed to evaluate variable '{}': {}", name, e));
+                        }
+                    }
                 } else {
                     self.ui.print_error(&format!("Variable '{}' not found", name));
                     if !self.variables.is_empty() {
@@ -3714,77 +3731,122 @@ Format your summary in clear, readable paragraphs. Be objective and factual.";
         
         unique_name
     }
-    
+
+    fn parse_load_source_and_timeout(source_str: &str) -> (String, Option<u64>) {
+        // Check for --timeout flag
+        if let Some(idx) = source_str.find("--timeout") {
+            let source = source_str[..idx].trim().to_string();
+            let timeout_part = source_str[idx..].trim();
+            if let Some(timeout_str) = timeout_part.strip_prefix("--timeout") {
+                if let Ok(timeout) = timeout_str.trim().parse::<u64>() {
+                    return (source, Some(timeout));
+                }
+            }
+            (source, None)
+        } else {
+            (source_str.to_string(), None)
+        }
+    }
+
+    fn generate_variable_name_from_source(&self, source: &VariableSource) -> String {
+        let base_name = match source {
+            VariableSource::Literal(s) => {
+                // Use first word or "literal"
+                s.split_whitespace()
+                    .next()
+                    .unwrap_or("literal")
+                    .chars()
+                    .filter(|c| c.is_alphanumeric() || *c == '_')
+                    .take(20)
+                    .collect::<String>()
+                    .to_lowercase()
+            }
+            VariableSource::File(path) => {
+                self.generate_variable_name_from_filename(&path.display().to_string())
+            }
+            VariableSource::Command { cmd, .. } => {
+                // Use first word of command
+                cmd.split_whitespace()
+                    .next()
+                    .unwrap_or("cmd")
+                    .chars()
+                    .filter(|c| c.is_alphanumeric() || *c == '_')
+                    .take(20)
+                    .collect::<String>()
+                    .to_lowercase()
+            }
+        };
+
+        // Ensure uniqueness
+        let mut name = if base_name.is_empty() { "var".to_string() } else { base_name };
+        let mut counter = 1;
+        while self.variables.contains_key(&name) {
+            name = format!("{}_{}", name.trim_end_matches(char::is_numeric).trim_end_matches('_'), counter);
+            counter += 1;
+        }
+        name
+    }
+
     fn substitute_variables(&self, input: &str) -> String {
         let mut result = input.to_string();
-        
+
         // Replace {{VARIABLE_NAME}} with variable content
-        for (var_name, var_content) in &self.variables {
+        for (var_name, var) in &self.variables {
             let pattern = format!("{{{{{}}}}}", var_name);
-            result = result.replace(&pattern, var_content);
+            // Evaluate the variable source to get current content
+            if let Ok(content) = var.source.evaluate_sync() {
+                result = result.replace(&pattern, &content);
+            }
         }
-        
+
         result
     }
     
     fn restore_session_variables(&mut self, session: &ChatSession) {
         // Clear current variables
         self.variables.clear();
-        
+
         // Restore variables from session
         for (var_name, var) in &session.variables {
-            if let VariableSource::File(path) = &var.source {
-                match std::fs::read_to_string(path) {
-                    Ok(content) => {
-                        self.variables.insert(var_name.clone(), content);
-                    }
-                    Err(_) => {
-                        // File no longer exists, but we'll keep the binding in case it comes back
-                        self.ui.print_info(&format!("Warning: File '{}' for variable '{}' not found", path.display(), var_name));
-                    }
+            // Validate the source is still accessible by trying to evaluate it
+            match var.source.evaluate_sync() {
+                Ok(_) => {
+                    self.variables.insert(var_name.clone(), var.clone());
+                }
+                Err(_) => {
+                    // Source is not accessible, but we'll keep the binding in case it comes back
+                    self.ui.print_info(&format!("Warning: Source for variable '{}' not accessible", var_name));
+                    self.variables.insert(var_name.clone(), var.clone());
                 }
             }
         }
-        
+
         // Update completion context with restored variables
         let _ = self.update_completion_context();
     }
     
     fn reload_specific_variable(&mut self, var_name: &str) {
-        // Find the file path for this variable
-        let filename = self.session.variables.get(var_name)
-            .and_then(|var| {
-                if let VariableSource::File(path) = &var.source {
-                    Some(path.display().to_string())
-                } else {
-                    None
-                }
-            });
-        
-        if let Some(filename) = filename {
-            match std::fs::read_to_string(&filename) {
+        // Get the variable
+        if let Some(var) = self.variables.get(var_name) {
+            let source_display = var.source.display_source();
+            // Try to re-evaluate the source
+            match var.source.evaluate_sync() {
                 Ok(content) => {
-                    let old_size = self.variables.get(var_name).map(|c| c.len()).unwrap_or(0);
-                    self.variables.insert(var_name.to_string(), content.clone());
-                    
                     let preview = if content.len() > 100 {
                         format!("{}...", &content[..100].replace('\n', " "))
                     } else {
                         content.replace('\n', " ")
                     };
-                    
-                    self.ui.print_info(&format!("Reloaded variable '{{{}}}' from '{}' ({} → {} chars): {}", 
-                        var_name, filename, old_size, content.len(), preview));
+
+                    self.ui.print_info(&format!("Reloaded variable '{{{}}}' from '{}' ({} chars): {}",
+                        var_name, source_display, content.len(), preview));
                 }
                 Err(e) => {
-                    // Remove the variable since file is not accessible
-                    self.variables.remove(var_name);
-                    self.ui.print_error(&format!("Failed to reload variable '{}' from '{}': {}", var_name, filename, e));
-                    self.ui.print_info(&format!("Variable '{}' removed from active variables", var_name));
+                    self.ui.print_error(&format!("Failed to reload variable '{}' from '{}': {}", var_name, source_display, e));
                 }
             }
         } else {
-            self.ui.print_error(&format!("Variable '{}' not found or has no associated file", var_name));
+            self.ui.print_error(&format!("Variable '{}' not found", var_name));
             if !self.variables.is_empty() {
                 self.ui.print_info("Available variables:");
                 for var_name in self.variables.keys() {
@@ -3792,58 +3854,43 @@ Format your summary in clear, readable paragraphs. Be objective and factual.";
                 }
             }
         }
-        
+
         // Update completion context
         let _ = self.update_completion_context();
     }
     
     fn reload_all_variables(&mut self) {
-        if self.session.variables.is_empty() {
+        if self.variables.is_empty() {
             self.ui.print_info("No variables to reload");
             return;
         }
 
         let mut reloaded_count = 0;
         let mut failed_count = 0;
-        let mut removed_count = 0;
 
-        // Collect file-based variables to avoid borrow checker issues
-        let bindings: Vec<(String, String)> = self.session.variables.iter()
-            .filter_map(|(var_name, var)| {
-                if let VariableSource::File(path) = &var.source {
-                    Some((path.display().to_string(), var_name.clone()))
-                } else {
-                    None
-                }
-            })
-            .collect();
-        
-        for (filename, var_name) in bindings {
-            match std::fs::read_to_string(&filename) {
-                Ok(content) => {
-                    let old_size = self.variables.get(&var_name).map(|c| c.len()).unwrap_or(0);
-                    self.variables.insert(var_name.clone(), content.clone());
-                    
-                    if old_size != content.len() {
-                        self.ui.print_info(&format!("Reloaded '{{{}}}' from '{}' ({} → {} chars)", 
-                            var_name, filename, old_size, content.len()));
+        // Collect variable names to avoid borrow checker issues
+        let var_names: Vec<String> = self.variables.keys().cloned().collect();
+
+        for var_name in var_names {
+            if let Some(var) = self.variables.get(&var_name) {
+                let source_display = var.source.display_source();
+                match var.source.evaluate_sync() {
+                    Ok(content) => {
+                        self.ui.print_info(&format!("Reloaded '{{{}}}' from '{}' ({} chars)",
+                            var_name, source_display, content.len()));
+                        reloaded_count += 1;
                     }
-                    reloaded_count += 1;
-                }
-                Err(_) => {
-                    // Remove the variable since file is not accessible
-                    if self.variables.remove(&var_name).is_some() {
-                        removed_count += 1;
-                        self.ui.print_info(&format!("Removed variable '{{{}}}' (file '{}' not found)", var_name, filename));
-                    } else {
+                    Err(e) => {
+                        self.ui.print_error(&format!("Failed to reload '{{{}}}' from '{}': {}",
+                            var_name, source_display, e));
                         failed_count += 1;
                     }
                 }
             }
         }
         
-        self.ui.print_info(&format!("Variable reload complete: {} reloaded, {} removed, {} failed", 
-            reloaded_count, removed_count, failed_count));
+        self.ui.print_info(&format!("Variable reload complete: {} reloaded, {} failed",
+            reloaded_count, failed_count));
         
         // Update completion context
         let _ = self.update_completion_context();
