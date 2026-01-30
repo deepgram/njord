@@ -22,7 +22,7 @@ pub enum Command {
     Summarize(Option<SessionReference>), // (session_ref)
     Undo(Option<usize>),
     Goto(usize),
-    History,
+    History(bool), // bool is the expand flag
     Search(String),
     Blocks,
     Block(usize),
@@ -102,6 +102,7 @@ pub enum SessionReference {
 
 pub struct CommandParser {
     model_regex: Regex,
+    history_regex: Regex,
     undo_regex: Regex,
     goto_regex: Regex,
     search_regex: Regex,
@@ -414,6 +415,7 @@ impl CommandParser {
     pub fn new() -> Result<Self> {
         Ok(Self {
             model_regex: Regex::new(r"^/model\s+(.+)$")?,
+            history_regex: Regex::new(r"^/history(\s+--expand)?$")?,
             undo_regex: Regex::new(r"^/undo(?:\s+(\d+))?$")?,
             goto_regex: Regex::new(r"^/goto\s+(\d+)$")?,
             search_regex: Regex::new(r"^/search\s+(.+)$")?,
@@ -475,7 +477,7 @@ impl CommandParser {
             "/chat list" => Some(Command::ChatList),
             "/chat recent" => Some(Command::ChatRecent),
             "/chat auto-rename-all" => Some(Command::ChatAutoRenameAll),
-            "/history" => Some(Command::History),
+            "/history" => Some(Command::History(false)),
             "/blocks" => Some(Command::Blocks),
             "/tokens" => Some(Command::Tokens),
             "/help" | "/commands" => Some(Command::Help),
@@ -512,6 +514,8 @@ impl CommandParser {
             _ => {
                 if let Some(caps) = self.model_regex.captures(input) {
                     Some(Command::Model(caps[1].to_string()))
+                } else if let Some(caps) = self.history_regex.captures(input) {
+                    Some(Command::History(caps.get(1).is_some()))
                 } else if let Some(caps) = self.undo_regex.captures(input) {
                     let count = caps.get(1).map(|m| m.as_str().parse().unwrap_or(1));
                     Some(Command::Undo(count))
@@ -680,7 +684,7 @@ mod tests {
         assert!(matches!(parser.parse("/quit"), Some(Command::Quit)));
         assert!(matches!(parser.parse("/clear"), Some(Command::Clear)));
         assert!(matches!(parser.parse("/status"), Some(Command::Status)));
-        assert!(matches!(parser.parse("/history"), Some(Command::History)));
+        assert!(matches!(parser.parse("/history"), Some(Command::History(false))));
         assert!(matches!(parser.parse("/blocks"), Some(Command::Blocks)));
     }
 

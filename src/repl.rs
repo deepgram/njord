@@ -1738,7 +1738,7 @@ impl Repl {
                     }
                 }
             }
-            Command::History => {
+            Command::History(expand) => {
                 if self.session.messages.is_empty() {
                     self.ui.print_info("No messages in current session");
                 } else {
@@ -1753,41 +1753,52 @@ impl Repl {
                         println!("System prompt: {}",system_prompt);
                     }
                     println!();
-                    
+
                     let mut conversation_index = 0;
                     let mut i = 0;
-                    
+
                     while i < self.session.messages.len() {
                         let current_msg = &self.session.messages[i];
-                        
+
                         if current_msg.message.role == "user" {
                             conversation_index += 1;
-                            
+
                             // Print user message
                             let timestamp = current_msg.timestamp.format("%H:%M:%S");
                             let header = format!("\x1b[1;34m[{}] User {}", conversation_index, timestamp);
-                            let styled_content = self.ui.style_code_blocks(&current_msg.message.content);
+
+                            // Get content, optionally expanded
+                            let content = if expand {
+                                match self.substitute_variables(&current_msg.message.content) {
+                                    Ok(expanded) => expanded,
+                                    Err(_) => current_msg.message.content.clone(),
+                                }
+                            } else {
+                                current_msg.message.content.clone()
+                            };
+
+                            let styled_content = self.ui.style_code_blocks(&content);
                             println!("{}\x1b[0m: {}", header, styled_content);
                             println!();
-                            
+
                             // Look for the corresponding agent message
                             if i + 1 < self.session.messages.len() {
                                 let next_msg = &self.session.messages[i + 1];
                                 if next_msg.message.role == "assistant" {
                                     let agent_timestamp = next_msg.timestamp.format("%H:%M:%S");
                                     let mut agent_header = format!("\x1b[1;35m[{}] Agent {}", conversation_index, agent_timestamp);
-                                    
+
                                     // Add provider/model info for assistant messages
                                     if let (Some(provider), Some(model)) = (&next_msg.provider, &next_msg.model) {
                                         agent_header.push_str(&format!(" ({}:{})", provider, model));
                                     } else if let Some(provider) = &next_msg.provider {
                                         agent_header.push_str(&format!(" ({})", provider));
                                     }
-                                    
+
                                     let agent_styled_content = self.ui.style_code_blocks(&next_msg.message.content);
                                     println!("{}\x1b[0m: {}", agent_header, agent_styled_content);
                                     println!();
-                                    
+
                                     i += 2; // Skip both user and agent message
                                 } else {
                                     i += 1; // Only skip user message
@@ -1799,17 +1810,17 @@ impl Repl {
                             // Orphaned agent message (shouldn't happen in normal flow)
                             let timestamp = current_msg.timestamp.format("%H:%M:%S");
                             let mut header = format!("\x1b[1;35m[orphaned] Agent {}", timestamp);
-                            
+
                             if let (Some(provider), Some(model)) = (&current_msg.provider, &current_msg.model) {
                                 header.push_str(&format!(" ({}:{})", provider, model));
                             } else if let Some(provider) = &current_msg.provider {
                                 header.push_str(&format!(" ({})", provider));
                             }
-                            
+
                             let styled_content = self.ui.style_code_blocks(&current_msg.message.content);
                             println!("{}\x1b[0m: {}", header, styled_content);
                             println!();
-                            
+
                             i += 1;
                         }
                     }
@@ -2624,21 +2635,20 @@ impl Repl {
                     self.ui.print_info(&format!("Loaded variables ({} total):", self.variables.len()));
 
                     for (name, var) in &self.variables {
-                        // Try to evaluate the source to show preview
-                        let (preview, len) = match var.source.evaluate_sync() {
-                            Ok(content) => {
-                                let preview = if content.len() > 80 {
-                                    format!("{}...", &content[..80].replace('\n', " "))
-                                } else {
-                                    content.replace('\n', " ")
-                                };
-                                (preview, content.len())
-                            }
-                            Err(_) => ("[evaluation failed]".to_string(), 0)
+                        // Try to evaluate the source to get size
+                        let size = match var.source.evaluate_sync() {
+                            Ok(content) => content.len(),
+                            Err(_) => 0
                         };
 
-                        let source_display = var.source.display_source();
-                        println!("  {{{{{}}}}} (from '{}'): {} chars - {}", name, source_display, len, preview);
+                        println!(
+                            "  {:<12} {}{:<30} {:>8} ({} bytes)",
+                            format!("{{{{{}}}}}", name),
+                            var.source.type_indicator(),
+                            var.source.display_source(),
+                            var.status(),
+                            size
+                        );
                     }
                     println!();
                     self.ui.print_info("Use {{VARIABLE_NAME}} in your messages to reference content");
@@ -3967,6 +3977,12 @@ Format your summary in clear, readable paragraphs. Be objective and factual.";
     fn reload_specific_variable(&mut self, var_name: &str) {
         // Get the variable
         if let Some(var) = self.variables.get(var_name) {
+            // Check if the variable is frozen
+            if !var.is_frozen() {
+                self.ui.print_info(&format!("Variable '{{{{{}}}}}' is live (not frozen). No reload needed.", var_name));
+                return;
+            }
+
             let source_display = var.source.display_source();
             // Try to re-evaluate the source
             match var.source.evaluate_sync() {
@@ -3977,7 +3993,15 @@ Format your summary in clear, readable paragraphs. Be objective and factual.";
                         content.replace('\n', " ")
                     };
 
-                    self.ui.print_info(&format!("Reloaded variable '{{{}}}' from '{}' ({} chars): {}",
+                    // Update the frozen value with new content
+                    if let Some(var_mut) = self.variables.get_mut(var_name) {
+                        var_mut.frozen_value = Some(content.clone());
+                        if let Some(session_var) = self.session.variables.get_mut(var_name) {
+                            session_var.frozen_value = Some(content.clone());
+                        }
+                    }
+
+                    self.ui.print_info(&format!("Reloaded variable '{{{{{}}}}}' from '{}' ({} chars): {}",
                         var_name, source_display, content.len(), preview));
                 }
                 Err(e) => {
@@ -4004,33 +4028,49 @@ Format your summary in clear, readable paragraphs. Be objective and factual.";
             return;
         }
 
+        // Collect frozen variable names to avoid borrow checker issues
+        let frozen_var_names: Vec<String> = self.variables.iter()
+            .filter(|(_, var)| var.is_frozen())
+            .map(|(name, _)| name.clone())
+            .collect();
+
+        if frozen_var_names.is_empty() {
+            self.ui.print_info("No frozen variables to reload (live variables refresh automatically)");
+            return;
+        }
+
         let mut reloaded_count = 0;
         let mut failed_count = 0;
 
-        // Collect variable names to avoid borrow checker issues
-        let var_names: Vec<String> = self.variables.keys().cloned().collect();
-
-        for var_name in var_names {
+        for var_name in frozen_var_names {
             if let Some(var) = self.variables.get(&var_name) {
                 let source_display = var.source.display_source();
                 match var.source.evaluate_sync() {
                     Ok(content) => {
-                        self.ui.print_info(&format!("Reloaded '{{{}}}' from '{}' ({} chars)",
+                        // Update the frozen value with new content
+                        if let Some(var_mut) = self.variables.get_mut(&var_name) {
+                            var_mut.frozen_value = Some(content.clone());
+                            if let Some(session_var) = self.session.variables.get_mut(&var_name) {
+                                session_var.frozen_value = Some(content.clone());
+                            }
+                        }
+
+                        self.ui.print_info(&format!("Reloaded '{{{{{}}}}}' from '{}' ({} chars)",
                             var_name, source_display, content.len()));
                         reloaded_count += 1;
                     }
                     Err(e) => {
-                        self.ui.print_error(&format!("Failed to reload '{{{}}}' from '{}': {}",
+                        self.ui.print_error(&format!("Failed to reload '{{{{{}}}}}' from '{}': {}",
                             var_name, source_display, e));
                         failed_count += 1;
                     }
                 }
             }
         }
-        
+
         self.ui.print_info(&format!("Variable reload complete: {} reloaded, {} failed",
             reloaded_count, failed_count));
-        
+
         // Update completion context
         let _ = self.update_completion_context();
     }
