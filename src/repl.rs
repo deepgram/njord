@@ -467,7 +467,17 @@ impl Repl {
                 // Clear queued/interrupted messages once we get input
                 self.queued_message = None;
                 self.interrupted_message = None;
-                
+
+                // Special handling for /edit with prefix text
+                // e.g., "Hello world /edit" -> opens editor with "Hello world"
+                if let Some(prefix) = input.strip_suffix("/edit").map(|s| s.trim_end()) {
+                    if !prefix.is_empty() || input == "/edit" {
+                        let prefix_text = if prefix.is_empty() { String::new() } else { prefix.to_string() };
+                        self.handle_command(Command::Edit(EditTarget::NewMessage(prefix_text))).await?;
+                        continue;
+                    }
+                }
+
                 if input.starts_with('/') {
                     // Check if this is a heredoc command
                     if let Some((command_part, delimiter)) = self.ui.parse_command_heredoc(&input) {
