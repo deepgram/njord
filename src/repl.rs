@@ -888,7 +888,10 @@ impl Repl {
                 println!("  /goto N - Jump back to User N (removes later messages and queues user message for editing)");
                 println!("  /search TERM - Search through chat history");
                 println!("  /retry - Regenerate last response");
-                println!("  /edit N - Edit and resend message N");
+                println!("  /edit - Open $EDITOR to compose a new message");
+                println!("  /edit N - Edit user message N in $EDITOR (modifies history)");
+                println!("  /edit user N - Edit user message N in $EDITOR (explicit)");
+                println!("  /edit agent N - Edit agent message N in $EDITOR");
                 println!();
                 
                 // Content Management
