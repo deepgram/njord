@@ -13,6 +13,7 @@ mod commands;
 mod ui;
 mod prompts;
 mod input_history;
+mod variable;
 
 use cli::Args;
 use config::Config;
