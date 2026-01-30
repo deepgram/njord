@@ -41,7 +41,7 @@ pub enum Command {
     Stats,
     Status,
     Retry,
-    Edit(usize),
+    Edit(EditTarget),
     Quit,
     // File loading commands
     Load(String, Option<String>), // (filename, optional_variable_name)
@@ -86,6 +86,13 @@ pub enum SaveType {
 }
 
 #[derive(Debug, Clone)]
+pub enum EditTarget {
+    NewMessage(String),  // /edit with optional prefix text
+    User(usize),         // /edit N or /edit user N
+    Agent(usize),        // /edit agent N
+}
+
+#[derive(Debug, Clone)]
 pub enum SessionReference {
     Named(String),
     Ephemeral(usize),
@@ -110,6 +117,7 @@ pub struct CommandParser {
     thinking_regex: Regex,
     export_regex: Regex,
     edit_regex: Regex,
+    edit_typed_regex: Regex,
     chat_save_regex: Regex,
     chat_load_regex: Regex,
     chat_delete_regex: Regex,
@@ -419,7 +427,8 @@ impl CommandParser {
             thinking_budget_regex: Regex::new(r"^/thinking-budget\s+(\d+)$")?,
             thinking_regex: Regex::new(r"^/thinking\s+(on|off|true|false)$")?,
             export_regex: Regex::new(r"^/export\s+(\w+)$")?,
-            edit_regex: Regex::new(r"^/edit\s+(\d+)$")?,
+            edit_regex: Regex::new(r"^/edit(?:\s+(\d+))?$")?,
+            edit_typed_regex: Regex::new(r"^/edit\s+(user|agent)\s+(\d+)$")?,
             chat_save_regex: Regex::new(r"^/chat\s+save\s+(.+)$")?,
             chat_load_regex: Regex::new(r"^/chat\s+load\s+(.+)$")?,
             chat_delete_regex: Regex::new(r"^/chat\s+delete(?:\s+(.+))?$")?,
@@ -551,8 +560,17 @@ impl CommandParser {
                     Some(Command::Thinking(enable))
                 } else if let Some(caps) = self.export_regex.captures(input) {
                     Some(Command::Export(caps[1].to_string()))
+                } else if let Some(caps) = self.edit_typed_regex.captures(input) {
+                    let edit_type = match caps[1].as_ref() {
+                        "agent" => EditTarget::Agent(caps[2].parse().unwrap_or(1)),
+                        _ => EditTarget::User(caps[2].parse().unwrap_or(1)),
+                    };
+                    Some(Command::Edit(edit_type))
                 } else if let Some(caps) = self.edit_regex.captures(input) {
-                    Some(Command::Edit(caps[1].parse().unwrap_or(1)))
+                    match caps.get(1) {
+                        Some(m) => Some(Command::Edit(EditTarget::User(m.as_str().parse().unwrap_or(1)))),
+                        None => Some(Command::Edit(EditTarget::NewMessage(String::new()))),
+                    }
                 } else if let Some(caps) = self.chat_save_regex.captures(input) {
                     Some(Command::ChatSave(Self::unquote_session_name(&caps[1])))
                 } else if let Some(caps) = self.chat_load_regex.captures(input) {
@@ -1045,6 +1063,51 @@ mod tests {
             assert_eq!(value, "You are a helpful assistant");
         } else {
             panic!("Expected SetDefault command");
+        }
+    }
+
+    #[test]
+    fn test_edit_commands() {
+        let parser = create_parser();
+
+        // Test /edit (new message)
+        if let Some(Command::Edit(target)) = parser.parse("/edit") {
+            assert!(matches!(target, EditTarget::NewMessage(_)));
+        } else {
+            panic!("Expected Edit command");
+        }
+
+        // Test /edit N (user shorthand)
+        if let Some(Command::Edit(target)) = parser.parse("/edit 3") {
+            if let EditTarget::User(n) = target {
+                assert_eq!(n, 3);
+            } else {
+                panic!("Expected User target");
+            }
+        } else {
+            panic!("Expected Edit command");
+        }
+
+        // Test /edit user N
+        if let Some(Command::Edit(target)) = parser.parse("/edit user 5") {
+            if let EditTarget::User(n) = target {
+                assert_eq!(n, 5);
+            } else {
+                panic!("Expected User target");
+            }
+        } else {
+            panic!("Expected Edit command");
+        }
+
+        // Test /edit agent N
+        if let Some(Command::Edit(target)) = parser.parse("/edit agent 2") {
+            if let EditTarget::Agent(n) = target {
+                assert_eq!(n, 2);
+            } else {
+                panic!("Expected Agent target");
+            }
+        } else {
+            panic!("Expected Edit command");
         }
     }
 }
