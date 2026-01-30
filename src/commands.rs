@@ -49,6 +49,7 @@ pub enum Command {
     VariableShow(String),
     VariableDelete(String),
     VariableReload(Option<String>), // (optional_variable_name) - reload specific var or all vars
+    VariableFreeze(String), // /freeze VAR
     // Prompt library commands
     PromptsList,
     PromptsShow(String),
@@ -132,6 +133,7 @@ pub struct CommandParser {
     variable_show_regex: Regex,
     variable_delete_regex: Regex,
     variable_reload_regex: Regex,
+    freeze_regex: Regex,
     // Prompt library regexes
     prompts_save_regex: Regex,
     prompts_show_regex: Regex,
@@ -443,6 +445,7 @@ impl CommandParser {
             variable_show_regex: Regex::new(r"^/var\s+show\s+(.+)$")?,
             variable_delete_regex: Regex::new(r"^/var\s+delete\s+(.+)$")?,
             variable_reload_regex: Regex::new(r"^/var\s+reload(?:\s+(.+))?$")?,
+            freeze_regex: Regex::new(r"^/freeze\s+(\S+)$")?,
             // Prompt library regexes
             prompts_save_regex: Regex::new(r"^/prompts\s+save\s+(.+)$")?,
             prompts_show_regex: Regex::new(r"^/prompts\s+show\s+(.+)$")?,
@@ -614,6 +617,8 @@ impl CommandParser {
                 } else if let Some(caps) = self.variable_reload_regex.captures(input) {
                     let name = caps.get(1).map(|m| Self::unquote_session_name(m.as_str()));
                     Some(Command::VariableReload(name))
+                } else if let Some(caps) = self.freeze_regex.captures(input) {
+                    return Some(Command::VariableFreeze(caps[1].to_string()));
                 } else if let Some(caps) = self.prompts_save_regex.captures(input) {
                     // Parse the arguments manually to handle quoted strings properly
                     let args_part = &caps[1];
@@ -1108,6 +1113,46 @@ mod tests {
             }
         } else {
             panic!("Expected Edit command");
+        }
+    }
+
+    #[test]
+    fn test_load_command_with_prefixes() {
+        let parser = CommandParser::new().unwrap();
+
+        // Literal
+        if let Some(Command::Load(source, var_name)) = parser.parse("/load \"=hello world\" greeting") {
+            assert_eq!(source, "=hello world");
+            assert_eq!(var_name, Some("greeting".to_string()));
+        } else {
+            panic!("Failed to parse literal load command");
+        }
+
+        // File
+        if let Some(Command::Load(source, var_name)) = parser.parse("/load \"@src/main.rs\" code") {
+            assert_eq!(source, "@src/main.rs");
+            assert_eq!(var_name, Some("code".to_string()));
+        } else {
+            panic!("Failed to parse file load command");
+        }
+
+        // Command
+        if let Some(Command::Load(source, var_name)) = parser.parse("/load \"!git diff\" changes") {
+            assert_eq!(source, "!git diff");
+            assert_eq!(var_name, Some("changes".to_string()));
+        } else {
+            panic!("Failed to parse command load command");
+        }
+    }
+
+    #[test]
+    fn test_freeze_command() {
+        let parser = CommandParser::new().unwrap();
+
+        if let Some(Command::VariableFreeze(var_name)) = parser.parse("/freeze myvar") {
+            assert_eq!(var_name, "myvar");
+        } else {
+            panic!("Failed to parse freeze command");
         }
     }
 }
