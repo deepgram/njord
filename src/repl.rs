@@ -9,7 +9,7 @@ use std::io::Write;
 use tempfile::NamedTempFile;
 
 use crate::{
-    commands::{Command, CommandParser, CopyType, SaveType, SessionReference},
+    commands::{Command, CommandParser, CopyType, EditTarget, SaveType, SessionReference},
     config::Config,
     history::History,
     providers::{create_provider, get_provider_for_model, LLMProvider, Message, ChatRequest},
@@ -2648,11 +2648,68 @@ impl Repl {
                     self.reload_all_variables();
                 }
             }
+            Command::Edit(target) => {
+                match target {
+                    EditTarget::NewMessage(prefix) => {
+                        match self.open_in_editor(&prefix) {
+                            Ok(Some(content)) => {
+                                // Queue the edited content for the user to review and send
+                                self.queued_message = Some(content);
+                                self.ui.print_info("Content ready - press Enter to review and send");
+                            }
+                            Ok(None) => {
+                                self.ui.print_info("Edit cancelled (empty content)");
+                            }
+                            Err(e) => {
+                                self.ui.print_error(&e.to_string());
+                            }
+                        }
+                    }
+                    EditTarget::User(user_number) => {
+                        if let Some(idx) = self.get_user_message_index_by_number(user_number) {
+                            let content = self.session.messages[idx].message.content.clone();
+                            match self.open_in_editor(&content) {
+                                Ok(Some(new_content)) => {
+                                    self.session.messages[idx].message.content = new_content;
+                                    self.ui.print_info(&format!("User {} updated", user_number));
+                                }
+                                Ok(None) => {
+                                    self.ui.print_info("Edit cancelled (empty content)");
+                                }
+                                Err(e) => {
+                                    self.ui.print_error(&e.to_string());
+                                }
+                            }
+                        } else {
+                            self.ui.print_error(&format!("User {} not found", user_number));
+                        }
+                    }
+                    EditTarget::Agent(agent_number) => {
+                        if let Some(idx) = self.get_agent_message_index_by_number(agent_number) {
+                            let content = self.session.messages[idx].message.content.clone();
+                            match self.open_in_editor(&content) {
+                                Ok(Some(new_content)) => {
+                                    self.session.messages[idx].message.content = new_content;
+                                    self.ui.print_info(&format!("Agent {} updated", agent_number));
+                                }
+                                Ok(None) => {
+                                    self.ui.print_info("Edit cancelled (empty content)");
+                                }
+                                Err(e) => {
+                                    self.ui.print_error(&e.to_string());
+                                }
+                            }
+                        } else {
+                            self.ui.print_error(&format!("Agent {} not found", agent_number));
+                        }
+                    }
+                }
+            }
             _ => {
                 self.ui.print_info(&format!("Command not yet implemented: {:?}", command));
             }
         }
-        
+
         Ok(true)
     }
     
