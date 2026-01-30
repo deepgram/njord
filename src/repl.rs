@@ -747,7 +747,33 @@ impl Repl {
         }
         None
     }
-    
+
+    fn get_agent_message_index_by_number(&self, agent_number: usize) -> Option<usize> {
+        let mut agent_count = 0;
+        for (i, msg) in self.session.messages.iter().enumerate() {
+            if msg.message.role == "assistant" {
+                agent_count += 1;
+                if agent_count == agent_number {
+                    return Some(i);
+                }
+            }
+        }
+        None
+    }
+
+    fn get_user_message_index_by_number(&self, user_number: usize) -> Option<usize> {
+        let mut user_count = 0;
+        for (i, msg) in self.session.messages.iter().enumerate() {
+            if msg.message.role == "user" {
+                user_count += 1;
+                if user_count == user_number {
+                    return Some(i);
+                }
+            }
+        }
+        None
+    }
+
     fn get_agent_message(&self, agent_number: Option<usize>) -> Option<&str> {
         let target_number = agent_number.unwrap_or_else(|| {
             // Get the most recent agent message number
